@@ -1,0 +1,17 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "panelneko-reader",
+  "outputfilename": "panelneko-reader",
+  "info": {
+    "version": "0.1.0",
+    "productName": "PanelNeko Reader",
+    "copyright": "Copyright © 2026 (MIT License)",
+    "comments": "Built using Wails"
+  },
+  "frontend:dir": "frontend",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm build",
+  "frontend:dev:watcher": "pnpm dev",
+  "frontend:dev:serverUrl": "auto",
+  "assetdir": "frontend/dist"
+}

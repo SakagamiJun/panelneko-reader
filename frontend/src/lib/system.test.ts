@@ -1,0 +1,39 @@
+import { describe, expect, it } from "vitest";
+import { resolveLocale, resolveTheme } from "@/lib/system";
+
+describe("resolveLocale", () => {
+  it("maps zh locales to zh-CN", () => {
+    expect(
+      resolveLocale(
+        {
+          libraryRoot: "",
+          localeMode: "system",
+          locale: "en",
+          themeMode: "system",
+          readerScrollCachePages: 6,
+          autoRestoreReaderProgress: true,
+        },
+        ["zh-Hans-CN"]
+      )
+    ).toBe("zh-CN");
+  });
+
+  it("prefers manual locale when localeMode is manual", () => {
+    expect(
+      resolveLocale({
+        libraryRoot: "",
+        localeMode: "manual",
+        locale: "ja",
+        themeMode: "system",
+        readerScrollCachePages: 6,
+        autoRestoreReaderProgress: true,
+      })
+    ).toBe("ja");
+  });
+});
+
+describe("resolveTheme", () => {
+  it("returns system dark when prefersDark is true", () => {
+    expect(resolveTheme("system", true)).toBe("dark");
+  });
+});
