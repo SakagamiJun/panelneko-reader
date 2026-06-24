@@ -26,6 +26,7 @@ export const en = {
     light: "Light",
     dark: "Dark",
     railHint: "Language and theme are now switched directly from the left rail.",
+    browse: "Browse...",
     save: "Save settings",
   },
   library: {

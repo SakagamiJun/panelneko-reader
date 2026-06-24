@@ -762,6 +762,17 @@ function SettingsForm({
     setForm(settings);
   }, [settings]);
 
+  const handleSelectDirectory = async () => {
+    try {
+      const selected = await appAdapter.selectDirectory();
+      if (selected) {
+        setForm((current) => ({ ...current, libraryRoot: selected }));
+      }
+    } catch (error) {
+      console.error("Failed to select directory:", error);
+    }
+  };
+
   return (
     <div className="space-y-3 p-3">
       <PanelSection title={t("settings.title")} subtitle={t("settings.subtitle")}>
@@ -773,7 +784,16 @@ function SettingsForm({
           }}
         >
           <Field label={t("settings.outputRoot")}>
-            <Input value={form.libraryRoot} onChange={(event) => setForm((current) => ({ ...current, libraryRoot: event.target.value }))} />
+            <div className="flex gap-2">
+              <Input
+                className="flex-1"
+                value={form.libraryRoot}
+                onChange={(event) => setForm((current) => ({ ...current, libraryRoot: event.target.value }))}
+              />
+              <Button type="button" variant="outline" onClick={handleSelectDirectory}>
+                {t("settings.browse")}
+              </Button>
+            </div>
           </Field>
 
           <Field label={t("settings.readerScrollCachePages")} hint={t("settings.readerScrollCachePagesHint")}>

@@ -26,6 +26,7 @@ export const zhCN = {
     light: "浅色",
     dark: "深色",
     railHint: "语言和主题改为从左侧导航条直接切换。",
+    browse: "选择…",
     save: "保存设置",
   },
   library: {

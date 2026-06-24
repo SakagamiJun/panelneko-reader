@@ -113,6 +113,21 @@ func (a *App) UpdateSettings(input contracts.AppSettings) (contracts.AppSettings
 	return updated, nil
 }
 
+func (a *App) SelectDirectory() (string, error) {
+	if err := a.ensureReady(); err != nil {
+		return "", err
+	}
+
+	selected, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Manga Library Directory",
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return selected, nil
+}
+
 func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 	if err := a.ensureReady(); err != nil {
 		return nil, err

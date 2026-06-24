@@ -116,6 +116,10 @@ export class MockAdapter implements AppAdapter {
     return "0.1.0";
   }
 
+  async selectDirectory() {
+    return "/Users/example/Downloads/MangaLibrary";
+  }
+
   subscribe(eventName: string, callback: Listener) {
     const listeners = this.listeners.get(eventName) ?? new Set<Listener>();
     listeners.add(callback);

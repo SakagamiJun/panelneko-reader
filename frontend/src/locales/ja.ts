@@ -26,6 +26,7 @@ export const ja = {
     light: "ライト",
     dark: "ダーク",
     railHint: "言語とテーマは左側レールから直接切り替えます。",
+    browse: "参照...",
     save: "設定を保存",
   },
   library: {

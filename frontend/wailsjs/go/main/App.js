@@ -26,6 +26,10 @@ export function ListLibraryManga() {
   return window['go']['main']['App']['ListLibraryManga']();
 }
 
+export function SelectDirectory() {
+  return window['go']['main']['App']['SelectDirectory']();
+}
+
 export function UpdateReaderProgress(arg1) {
   return window['go']['main']['App']['UpdateReaderProgress'](arg1);
 }

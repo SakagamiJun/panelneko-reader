@@ -35,6 +35,9 @@ export const appAdapter: AppAdapter = {
   getAppVersion() {
     return currentAdapter().getAppVersion();
   },
+  selectDirectory() {
+    return currentAdapter().selectDirectory();
+  },
   subscribe(eventName, callback) {
     return currentAdapter().subscribe(eventName, callback);
   },

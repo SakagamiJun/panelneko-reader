@@ -15,6 +15,8 @@ export function GetSettings():Promise<contracts.AppSettings>;
 
 export function ListLibraryManga():Promise<Array<contracts.LibraryManga>>;
 
+export function SelectDirectory():Promise<string>;
+
 export function UpdateReaderProgress(arg1:contracts.ReaderProgress):Promise<contracts.ReaderProgress>;
 
 export function UpdateSettings(arg1:contracts.AppSettings):Promise<contracts.AppSettings>;

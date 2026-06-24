@@ -38,6 +38,10 @@ export class WailsAdapter implements AppAdapter {
     return ((await getWailsApp()?.GetAppVersion?.()) ?? "0.0.0") as string;
   }
 
+  async selectDirectory() {
+    return ((await getWailsApp()?.SelectDirectory?.()) ?? "") as string;
+  }
+
   subscribe(eventName: string, callback: (payload: unknown) => void) {
     const runtime = getWailsRuntime();
     const unsubscribe = runtime?.EventsOn?.(eventName, callback);

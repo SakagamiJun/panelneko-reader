@@ -729,7 +729,7 @@ func relativePathWithinRoot(root string, targetPath string) (string, error) {
 		return "", fmt.Errorf("abs output root: %w", err)
 	}
 	if symlinkResolvedRoot, symlinkErr := filepath.EvalSymlinks(resolvedRoot); symlinkErr == nil {
-		resolvedRoot = symlinkResolvedRoot
+		resolvedRoot = cleanExtendedPath(symlinkResolvedRoot)
 	}
 
 	resolvedTargetPath, err := filepath.Abs(targetPath)
@@ -737,7 +737,7 @@ func relativePathWithinRoot(root string, targetPath string) (string, error) {
 		return "", fmt.Errorf("abs file path: %w", err)
 	}
 	if symlinkResolvedTargetPath, symlinkErr := filepath.EvalSymlinks(resolvedTargetPath); symlinkErr == nil {
-		resolvedTargetPath = symlinkResolvedTargetPath
+		resolvedTargetPath = cleanExtendedPath(symlinkResolvedTargetPath)
 	}
 
 	relativePath, err := filepath.Rel(resolvedRoot, resolvedTargetPath)
@@ -779,6 +779,8 @@ func resolveWithinRoot(root string, relativePath string) (string, error) {
 	}
 	if resolvedRoot == "" {
 		resolvedRoot = absoluteRoot
+	} else {
+		resolvedRoot = cleanExtendedPath(resolvedRoot)
 	}
 
 	resolvedTarget, err := filepath.EvalSymlinks(absoluteTarget)
@@ -787,6 +789,8 @@ func resolveWithinRoot(root string, relativePath string) (string, error) {
 	}
 	if resolvedTarget == "" {
 		resolvedTarget = filepath.Join(resolvedRoot, cleanedPath)
+	} else {
+		resolvedTarget = cleanExtendedPath(resolvedTarget)
 	}
 
 	relativeToRoot, err := filepath.Rel(resolvedRoot, resolvedTarget)
@@ -1027,4 +1031,10 @@ func isSupportedImagePath(filePath string) bool {
 func fileExists(filePath string) bool {
 	info, err := os.Stat(filePath)
 	return err == nil && !info.IsDir()
+}
+
+func cleanExtendedPath(p string) string {
+	p = strings.TrimPrefix(p, `\\?\`)
+	p = strings.TrimPrefix(p, `\??\`)
+	return p
 }

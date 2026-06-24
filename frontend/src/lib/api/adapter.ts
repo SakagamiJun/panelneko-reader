@@ -14,5 +14,6 @@ export interface AppAdapter {
   getReaderProgress(mangaID: string): Promise<ReaderProgress>;
   updateReaderProgress(input: ReaderProgress): Promise<ReaderProgress>;
   getAppVersion(): Promise<string>;
+  selectDirectory(): Promise<string>;
   subscribe(eventName: string, callback: (payload: unknown) => void): () => void;
 }
