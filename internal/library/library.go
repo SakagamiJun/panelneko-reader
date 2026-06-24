@@ -107,7 +107,7 @@ func ListLibraryManga(outputRoot string) ([]contracts.LibraryManga, error) {
 		}
 
 		mangaDir := filepath.Join(outputRoot, entry.Name())
-		manifest, err := loadMangaManifest(outputRoot, mangaDir)
+		manifest, err := loadMangaManifest(outputRoot, mangaDir, entry.Name())
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +146,7 @@ func GetReaderManifest(outputRoot string, mangaID string) (contracts.ReaderManif
 		return contracts.ReaderManifest{}, err
 	}
 
-	manifest, err := loadMangaManifest(outputRoot, mangaDir)
+	manifest, err := loadMangaManifest(outputRoot, mangaDir, relativePath)
 	if err != nil {
 		return contracts.ReaderManifest{}, err
 	}
@@ -281,12 +281,7 @@ func ArchiveSidecarPath(archivePath string) string {
 	return strings.TrimSuffix(archivePath, filepath.Ext(archivePath)) + archiveSidecarSuffix
 }
 
-func loadMangaManifest(outputRoot string, mangaDir string) (mangaManifest, error) {
-	relativePath, err := filepath.Rel(outputRoot, mangaDir)
-	if err != nil {
-		return mangaManifest{}, fmt.Errorf("derive manga relative path: %w", err)
-	}
-
+func loadMangaManifest(outputRoot string, mangaDir string, relativePath string) (mangaManifest, error) {
 	chapterEntries, err := os.ReadDir(mangaDir)
 	if err != nil {
 		return mangaManifest{}, fmt.Errorf("read manga directory: %w", err)
@@ -730,6 +725,8 @@ func relativePathWithinRoot(root string, targetPath string) (string, error) {
 	}
 	if symlinkResolvedRoot, symlinkErr := filepath.EvalSymlinks(resolvedRoot); symlinkErr == nil {
 		resolvedRoot = cleanExtendedPath(symlinkResolvedRoot)
+	} else {
+		resolvedRoot = cleanExtendedPath(resolvedRoot)
 	}
 
 	resolvedTargetPath, err := filepath.Abs(targetPath)
@@ -738,9 +735,11 @@ func relativePathWithinRoot(root string, targetPath string) (string, error) {
 	}
 	if symlinkResolvedTargetPath, symlinkErr := filepath.EvalSymlinks(resolvedTargetPath); symlinkErr == nil {
 		resolvedTargetPath = cleanExtendedPath(symlinkResolvedTargetPath)
+	} else {
+		resolvedTargetPath = cleanExtendedPath(resolvedTargetPath)
 	}
 
-	relativePath, err := filepath.Rel(resolvedRoot, resolvedTargetPath)
+	relativePath, err := robustRel(resolvedRoot, resolvedTargetPath)
 	if err != nil {
 		return "", fmt.Errorf("derive asset relative path: %w", err)
 	}
@@ -775,7 +774,8 @@ func resolveWithinRoot(root string, relativePath string) (string, error) {
 
 	resolvedRoot, err := filepath.EvalSymlinks(absoluteRoot)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("eval root symlinks: %w", err)
+		// Fallback to absolute path on Windows if EvalSymlinks fails (e.g. OneDrive)
+		resolvedRoot = absoluteRoot
 	}
 	if resolvedRoot == "" {
 		resolvedRoot = absoluteRoot
@@ -785,7 +785,8 @@ func resolveWithinRoot(root string, relativePath string) (string, error) {
 
 	resolvedTarget, err := filepath.EvalSymlinks(absoluteTarget)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("eval target symlinks: %w", err)
+		// Fallback
+		resolvedTarget = absoluteTarget
 	}
 	if resolvedTarget == "" {
 		resolvedTarget = filepath.Join(resolvedRoot, cleanedPath)
@@ -793,7 +794,7 @@ func resolveWithinRoot(root string, relativePath string) (string, error) {
 		resolvedTarget = cleanExtendedPath(resolvedTarget)
 	}
 
-	relativeToRoot, err := filepath.Rel(resolvedRoot, resolvedTarget)
+	relativeToRoot, err := robustRel(resolvedRoot, resolvedTarget)
 	if err != nil {
 		return "", fmt.Errorf("derive root-relative path: %w", err)
 	}
@@ -1034,7 +1035,39 @@ func fileExists(filePath string) bool {
 }
 
 func cleanExtendedPath(p string) string {
-	p = strings.TrimPrefix(p, `\\?\`)
-	p = strings.TrimPrefix(p, `\??\`)
+	if strings.HasPrefix(p, `\\?\UNC\`) {
+		return `\\` + p[8:]
+	}
+	if strings.HasPrefix(p, `\\?\`) && len(p) >= 6 && p[5] == ':' {
+		return p[4:]
+	}
+	if strings.HasPrefix(p, `\??\`) && len(p) >= 6 && p[5] == ':' {
+		return p[4:]
+	}
 	return p
+}
+
+func robustRel(base, targ string) (string, error) {
+	rel, err := filepath.Rel(base, targ)
+	if err == nil && !strings.HasPrefix(rel, "..") {
+		return rel, nil
+	}
+
+	baseLower := strings.ToLower(base)
+	targLower := strings.ToLower(targ)
+	relLower, errLower := filepath.Rel(baseLower, targLower)
+	if errLower == nil && !strings.HasPrefix(relLower, "..") {
+		if strings.HasPrefix(targLower, baseLower) {
+			prefixLen := len(base)
+			if !strings.HasSuffix(baseLower, string(filepath.Separator)) {
+				prefixLen++
+			}
+			if prefixLen <= len(targ) {
+				return targ[prefixLen:], nil
+			}
+			return ".", nil
+		}
+	}
+
+	return rel, err
 }
