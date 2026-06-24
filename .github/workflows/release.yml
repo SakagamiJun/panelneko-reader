@@ -68,6 +68,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Update version from Git tag
+        run: node build/update-version.js
+
       - name: Enable pnpm
         run: |
           corepack enable
