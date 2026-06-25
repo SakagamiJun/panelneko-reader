@@ -27,7 +27,7 @@ function createMockReaderManifest(index: number, title: string): ReaderManifest 
       chapterTitle: `Chapter ${chapterIndex + 1}`,
       pageIndex,
       fileName: `${String(pageIndex + 1).padStart(3, "0")}.jpg`,
-      sourceURL: `https://picsum.photos/seed/klz9-${index}-${chapterIndex + 1}-${pageIndex + 1}/1400/2000`,
+      sourceURL: `https://picsum.photos/seed/panelneko-${index}-${chapterIndex + 1}-${pageIndex + 1}/1400/2000`,
     }));
 
     return {

@@ -18,7 +18,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("KLZ9 frontend crashed", error, errorInfo);
+    console.error("PanelNeko frontend crashed", error, errorInfo);
   }
 
   render() {
