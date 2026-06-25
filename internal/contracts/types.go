@@ -16,12 +16,13 @@ const (
 )
 
 type AppSettings struct {
-	LibraryRoot               string     `json:"libraryRoot"`
-	LocaleMode                LocaleMode `json:"localeMode"`
-	Locale                    string     `json:"locale"`
-	ThemeMode                 ThemeMode  `json:"themeMode"`
-	ReaderScrollCachePages    int        `json:"readerScrollCachePages"`
-	AutoRestoreReaderProgress bool       `json:"autoRestoreReaderProgress"`
+	LibraryRoot               string            `json:"libraryRoot"`
+	LocaleMode                LocaleMode        `json:"localeMode"`
+	Locale                    string            `json:"locale"`
+	ThemeMode                 ThemeMode         `json:"themeMode"`
+	ReaderScrollCachePages    int               `json:"readerScrollCachePages"`
+	AutoRestoreReaderProgress bool              `json:"autoRestoreReaderProgress"`
+	Shortcuts                 map[string]string `json:"shortcuts"`
 }
 
 type LibraryManga struct {

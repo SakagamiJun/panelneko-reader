@@ -24,7 +24,7 @@ interface ReaderControllerProps {
   manifest: ReaderManifest;
   mode: ReaderMode;
   onChapterChange?: (chapterID: string, chapterTitle: string) => void;
-  settings: Pick<AppSettings, "autoRestoreReaderProgress" | "readerScrollCachePages">;
+  settings: Pick<AppSettings, "autoRestoreReaderProgress" | "readerScrollCachePages" | "shortcuts">;
 }
 
 function resolveJumpTargetIndex(jumpRequest: ReaderJumpRequest, pages: FlatReaderPage[]) {
@@ -244,6 +244,52 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
     return () => window.clearTimeout(timer);
   }, [currentIndex, manifest.mangaID, pages, restoreReady]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "SELECT" ||
+        document.activeElement?.tagName === "TEXTAREA"
+      ) {
+        return;
+      }
+      
+      const s = settings.shortcuts || {};
+      const key = e.key.toLowerCase();
+      if (!s.nextChapter && !s.prevChapter) return;
+
+      const activePage = pages[clampIndex(currentIndex, pages.length)];
+      if (!activePage) return;
+
+      if (s.nextChapter && key === s.nextChapter.toLowerCase()) {
+        e.preventDefault();
+        const chapterIdx = manifest.chapters.findIndex((c) => c.id === activePage.chapterID);
+        if (chapterIdx !== -1 && chapterIdx + 1 < manifest.chapters.length) {
+          const nextChapterID = manifest.chapters[chapterIdx + 1].id;
+          const targetIndex = pages.findIndex((p) => p.chapterID === nextChapterID);
+          if (targetIndex !== -1) {
+            setCurrentIndex(targetIndex);
+            setNavigationRequest(nextNavigationRequest(targetIndex, "jump"));
+          }
+        }
+      } else if (s.prevChapter && key === s.prevChapter.toLowerCase()) {
+        e.preventDefault();
+        const chapterIdx = manifest.chapters.findIndex((c) => c.id === activePage.chapterID);
+        if (chapterIdx > 0) {
+          const prevChapterID = manifest.chapters[chapterIdx - 1].id;
+          const targetIndex = pages.findIndex((p) => p.chapterID === prevChapterID);
+          if (targetIndex !== -1) {
+            setCurrentIndex(targetIndex);
+            setNavigationRequest(nextNavigationRequest(targetIndex, "jump"));
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentIndex, manifest.chapters, pages, settings.shortcuts]);
+
   const handleCurrentIndexChange = (nextIndex: number) => {
     const clampedIndex = clampIndex(nextIndex, pages.length);
     setCurrentIndex((current) => (current === clampedIndex ? current : clampedIndex));
@@ -268,6 +314,7 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
         onMetricMeasured={onMetricMeasured}
         pages={pages}
         requestMetric={requestMetric}
+        shortcuts={settings.shortcuts}
       />
     );
   }
@@ -281,6 +328,7 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
       onMetricMeasured={onMetricMeasured}
       pages={pages}
       requestMetric={requestMetric}
+      shortcuts={settings.shortcuts}
     />
   );
 }

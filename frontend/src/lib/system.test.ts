@@ -12,6 +12,7 @@ describe("resolveLocale", () => {
           themeMode: "system",
           readerScrollCachePages: 6,
           autoRestoreReaderProgress: true,
+          shortcuts: {},
         },
         ["zh-Hans-CN"]
       )
@@ -27,6 +28,7 @@ describe("resolveLocale", () => {
         themeMode: "system",
         readerScrollCachePages: 6,
         autoRestoreReaderProgress: true,
+        shortcuts: {},
       })
     ).toBe("ja");
   });

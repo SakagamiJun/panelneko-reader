@@ -7,6 +7,7 @@ export namespace contracts {
 	    themeMode: string;
 	    readerScrollCachePages: number;
 	    autoRestoreReaderProgress: boolean;
+	    shortcuts: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -20,6 +21,7 @@ export namespace contracts {
 	        this.themeMode = source["themeMode"];
 	        this.readerScrollCachePages = source["readerScrollCachePages"];
 	        this.autoRestoreReaderProgress = source["autoRestoreReaderProgress"];
+	        this.shortcuts = source["shortcuts"];
 	    }
 	}
 	export class LibraryManga {

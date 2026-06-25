@@ -10,6 +10,7 @@ interface ScrollReaderProps {
   onMetricMeasured: (pageID: string, width: number, height: number) => void;
   pages: FlatReaderPage[];
   requestMetric: (page: FlatReaderPage | undefined) => void;
+  shortcuts?: Record<string, string>;
 }
 
 export function ScrollReader({
@@ -21,6 +22,7 @@ export function ScrollReader({
   onMetricMeasured,
   pages,
   requestMetric,
+  shortcuts = {},
 }: ScrollReaderProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -196,11 +198,15 @@ export function ScrollReader({
       return;
     }
 
-    if (event.key === "ArrowDown") {
+    const key = event.key.toLowerCase();
+    const nextKey = shortcuts.nextPage?.toLowerCase();
+    const prevKey = shortcuts.prevPage?.toLowerCase();
+
+    if ((nextKey && key === nextKey) || (!nextKey && event.key === "ArrowDown")) {
       event.preventDefault();
       scrollRef.current.scrollBy({ top: contentHeight * 0.85, behavior: "smooth" });
     }
-    if (event.key === "ArrowUp") {
+    if ((prevKey && key === prevKey) || (!prevKey && event.key === "ArrowUp")) {
       event.preventDefault();
       scrollRef.current.scrollBy({ top: -contentHeight * 0.85, behavior: "smooth" });
     }

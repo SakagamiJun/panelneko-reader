@@ -9,6 +9,7 @@ interface PagedReaderProps {
   onMetricMeasured: (pageID: string, width: number, height: number) => void;
   pages: FlatReaderPage[];
   requestMetric: (page: FlatReaderPage | undefined) => void;
+  shortcuts?: Record<string, string>;
 }
 
 export function PagedReader({
@@ -19,6 +20,7 @@ export function PagedReader({
   onMetricMeasured,
   pages,
   requestMetric,
+  shortcuts = {},
 }: PagedReaderProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const handledNavigationIDRef = useRef<number | null>(null);
@@ -98,11 +100,15 @@ export function PagedReader({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === " ") {
+    const key = event.key.toLowerCase();
+    const nextKey = shortcuts.nextPage?.toLowerCase();
+    const prevKey = shortcuts.prevPage?.toLowerCase();
+
+    if ((nextKey && key === nextKey) || (!nextKey && (event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === " "))) {
       event.preventDefault();
       jumpToIndex(currentIndex + pageStep);
     }
-    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+    if ((prevKey && key === prevKey) || (!prevKey && (event.key === "ArrowLeft" || event.key === "ArrowUp"))) {
       event.preventDefault();
       jumpToIndex(currentIndex - pageStep);
     }

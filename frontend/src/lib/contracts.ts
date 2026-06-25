@@ -9,6 +9,7 @@ export interface AppSettings {
   themeMode: ThemeMode;
   readerScrollCachePages: number;
   autoRestoreReaderProgress: boolean;
+  shortcuts: Record<string, string>;
 }
 
 export interface LibraryManga {

@@ -59,6 +59,15 @@ func DefaultSettings() contracts.AppSettings {
 		ThemeMode:                 contracts.ThemeModeSystem,
 		ReaderScrollCachePages:    6,
 		AutoRestoreReaderProgress: true,
+		Shortcuts: map[string]string{
+			"nextPage":      "ArrowRight", // or Space/ArrowDown handled in frontend
+			"prevPage":      "ArrowLeft",  // or ArrowUp handled in frontend
+			"nextChapter":   "]",
+			"prevChapter":   "[",
+			"toggleMode":    "m",
+			"backToLibrary": "Escape",
+			"toggleMenu":    "h",
+		},
 	}
 }
 
@@ -90,6 +99,12 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 	if input.ReaderScrollCachePages > 0 {
 		settings.ReaderScrollCachePages = input.ReaderScrollCachePages
 		settings.AutoRestoreReaderProgress = input.AutoRestoreReaderProgress
+	}
+
+	if input.Shortcuts != nil {
+		for k, v := range input.Shortcuts {
+			settings.Shortcuts[k] = v
+		}
 	}
 
 	switch input.LocaleMode {

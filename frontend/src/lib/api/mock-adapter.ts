@@ -11,12 +11,21 @@ const STORAGE_KEY = "panelneko-reader-settings";
 const READER_PROGRESS_STORAGE_KEY = "panelneko-reader-progress";
 
 const defaultSettings: AppSettings = {
-  libraryRoot: "/Users/example/Downloads/MangaLibrary",
+  libraryRoot: "/mock/library",
   localeMode: "system",
   locale: "en",
   themeMode: "system",
   readerScrollCachePages: 6,
   autoRestoreReaderProgress: true,
+  shortcuts: {
+    nextPage: "ArrowRight",
+    prevPage: "ArrowLeft",
+    nextChapter: "]",
+    prevChapter: "[",
+    toggleMode: "m",
+    backToLibrary: "Escape",
+    toggleMenu: "h",
+  },
 };
 
 function createMockReaderManifest(index: number, title: string): ReaderManifest {

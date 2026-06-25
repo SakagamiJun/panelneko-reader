@@ -175,6 +175,38 @@ export default function App() {
   }, [readerQuery.data]);
 
   useEffect(() => {
+    if (!selectedLibraryID || !settingsQuery.data) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "SELECT" ||
+        document.activeElement?.tagName === "TEXTAREA"
+      ) {
+        return;
+      }
+
+      const s = settingsQuery.data.shortcuts || {};
+      const key = e.key.toLowerCase();
+      if (s.backToLibrary && key === s.backToLibrary.toLowerCase()) {
+        e.preventDefault();
+        setReaderJumpMenuOpen(false);
+        setReaderMenuCollapsed(false);
+        setSelectedLibraryID(null);
+      } else if (s.toggleMode && key === s.toggleMode.toLowerCase()) {
+        e.preventDefault();
+        setReaderMode((m) => (m === "scroll" ? "paged" : "scroll"));
+      } else if (s.toggleMenu && key === s.toggleMenu.toLowerCase()) {
+        e.preventDefault();
+        setReaderMenuCollapsed((c) => !c);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedLibraryID, settingsQuery.data]);
+
+  useEffect(() => {
     setReaderJumpMenuOpen(false);
     setReaderJumpPageInput("");
     setReaderJumpRequest(null);
@@ -888,6 +920,18 @@ function SettingsForm({
         </form>
       </PanelSection>
 
+      <PanelSection title={t("settings.shortcuts")} subtitle="">
+        <div className="space-y-2 py-1">
+          <ShortcutEditor label={t("settings.shortcutAction_nextPage")} action="nextPage" form={form} setForm={setForm} />
+          <ShortcutEditor label={t("settings.shortcutAction_prevPage")} action="prevPage" form={form} setForm={setForm} />
+          <ShortcutEditor label={t("settings.shortcutAction_nextChapter")} action="nextChapter" form={form} setForm={setForm} />
+          <ShortcutEditor label={t("settings.shortcutAction_prevChapter")} action="prevChapter" form={form} setForm={setForm} />
+          <ShortcutEditor label={t("settings.shortcutAction_toggleMode")} action="toggleMode" form={form} setForm={setForm} />
+          <ShortcutEditor label={t("settings.shortcutAction_backToLibrary")} action="backToLibrary" form={form} setForm={setForm} />
+          <ShortcutEditor label={t("settings.shortcutAction_toggleMenu")} action="toggleMenu" form={form} setForm={setForm} />
+        </div>
+      </PanelSection>
+
       {version && (
         <div className="pt-2 text-center text-[10px] tracking-[0.1em] text-muted-foreground/60 border-t border-border/40">
           PanelNeko Reader v{version}
@@ -906,3 +950,51 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     </label>
   );
 }
+
+function ShortcutEditor({
+  action,
+  label,
+  form,
+  setForm,
+}: {
+  action: string;
+  label: string;
+  form: AppSettings;
+  setForm: React.Dispatch<React.SetStateAction<AppSettings>>;
+}) {
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState(false);
+  const value = form.shortcuts?.[action] ?? "";
+
+  useEffect(() => {
+    if (!editing) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.key !== "Escape") {
+        setForm((current) => ({
+          ...current,
+          shortcuts: { ...current.shortcuts, [action]: e.key },
+        }));
+      }
+      setEditing(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editing, action, setForm]);
+
+  return (
+    <div className="flex items-center justify-between text-sm px-1 py-1">
+      <span className="text-muted-foreground">{label}</span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={cn("w-32", editing && "border-primary text-primary")}
+        onClick={() => setEditing(true)}
+      >
+        {editing ? t("settings.pressAnyKey") : value}
+      </Button>
+    </div>
+  );
+}
+
