@@ -2,7 +2,7 @@
 [中文版](./README.zh-CN.md)
 ---------------------
 
-PanelNeko Reader is a lightweight, cross-platform desktop application designed exclusively for reading local manga, comics, and artbooks. Built with Go, Wails v2, and React, it provides a premium, high-performance offline reading experience with modern design aesthetics.
+PanelNeko Reader is a simple, lightweight, cross-platform desktop application designed exclusively for reading local manga, comics, and artbooks. It focuses on providing a pure, minimalist, and ad-free offline reading experience. Built with Go, Wails v2, and React, it provides a premium, high-performance offline reading experience with modern design aesthetics.
 
 ![Application Showcase](./Design.webp)
 
