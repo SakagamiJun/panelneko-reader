@@ -67,6 +67,17 @@ func (s *SQLiteStore) init() error {
 			page INTEGER NOT NULL,
 			updated_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS library_manga (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			source_url TEXT NOT NULL,
+			relative_path TEXT NOT NULL,
+			cover_image_url TEXT NOT NULL,
+			chapter_count INTEGER NOT NULL,
+			page_count INTEGER NOT NULL,
+			last_updated TEXT NOT NULL,
+			mod_time INTEGER NOT NULL
+		);`,
 	}
 
 	for _, statement := range statements {
@@ -134,6 +145,67 @@ func (s *SQLiteStore) GetReaderProgress(mangaID string) (contracts.ReaderProgres
 	}
 
 	return progress, true, nil
+}
+
+func (s *SQLiteStore) SaveLibraryManga(mangas []contracts.LibraryManga, modTimes map[string]int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`DELETE FROM library_manga`)
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO library_manga (id, title, source_url, relative_path, cover_image_url, chapter_count, page_count, last_updated, mod_time)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, m := range mangas {
+		modTime := modTimes[m.ID]
+		if _, err := stmt.Exec(m.ID, m.Title, m.SourceURL, m.RelativePath, m.CoverImageURL, m.ChapterCount, m.PageCount, m.LastUpdated, modTime); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+type LibraryMangaRecord struct {
+	contracts.LibraryManga
+	ModTime int64
+}
+
+func (s *SQLiteStore) ListLibraryManga() ([]LibraryMangaRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT id, title, source_url, relative_path, cover_image_url, chapter_count, page_count, last_updated, mod_time
+		FROM library_manga
+		ORDER BY last_updated DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []LibraryMangaRecord
+	for rows.Next() {
+		var r LibraryMangaRecord
+		if err := rows.Scan(
+			&r.ID, &r.Title, &r.SourceURL, &r.RelativePath, &r.CoverImageURL,
+			&r.ChapterCount, &r.PageCount, &r.LastUpdated, &r.ModTime,
+		); err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+	return records, rows.Err()
 }
 
 func (s *SQLiteStore) SaveReaderProgress(progress contracts.ReaderProgress) error {

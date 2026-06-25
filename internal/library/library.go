@@ -14,15 +14,18 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 )
 
+var libraryManifestSemaphore = make(chan struct{}, 32)
+
 const (
 	LibraryAssetPrefix        = "/library-files/"
 	LibraryArchiveAssetPrefix = "/library-archive/"
-	archiveSidecarSuffix      = ".klz9-chapter.json"
+	archiveSidecarSuffix      = ".panelneko-chapter.json"
 )
 
 func IsLibraryAssetRequest(requestPath string) bool {
@@ -91,48 +94,99 @@ func (r *archiveAssetReadCloser) Close() error {
 	return archiveErr
 }
 
-func ListLibraryManga(outputRoot string) ([]contracts.LibraryManga, error) {
+func getMangaModTime(mangaDir string, fallback int64) int64 {
+	entries, err := os.ReadDir(mangaDir)
+	if err != nil {
+		return fallback
+	}
+	max := fallback
+	for _, e := range entries {
+		if info, err := e.Info(); err == nil {
+			if t := info.ModTime().UnixNano(); t > max {
+				max = t
+			}
+		}
+	}
+	return max
+}
+
+func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryManga, prevModTimes map[string]int64) ([]contracts.LibraryManga, map[string]int64, error) {
 	entries, err := os.ReadDir(outputRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []contracts.LibraryManga{}, nil
+			return []contracts.LibraryManga{}, nil, nil
 		}
-		return nil, fmt.Errorf("read library root: %w", err)
+		return nil, nil, fmt.Errorf("read library root: %w", err)
 	}
 
-	items := make([]contracts.LibraryManga, 0, len(entries))
+	newModTimes := make(map[string]int64)
+
+	var items []contracts.LibraryManga
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	var firstErr error
+	var errOnce sync.Once
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
-		mangaDir := filepath.Join(outputRoot, entry.Name())
-		manifest, err := loadMangaManifest(outputRoot, mangaDir, entry.Name())
-		if err != nil {
-			return nil, err
-		}
-		if len(manifest.reader.Chapters) == 0 {
-			continue
-		}
+		wg.Add(1)
+		go func(entry os.DirEntry) {
+			defer wg.Done()
+			mangaDir := filepath.Join(outputRoot, entry.Name())
 
-		item := contracts.LibraryManga{
-			ID:            manifest.reader.MangaID,
-			Title:         manifest.reader.Title,
-			SourceURL:     manifest.sourceURL,
-			RelativePath:  manifest.relativePath,
-			CoverImageURL: manifest.reader.CoverImageURL,
-			ChapterCount:  len(manifest.reader.Chapters),
-			PageCount:     manifest.reader.TotalPages,
-			LastUpdated:   manifest.updatedAt.UTC().Format(time.RFC3339),
-		}
-		items = append(items, item)
+			info, err := entry.Info()
+			if err != nil {
+				return
+			}
+
+			modTime := getMangaModTime(mangaDir, info.ModTime().UnixNano())
+
+			if prevTime, ok := prevModTimes[entry.Name()]; ok && prevTime == modTime {
+				if prevItem, ok := prevItems[entry.Name()]; ok {
+					mu.Lock()
+					items = append(items, prevItem)
+					newModTimes[prevItem.ID] = modTime
+					mu.Unlock()
+					return
+				}
+			}
+
+			manifest, err := loadMangaManifest(outputRoot, mangaDir, entry.Name())
+			if err != nil {
+				errOnce.Do(func() { firstErr = err })
+				return
+			}
+			if len(manifest.reader.Chapters) == 0 {
+				return
+			}
+
+			item := contracts.LibraryManga{
+				ID:            manifest.reader.MangaID,
+				Title:         manifest.reader.Title,
+				SourceURL:     manifest.sourceURL,
+				RelativePath:  manifest.relativePath,
+				CoverImageURL: manifest.reader.CoverImageURL,
+				ChapterCount:  len(manifest.reader.Chapters),
+				PageCount:     manifest.reader.TotalPages,
+				LastUpdated:   manifest.updatedAt.UTC().Format(time.RFC3339),
+			}
+
+			mu.Lock()
+			items = append(items, item)
+			newModTimes[item.ID] = modTime
+			mu.Unlock()
+		}(entry)
 	}
 
-	sort.SliceStable(items, func(i, j int) bool {
-		return items[i].LastUpdated > items[j].LastUpdated
-	})
+	wg.Wait()
+	if firstErr != nil {
+		return nil, nil, firstErr
+	}
 
-	return items, nil
+	return items, newModTimes, nil
 }
 
 func GetReaderManifest(outputRoot string, mangaID string) (contracts.ReaderManifest, error) {
@@ -312,23 +366,44 @@ func loadMangaManifest(outputRoot string, mangaDir string, relativePath string) 
 		sourceURL  string
 	)
 
-	for _, descriptor := range descriptors {
-		source, err := loadChapterSource(outputRoot, descriptor)
-		if err != nil {
-			return mangaManifest{}, err
-		}
-		if len(source.pages) == 0 {
-			continue
-		}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	var firstErr error
+	var errOnce sync.Once
 
-		if source.updatedAt.After(updatedAt) {
-			updatedAt = source.updatedAt
-		}
-		if sourceURL == "" && source.sourceURL != "" {
-			sourceURL = source.sourceURL
-		}
-		totalPages += len(source.pages)
-		chapters = append(chapters, source)
+	for _, descriptor := range descriptors {
+		wg.Add(1)
+		go func(descriptor chapterSourceDescriptor) {
+			defer wg.Done()
+
+			libraryManifestSemaphore <- struct{}{}
+			source, err := loadChapterSource(outputRoot, descriptor)
+			<-libraryManifestSemaphore
+
+			if err != nil {
+				errOnce.Do(func() { firstErr = err })
+				return
+			}
+			if len(source.pages) == 0 {
+				return
+			}
+
+			mu.Lock()
+			if source.updatedAt.After(updatedAt) {
+				updatedAt = source.updatedAt
+			}
+			if sourceURL == "" && source.sourceURL != "" {
+				sourceURL = source.sourceURL
+			}
+			totalPages += len(source.pages)
+			chapters = append(chapters, source)
+			mu.Unlock()
+		}(descriptor)
+	}
+
+	wg.Wait()
+	if firstErr != nil {
+		return mangaManifest{}, firstErr
 	}
 
 	sort.SliceStable(chapters, func(i, j int) bool {
@@ -382,27 +457,22 @@ func loadChapterSource(outputRoot string, descriptor chapterSourceDescriptor) (c
 }
 
 func loadDirectoryChapterSource(outputRoot string, chapterDir string) (chapterSource, error) {
-	sidecar, sidecarFound, err := ReadSidecar(SidecarPath(chapterDir))
-	if err != nil {
-		return chapterSource{}, err
-	}
+	info, hasInfo := readComicInfoFromDir(chapterDir)
 
 	baseName := filepath.Base(chapterDir)
-	metadata := resolveChapterMetadata(baseName, sidecar, sidecarFound)
-	if !sidecarFound || sidecar.ChapterID == "" {
-		if relToRoot, err := filepath.Rel(outputRoot, chapterDir); err == nil {
-			parts := strings.SplitN(relToRoot, string(filepath.Separator), 2)
-			if len(parts) == 2 {
-				metadata.id = parts[1]
-			}
+	metadata := resolveChapterMetadata(baseName, info, hasInfo)
+	if relToRoot, err := relativePathWithinRoot(outputRoot, chapterDir); err == nil {
+		parts := strings.SplitN(relToRoot, "/", 2)
+		if len(parts) == 2 {
+			metadata.id = parts[1]
 		}
 	}
-	pages, err := readDirectoryPages(outputRoot, chapterDir, sidecar, sidecarFound, metadata)
+	pages, err := readDirectoryPages(outputRoot, chapterDir, metadata)
 	if err != nil {
 		return chapterSource{}, err
 	}
 
-	info, err := os.Stat(chapterDir)
+	stat, err := os.Stat(chapterDir)
 	if err != nil {
 		return chapterSource{}, fmt.Errorf("stat chapter directory: %w", err)
 	}
@@ -415,24 +485,32 @@ func loadDirectoryChapterSource(outputRoot string, chapterDir string) (chapterSo
 		completedAt: metadata.completedAt,
 		localPath:   chapterDir,
 		pages:       pages,
-		updatedAt:   info.ModTime(),
+		updatedAt:   stat.ModTime(),
 	}, nil
 }
 
 func loadArchiveChapterSource(outputRoot string, archivePath string) (chapterSource, error) {
-	sidecar, sidecarFound, err := ReadSidecar(ArchiveSidecarPath(archivePath))
+	archiveReader, err := zip.OpenReader(archivePath)
 	if err != nil {
-		return chapterSource{}, err
+		return chapterSource{}, fmt.Errorf("open chapter archive: %w", err)
 	}
+	defer archiveReader.Close()
 
+	info, hasInfo := readComicInfoFromArchive(archiveReader)
 	baseName := strings.TrimSuffix(filepath.Base(archivePath), filepath.Ext(archivePath))
-	metadata := resolveChapterMetadata(baseName, sidecar, sidecarFound)
-	pages, err := readArchivePages(outputRoot, archivePath, sidecar, sidecarFound, metadata)
+	metadata := resolveChapterMetadata(baseName, info, hasInfo)
+	if relToRoot, err := relativePathWithinRoot(outputRoot, archivePath); err == nil {
+		parts := strings.SplitN(relToRoot, "/", 2)
+		if len(parts) == 2 {
+			metadata.id = strings.TrimSuffix(parts[1], filepath.Ext(parts[1]))
+		}
+	}
+	pages, err := readArchivePages(outputRoot, archivePath, archiveReader, metadata)
 	if err != nil {
 		return chapterSource{}, err
 	}
 
-	info, err := os.Stat(archivePath)
+	stat, err := os.Stat(archivePath)
 	if err != nil {
 		return chapterSource{}, fmt.Errorf("stat chapter archive: %w", err)
 	}
@@ -445,29 +523,22 @@ func loadArchiveChapterSource(outputRoot string, archivePath string) (chapterSou
 		completedAt: metadata.completedAt,
 		localPath:   archivePath,
 		pages:       pages,
-		updatedAt:   info.ModTime(),
+		updatedAt:   stat.ModTime(),
 	}, nil
 }
 
-func readDirectoryPages(outputRoot string, chapterDir string, sidecar ChapterSidecar, sidecarFound bool, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
+func readDirectoryPages(outputRoot string, chapterDir string, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
 	pages := make([]contracts.ReaderPage, 0)
-	if sidecarFound && len(sidecar.Files) > 0 {
-		sort.SliceStable(sidecar.Files, func(i, j int) bool {
-			return sidecar.Files[i].PageIndex < sidecar.Files[j].PageIndex
-		})
-		for _, file := range sidecar.Files {
-			fullPath := filepath.Join(chapterDir, file.FileName)
-			if !fileExists(fullPath) || !isSupportedImagePath(fullPath) {
-				continue
-			}
-			sourceURL, err := AssetURLForPath(outputRoot, fullPath)
-			if err != nil {
-				return nil, err
-			}
-			pages = append(pages, buildReaderPage(metadata, file.PageIndex, file.FileName, sourceURL))
-		}
-		return pages, nil
+
+	chapterRelativePath, err := relativePathWithinRoot(outputRoot, chapterDir)
+	if err != nil {
+		return nil, err
 	}
+	segments := strings.Split(chapterRelativePath, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+	baseSourceURL := LibraryAssetPrefix + strings.Join(segments, "/") + "/"
 
 	entries, err := os.ReadDir(chapterDir)
 	if err != nil {
@@ -486,63 +557,32 @@ func readDirectoryPages(outputRoot string, chapterDir string, sidecar ChapterSid
 		if !isSupportedImagePath(fullPath) {
 			continue
 		}
-		sourceURL, err := AssetURLForPath(outputRoot, fullPath)
-		if err != nil {
-			return nil, err
-		}
+		sourceURL := baseSourceURL + url.PathEscape(entry.Name())
 		pages = append(pages, buildReaderPage(metadata, index, entry.Name(), sourceURL))
 	}
 
 	return pages, nil
 }
 
-func readArchivePages(outputRoot string, archivePath string, sidecar ChapterSidecar, sidecarFound bool, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
-	archiveReader, err := zip.OpenReader(archivePath)
-	if err != nil {
-		return nil, fmt.Errorf("open chapter archive: %w", err)
-	}
-	defer archiveReader.Close()
-
+func readArchivePages(outputRoot string, archivePath string, archiveReader *zip.ReadCloser, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
 	entries, err := collectArchiveImageEntries(archiveReader)
 	if err != nil {
 		return nil, err
 	}
 
-	entryByPath := make(map[string]archiveEntry, len(entries))
-	for _, entry := range entries {
-		entryByPath[entry.normalizedPath] = entry
+	archiveRelativePath, err := relativePathWithinRoot(outputRoot, archivePath)
+	if err != nil {
+		return nil, err
 	}
+	baseSourceURL := LibraryArchiveAssetPrefix + encodePathToken(archiveRelativePath) + "/"
 
 	pages := make([]contracts.ReaderPage, 0)
-	if sidecarFound && len(sidecar.Files) > 0 {
-		sort.SliceStable(sidecar.Files, func(i, j int) bool {
-			return sidecar.Files[i].PageIndex < sidecar.Files[j].PageIndex
-		})
-		for _, file := range sidecar.Files {
-			normalizedEntryPath, err := normalizeArchiveEntryPath(file.FileName)
-			if err != nil {
-				continue
-			}
-			if _, found := entryByPath[normalizedEntryPath]; !found {
-				continue
-			}
-			sourceURL, err := ArchiveAssetURL(outputRoot, archivePath, normalizedEntryPath)
-			if err != nil {
-				return nil, err
-			}
-			pages = append(pages, buildReaderPage(metadata, file.PageIndex, normalizedEntryPath, sourceURL))
-		}
-		return pages, nil
-	}
 
 	sort.SliceStable(entries, func(i, j int) bool {
 		return naturalLess(entries[i].normalizedPath, entries[j].normalizedPath)
 	})
 	for index, entry := range entries {
-		sourceURL, err := ArchiveAssetURL(outputRoot, archivePath, entry.normalizedPath)
-		if err != nil {
-			return nil, err
-		}
+		sourceURL := baseSourceURL + encodePathToken(entry.normalizedPath)
 		pages = append(pages, buildReaderPage(metadata, index, entry.normalizedPath, sourceURL))
 	}
 
@@ -560,30 +600,27 @@ func buildReaderPage(metadata chapterMetadata, pageIndex int, fileName string, s
 	}
 }
 
-func resolveChapterMetadata(baseName string, sidecar ChapterSidecar, sidecarFound bool) chapterMetadata {
+func resolveChapterMetadata(baseName string, info ComicInfo, hasInfo bool) chapterMetadata {
 	metadata := chapterMetadata{
 		id:     baseName,
 		title:  baseName,
 		number: inferChapterNumber(baseName),
 	}
 
-	if !sidecarFound {
+	if !hasInfo {
 		return metadata
 	}
 
-	if sidecar.ChapterNumber != 0 {
-		metadata.number = sidecar.ChapterNumber
-	} else if metadata.number == 0 && sidecar.ChapterTitle != "" {
-		metadata.number = inferChapterNumber(sidecar.ChapterTitle)
+	if info.Number != "" {
+		if val, err := strconv.ParseFloat(info.Number, 64); err == nil {
+			metadata.number = val
+		}
+	} else if metadata.number == 0 && info.Title != "" {
+		metadata.number = inferChapterNumber(info.Title)
 	}
-	if sidecar.ChapterTitle != "" {
-		metadata.title = sidecar.ChapterTitle
+	if info.Title != "" {
+		metadata.title = info.Title
 	}
-	if sidecar.ChapterID != "" {
-		metadata.id = sidecar.ChapterID
-	}
-	metadata.sourceURL = sidecar.SourceURL
-	metadata.completedAt = sidecar.CompletedAt
 	return metadata
 }
 
@@ -895,18 +932,33 @@ func naturalLess(left string, right string) bool {
 				rightEnd++
 			}
 
-			leftNumber := strings.TrimLeft(left[leftIndex:leftEnd], "0")
-			rightNumber := strings.TrimLeft(right[rightIndex:rightEnd], "0")
-			if leftNumber == "" {
-				leftNumber = "0"
+			leftNumStart := leftIndex
+			for leftNumStart < leftEnd && left[leftNumStart] == '0' {
+				leftNumStart++
 			}
-			if rightNumber == "" {
-				rightNumber = "0"
+			rightNumStart := rightIndex
+			for rightNumStart < rightEnd && right[rightNumStart] == '0' {
+				rightNumStart++
 			}
 
-			if len(leftNumber) != len(rightNumber) {
-				return len(leftNumber) < len(rightNumber)
+			leftLen := leftEnd - leftNumStart
+			rightLen := rightEnd - rightNumStart
+
+			if leftLen == 0 {
+				leftLen = 1
+				leftNumStart = leftEnd - 1
 			}
+			if rightLen == 0 {
+				rightLen = 1
+				rightNumStart = rightEnd - 1
+			}
+
+			if leftLen != rightLen {
+				return leftLen < rightLen
+			}
+
+			leftNumber := left[leftNumStart:leftEnd]
+			rightNumber := right[rightNumStart:rightEnd]
 			if leftNumber != rightNumber {
 				return leftNumber < rightNumber
 			}
@@ -950,10 +1002,9 @@ func resolveChapterDescriptors(dirPath string) ([]chapterSourceDescriptor, error
 		}}, nil
 	}
 
-	// Preserve sidecar-bearing directories as chapters even when
-	// images live in child folders (sidecar Files entries reference
-	// relative paths like "pages/001.jpg").
-	if _, err := os.Stat(SidecarPath(dirPath)); err == nil {
+	// Preserve directories with ComicInfo.xml as chapters even when
+	// images live in child folders.
+	if _, err := os.Stat(filepath.Join(dirPath, "ComicInfo.xml")); err == nil {
 		return []chapterSourceDescriptor{{
 			kind: chapterSourceDirectory,
 			path: dirPath,

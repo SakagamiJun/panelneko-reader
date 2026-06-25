@@ -133,7 +133,28 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 		return nil, err
 	}
 
-	return library.ListLibraryManga(a.settings.Get().LibraryRoot)
+	records, err := a.store.ListLibraryManga()
+	if err != nil {
+		return nil, err
+	}
+
+	prevModTimes := make(map[string]int64)
+	prevItems := make(map[string]contracts.LibraryManga)
+	for _, r := range records {
+		prevModTimes[r.RelativePath] = r.ModTime
+		prevItems[r.RelativePath] = r.LibraryManga
+	}
+
+	items, newModTimes, err := library.ScanLibraryManga(a.settings.Get().LibraryRoot, prevItems, prevModTimes)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := a.store.SaveLibraryManga(items, newModTimes); err != nil {
+		return nil, err
+	}
+
+	return items, nil
 }
 
 func (a *App) GetReaderManifest(mangaID string) (contracts.ReaderManifest, error) {
