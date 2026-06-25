@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -690,6 +691,32 @@ function LibraryGrid({
   onOpen: (mangaID: string) => void;
   onOpenSettings: () => void;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [columns, setColumns] = useState(1);
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0].contentRect.width;
+      if (width >= 3840) setColumns(12);      // 2160p
+      else if (width >= 2560) setColumns(8);  // 1440p
+      else if (width >= 1920) setColumns(6);  // 1080p
+      else if (width >= 1280) setColumns(4);  // 720p
+      else if (width >= 768) setColumns(3);   // 平板
+      else setColumns(2);                     // 手机
+    });
+    observer.observe(scrollRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const rowCount = Math.ceil(items.length / columns);
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 280,
+    overscan: 2,
+  });
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center border-l border-border/40 bg-card/14 text-sm text-muted-foreground">
@@ -711,37 +738,63 @@ function LibraryGrid({
   }
 
   return (
-    <div className="grid h-full auto-rows-max gap-px overflow-y-auto bg-border/45 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-      {items.map((item) => (
-        <article className="group relative min-h-[220px] overflow-hidden bg-background/92 transition hover:bg-background" key={item.id}>
-          <button className="flex h-full w-full flex-col text-left" onClick={() => onOpen(item.id)} type="button">
-            <div className="relative aspect-[4/5] overflow-hidden bg-muted">
-              {item.coverImageURL ? (
-                <img
-                  alt={item.title}
-                  className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
-                  loading="lazy"
-                  src={item.coverImageURL}
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                  <BookImage className="h-9 w-9" />
-                </div>
-              )}
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/74 via-black/18 to-transparent px-3 py-3 text-black drop-shadow-[0_0_10px_rgba(255,255,255,1)]">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black drop-shadow-[0_0_10px_rgba(255,255,255,1)]">{item.chapterCount} chapters</div>
-                <div className="mt-1 line-clamp-2 text-base font-black">{item.title}</div>
-              </div>
-            </div>
-            <div className="flex flex-1 items-center gap-3 px-3 py-3">
-              <div className="min-w-0">
-                <div className="text-xs text-muted-foreground">{item.pageCount} pages</div>
-                <div className="mt-1 truncate text-[11px] text-muted-foreground">{formatDateTime(item.lastUpdated)}</div>
-              </div>
-            </div>
-          </button>
-        </article>
-      ))}
+    <div ref={scrollRef} className="h-full overflow-y-auto bg-border/45 relative">
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: "100%",
+          position: "relative",
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualRow) => (
+          <div
+            key={virtualRow.index}
+            data-index={virtualRow.index}
+            ref={virtualizer.measureElement}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${virtualRow.start}px)`,
+              display: "grid",
+              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+              gap: "1px",
+            }}
+          >
+            {items.slice(virtualRow.index * columns, (virtualRow.index + 1) * columns).map((item) => (
+              <article className="group relative overflow-hidden bg-background/92 transition hover:bg-background" key={item.id}>
+                <button className="flex w-full flex-col text-left" onClick={() => onOpen(item.id)} type="button">
+                  <div className="relative aspect-[4/5] overflow-hidden bg-muted w-full">
+                    {item.coverImageURL ? (
+                      <img
+                        alt={item.title}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+                        loading="lazy"
+                        src={item.coverImageURL}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                        <BookImage className="h-9 w-9" />
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/74 via-black/18 to-transparent px-3 py-3 text-black drop-shadow-[0_0_10px_rgba(255,255,255,1)]">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black drop-shadow-[0_0_10px_rgba(255,255,255,1)]">{item.chapterCount} chapters</div>
+                      <div className="mt-1 line-clamp-2 text-base font-black">{item.title}</div>
+                    </div>
+                  </div>
+                  <div className="flex flex-1 items-center gap-3 px-3 py-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground">{item.pageCount} pages</div>
+                      <div className="mt-1 truncate text-[11px] text-muted-foreground">{formatDateTime(item.lastUpdated)}</div>
+                    </div>
+                  </div>
+                </button>
+              </article>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
