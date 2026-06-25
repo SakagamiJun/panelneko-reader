@@ -691,11 +691,11 @@ function LibraryGrid({
   onOpen: (mangaID: string) => void;
   onOpenSettings: () => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const [columns, setColumns] = useState(1);
 
   useEffect(() => {
-    if (!scrollRef.current) return;
+    if (!scrollEl) return;
     const observer = new ResizeObserver((entries) => {
       const width = entries[0].contentRect.width;
       if (width >= 3840) setColumns(12);      // 2160p
@@ -705,14 +705,14 @@ function LibraryGrid({
       else if (width >= 768) setColumns(3);   // 平板
       else setColumns(2);                     // 手机
     });
-    observer.observe(scrollRef.current);
+    observer.observe(scrollEl);
     return () => observer.disconnect();
-  }, []);
+  }, [scrollEl]);
 
   const rowCount = Math.ceil(items.length / columns);
   const virtualizer = useVirtualizer({
     count: rowCount,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement: () => scrollEl,
     estimateSize: () => 280,
     overscan: 2,
   });
@@ -738,7 +738,7 @@ function LibraryGrid({
   }
 
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto bg-border/45 relative">
+    <div ref={setScrollEl} className="h-full overflow-y-auto bg-border/45 relative">
       <div
         style={{
           height: `${virtualizer.getTotalSize()}px`,
