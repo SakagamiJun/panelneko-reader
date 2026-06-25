@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -153,6 +154,10 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 	if err := a.store.SaveLibraryManga(items, newModTimes); err != nil {
 		return nil, err
 	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].LastUpdated > items[j].LastUpdated
+	})
 
 	return items, nil
 }
