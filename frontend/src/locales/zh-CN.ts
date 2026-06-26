@@ -42,6 +42,8 @@ export const zhCN = {
     title: "本地漫画库",
     empty: "当前漫画库目录下还没有已导入漫画。请点击下方按钮选择存放漫画（包含图片子目录或 ZIP/CBZ 压缩包）的本地文件夹。",
     back: "返回书架",
+    loadingTitle: "正在加载书库...",
+    loadingDescription: "如果您的书库过大，首次加载可能会需要一些时间。请耐心等待。",
   },
   reader: {
     scrollMode: "卷轴模式",

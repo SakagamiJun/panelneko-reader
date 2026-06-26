@@ -42,6 +42,8 @@ export const en = {
     title: "Local Library",
     empty: "No manga directories found. Please configure your manga library directory below to scan your local folders and archives (.zip/.cbz).",
     back: "Back to Library",
+    loadingTitle: "Loading Library...",
+    loadingDescription: "This might take a moment if you have a large comic collection. Please wait patiently.",
   },
   reader: {
     scrollMode: "Scroll Mode",

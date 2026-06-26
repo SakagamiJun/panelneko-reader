@@ -8,6 +8,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Languages,
+  Loader2,
   MoonStar,
   Settings2,
   Sparkles,
@@ -749,10 +750,24 @@ function LibraryGrid({
     overscan: 2,
   });
 
+  const { t } = useTranslation();
+
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center border-l border-border/40 bg-card/14 text-sm text-muted-foreground">
-        Loading library…
+      <div className="flex h-full w-full flex-col items-center justify-center border-l border-border/40 bg-card/14 p-6 text-center">
+        <div className="relative flex items-center justify-center mb-8">
+          <div className="absolute h-24 w-24 animate-ping rounded-full bg-primary/20" />
+          <div className="absolute h-16 w-16 animate-pulse rounded-full bg-primary/40" />
+          <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-full bg-primary/90 text-primary-foreground shadow-xl ring-4 ring-primary/20 backdrop-blur">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
+        </div>
+        <h3 className="mb-3 text-xl font-semibold tracking-tight text-foreground">
+          {t("library.loadingTitle")}
+        </h3>
+        <p className="max-w-md text-sm text-muted-foreground/80 leading-relaxed">
+          {t("library.loadingDescription")}
+        </p>
       </div>
     );
   }
