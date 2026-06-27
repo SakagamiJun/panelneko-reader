@@ -2,8 +2,22 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump'
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
@@ -18,7 +32,88 @@ env:
   WAILS_VERSION: v2.12.0
 
 jobs:
+  prepare-version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      skip: ${{ steps.version.outputs.skip }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        env:
+          INPUT_BUMP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump || 'auto' }}
+        run: |
+          set -euo pipefail
+          
+          # If triggered by a manual tag push (e.g., v1.0.0), use it directly
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" == v* ]]; then
+            echo "Triggered by manual tag: ${GITHUB_REF_NAME}"
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          
+          git fetch --tags --force
+          
+          last_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
+          base_version="0.0.0"
+          range="HEAD"
+          if [[ -n "$last_tag" ]]; then
+            base_version="${last_tag#v}"
+            range="${last_tag}..HEAD"
+          fi
+          
+          bump="${INPUT_BUMP:-auto}"
+          if [[ "$bump" == "auto" || -z "$bump" ]]; then
+            commit_lines="$(git log --format='%s%n%b' $range)"
+            bump=""
+            # We removed the auto-major bump here. Major versions are handled manually via tags.
+            if grep -Eq '^feat(\([^)]+\))?:' <<< "$commit_lines"; then
+              bump="minor"
+            elif grep -Eq '^(fix|perf|refactor|build|ci|revert|chore|docs|style|test)(\([^)]+\))?:' <<< "$commit_lines"; then
+              bump="patch"
+            fi
+            
+            if [[ -z "$bump" ]]; then
+              echo "No releasable commits found since ${last_tag:-repository start}. Skipping release." >&2
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          
+          IFS='.' read -r major minor patch <<< "$base_version"
+          case "$bump" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          tag="v${major}.${minor}.${patch}"
+          version="${major}.${minor}.${patch}"
+          
+          if git ls-remote --tags origin "refs/tags/${tag}" | grep -q .; then
+            echo "Tag ${tag} already exists."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$tag"
+            git push origin "$tag"
+          fi
+          
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: prepare-version
+    if: needs.prepare-version.outputs.skip != 'true'
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -30,10 +125,15 @@ jobs:
             platform: linux/amd64
             archive: panelneko-reader-linux-amd64.tar.gz
             wails_args: "-tags webkit2_41"
-          - name: macos-universal
+          - name: macos-amd64
             os: macos-latest
-            platform: darwin/universal
-            archive: panelneko-reader-macos-universal.zip
+            platform: darwin/amd64
+            archive: panelneko-reader-macos-amd64.zip
+            wails_args: ""
+          - name: macos-arm64
+            os: macos-latest
+            platform: darwin/arm64
+            archive: panelneko-reader-macos-arm64.zip
             wails_args: ""
           - name: windows-amd64
             os: windows-latest
@@ -44,6 +144,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare-version.outputs.tag }}
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -87,7 +189,7 @@ jobs:
         if: runner.os != 'macOS'
         run: wails build -clean -platform ${{ matrix.platform }} ${{ matrix.wails_args }}
 
-      - name: Build application
+      - name: Build application (macOS)
         if: runner.os == 'macOS'
         env:
           CGO_LDFLAGS: "-framework UniformTypeIdentifiers -mmacosx-version-min=10.13"
@@ -122,9 +224,15 @@ jobs:
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [prepare-version, build]
+    if: needs.prepare-version.outputs.skip != 'true'
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare-version.outputs.tag }}
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
@@ -134,7 +242,7 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ needs.prepare-version.outputs.tag }}
           REPO: ${{ github.repository }}
         run: |
           if gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
@@ -142,3 +250,65 @@ jobs:
           else
             gh release create "$TAG_NAME" release-assets/* --repo "$REPO" --title "$TAG_NAME" --generate-notes
           fi
+
+  sync-homebrew:
+    name: Sync Homebrew Cask
+    runs-on: ubuntu-latest
+    needs: [prepare-version, publish]
+    if: needs.prepare-version.outputs.skip != 'true'
+    steps:
+      - name: Fetch SHA256 from release assets
+        env:
+          VERSION: ${{ needs.prepare-version.outputs.version }}
+          TAG: ${{ needs.prepare-version.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          
+          ARM_URL="https://github.com/${REPO}/releases/download/${TAG}/panelneko-reader-macos-arm64.zip"
+          INTEL_URL="https://github.com/${REPO}/releases/download/${TAG}/panelneko-reader-macos-amd64.zip"
+          
+          echo "Waiting for assets to be available online..."
+          sleep 15
+          
+          echo "Fetching SHA256..."
+          ARM_SHA=$(curl -sL "$ARM_URL" | shasum -a 256 | awk '{print $1}')
+          INTEL_SHA=$(curl -sL "$INTEL_URL" | shasum -a 256 | awk '{print $1}')
+          
+          echo "arm_sha=${ARM_SHA}" >> "$GITHUB_ENV"
+          echo "intel_sha=${INTEL_SHA}" >> "$GITHUB_ENV"
+          
+      - name: Update Homebrew Cask (Personal Tap)
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          VERSION: ${{ needs.prepare-version.outputs.version }}
+          TAG: ${{ needs.prepare-version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          
+          # Clone the external tap repository
+          git clone "https://x-access-token:${PAT_TOKEN}@github.com/SakagamiJun/homebrew-tap.git" /tmp/homebrew-tap
+          cd /tmp/homebrew-tap
+          
+          CASK_FILE="Casks/panelneko.rb"
+          
+          if [ ! -f "$CASK_FILE" ]; then
+            echo "Cask file $CASK_FILE not found, skipping sync."
+            exit 0
+          fi
+          
+          sed -i -e "s/version \".*\"/version \"${VERSION}\"/" $CASK_FILE
+          sed -i -e "/on_arm do/,/end/ s/sha256 \".*\"/sha256 \"${arm_sha}\"/" $CASK_FILE
+          sed -i -e "/on_intel do/,/end/ s/sha256 \".*\"/sha256 \"${intel_sha}\"/" $CASK_FILE
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$CASK_FILE"
+          
+          if git diff --staged --quiet; then
+            echo "No changes to Cask, skipping commit."
+            exit 0
+          fi
+          
+          git commit -m "chore(release): update panelneko cask to ${TAG}"
+          git push origin main
