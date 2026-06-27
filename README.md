@@ -52,6 +52,14 @@ Built on a modern stack designed for speed and maintainability:
 
 ## INSTALLATION & DEVELOPMENT
 
+### Install via Homebrew (macOS)
+
+```bash
+brew tap SakagamiJun/homebrew-tap https://github.com/SakagamiJun/homebrew-tap.git
+brew trust SakagamiJun/tap
+brew install panelneko
+```
+*(Note: Run `brew trust SakagamiJun/tap` to trust the repository as required by recent Homebrew updates)*
 ### Environment Requirements
 
 * [Go](https://go.dev/doc/install) (1.21 or later)
