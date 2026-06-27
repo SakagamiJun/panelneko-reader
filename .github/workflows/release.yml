@@ -78,7 +78,7 @@ jobs:
             # We removed the auto-major bump here. Major versions are handled manually via tags.
             if grep -Eq '^feat(\([^)]+\))?:' <<< "$commit_lines"; then
               bump="minor"
-            elif grep -Eq '^(fix|perf|refactor|build|ci|revert|chore|docs|style|test)(\([^)]+\))?:' <<< "$commit_lines"; then
+            elif grep -Eq '^(fix|perf|refactor)(\([^)]+\))?:' <<< "$commit_lines"; then
               bump="patch"
             fi
             
