@@ -1,67 +1,88 @@
-# PanelNeko Reader (本地漫画阅读器)
-[English](./README.md)
----------------------
+<div align="center">
+  <img src="./build/appicon.png" width="128" alt="PanelNeko Logo" />
+  <h1>PANELNEKO READER</h1>
+  <p><strong>一款极简、现代且高性能的本地漫画阅读器</strong></p>
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go" />
+  <img alt="Wails" src="https://img.shields.io/badge/Framework-Wails_v2-ED2024?style=flat-square" />
+  <img alt="React" src="https://img.shields.io/badge/Frontend-React-61DAFB?style=flat-square&logo=react&logoColor=black" />
+  <img alt="i18n" src="https://img.shields.io/badge/i18n-zh--Hans%20%7C%20en%20%7C%20ja-34C759?style=flat-square" />
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" />
+  <img alt="Release" src="https://img.shields.io/github/v/release/SakagamiJun/panelneko-reader?style=flat-square&color=F05138" />
+  <img alt="Platforms" src="https://img.shields.io/badge/Platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgray?style=flat-square" />
+  <img alt="Size" src="https://img.shields.io/github/repo-size/SakagamiJun/panelneko-reader?style=flat-square" />
+  <br /><br />
+  <p>
+    <b>中文</b> | <a href="./README.md">English</a>
+  </p>
+</div>
 
-PanelNeko Reader 是一款简单、轻量的跨平台桌面本地漫画与画集阅读器。它致力于提供纯粹、极简且无广告的本地阅读体验，开箱即用，无需复杂的配置。本项目采用 Go、Wails v2 和 React 构建，为您提供高端、丝滑的离线漫画阅读体验与现代化的磨砂玻璃美学设计。
+---
 
-![应用展示](./Design.webp)
+PanelNeko 是一款专为本地漫画与画集深度定制的跨平台桌面阅读器。本项目基于 Go、Wails v2 与 React 构建，摒弃了所有繁杂的冗余设计，致力于在极致的性能表现下，为您提供沉浸式的无广告阅读体验以及前沿的磨砂玻璃视觉美学。
 
-## 功能特性
+<div align="center">
+  <img src="./Design.webp" alt="Application Interface" width="100%" />
+</div>
 
-- **集成阅读器**：
-  - **卷轴模式**：连续垂直滚动阅读（条漫风格），支持智能后台预缓存页。
-  - **翻页模式**：传统的左右翻页阅读。
-  - 支持直接打开本地漫画文件夹以及包含漫画图片的 `.zip` / `.cbz` 压缩包。
-  - 自动记录并复原每本漫画的阅读历史与页码进度。
-- **本地书架**：只需在设置中配置您的“漫画库目录”，应用便可自动扫描其中的漫画与压缩包，并通过嵌入式 SQLite 数据库保存阅读进度状态。
-- **精致美学**：使用现代化磨砂玻璃滤镜、自适应系统暗黑/浅色模式、流畅的微交互动效。
-- **多语言支持**：完整支持英文、简体中文和日文。
+## 核心架构与功能
 
-## 技术栈
+PanelNeko 聚焦于性能优化与视觉表现，将最纯粹的阅读体验交还给用户。
 
-- **后端**: [Go](https://go.dev/) + [Wails v2](https://wails.io/) (桌面应用框架)
-- **数据库**: [SQLite](https://www.sqlite.org/) (通过 `go-sqlite3`)
-- **前端**: [React](https://reactjs.org/) + [TypeScript](https://www.typescriptlang.org/)
-- **状态管理**: [TanStack Query](https://tanstack.com/query/latest)
-- **样式**: [Tailwind CSS](https://tailwindcss.com/)
-- **构建工具**: [Vite](https://vitejs.dev/)
+* **双轨渲染引擎**
+  提供带有智能预缓存的连续垂直卷轴模式（条漫风格），以及传统的左右翻页模式，随时无缝切换。
+* **原生资源解析**
+  支持直接加载本地图片目录，同时原生支持实时解压并渲染 `.zip` 与 `.cbz` 压缩包内容，无需提前解压。
+* **无感状态同步**
+  底层集成 SQLite 高性能引擎，自动且精准地持久化追踪您在每一本漫画中的阅读进度，下次打开瞬间恢复。
+* **流体交互界面**
+  深度应用现代磨砂玻璃 (Glassmorphism) 材质，支持跟随系统的深色/浅色自适应模式，并融合了极具质感的微交互动效。
+* **全球化多语言**
+  原生提供英文、简体中文与日文支持。
 
-## 快速入门
+## 技术底座
 
-### 环境准备
+建立在旨在提供极速编译与长期可维护性的现代技术栈之上：
 
-- [Go](https://go.dev/doc/install) (1.21 或更高版本)
-- [Node.js](https://nodejs.org/) & [pnpm](https://pnpm.io/)
-- [Wails CLI](https://wails.io/docs/gettingstarted/installation)
+* **核心后端:** [Go](https://go.dev/) + [Wails v2](https://wails.io/)
+* **本地数据:** [SQLite](https://www.sqlite.org/) (基于 `go-sqlite3`)
+* **前端框架:** [React](https://reactjs.org/) + [TypeScript](https://www.typescriptlang.org/)
+* **状态调度:** [TanStack Query](https://tanstack.com/query/latest)
+* **样式系统:** [Tailwind CSS](https://tailwindcss.com/)
+* **构建管道:** [Vite](https://vitejs.dev/)
 
-### 开发模式
+## 部署与开发
 
-1. 克隆仓库：
-   ```bash
-   git clone https://github.com/sakagamijun/panelneko-reader.git
-   cd panelneko-reader
-   ```
+### 环境依赖
 
-2. 启动开发环境：
-   ```bash
-   wails dev
-   ```
+* [Go](https://go.dev/doc/install) (1.21 或更高版本)
+* [Node.js](https://nodejs.org/) & [pnpm](https://pnpm.io/)
+* [Wails CLI](https://wails.io/docs/gettingstarted/installation)
 
-### 生产构建
+### 唤醒本地环境
 
-编译适用于您当前操作系统的独立可执行文件：
+克隆代码库并启动热重载开发服务器：
+
+```bash
+git clone https://github.com/SakagamiJun/panelneko-reader.git
+cd panelneko-reader
+wails dev
+```
+
+### 生产级编译
+
+针对您的目标系统架构，编译并生成经过深度优化的独立可执行程序：
 
 ```bash
 wails build
 ```
-编译产物将位于 `build/bin` 目录下。
 
-## 鸣谢
+编译产出物将被统一放置于 `build/bin` 目录中。
 
-- [Wails](https://wails.io/)：感谢它为 Go 和 Web 技术之间搭建的优秀桥梁。
-- [shadcn/ui](https://ui.shadcn.com/)：提供了出色的 UI 设计灵感和基础组件。
-- 感谢所有支持本项目开发的开源库。
+## 鸣谢与致敬
 
-## 开源协议
+* [Wails](https://wails.io/) - 搭建了连接 Go 底层与现代 Web 渲染层之间令人赞叹的桥梁。
+* [shadcn/ui](https://ui.shadcn.com/) - 提供了极具启发的架构级 UI 设计思路。
 
-本项目采用 MIT 协议开源 - 详情请参阅 [LICENSE](LICENSE) 文件。
+## 协议
+
+本项目基于 MIT 协议进行开源分发。详见 [LICENSE](LICENSE) 文件获取完整条款。
