@@ -55,7 +55,7 @@ Built on a modern stack designed for speed and maintainability:
 ### Install via Homebrew (macOS)
 
 ```bash
-brew tap SakagamiJun/homebrew-tap https://github.com/SakagamiJun/homebrew-tap.git
+brew tap SakagamiJun/tap
 brew trust SakagamiJun/tap
 brew install panelneko
 ```
