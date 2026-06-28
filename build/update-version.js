@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// Get tag name from environment variable (GitHub Actions) or command line argument
-let tag = process.env.GITHUB_REF_NAME || process.argv[2];
+// Get tag name from command line argument or environment variable (GitHub Actions)
+let tag = process.argv[2] || process.env.GITHUB_REF_NAME;
 
 if (!tag) {
   console.log('No version tag or argument provided. Skipping version update.');

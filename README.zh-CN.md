@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./build/appicon.png" width="128" alt="PanelNeko Logo" />
+  <img src="./build/appicon.png" width="256" alt="PanelNeko Logo" />
   <h1>PANELNEKO READER</h1>
   <p><strong>一款极简、现代且高性能的本地漫画阅读器</strong></p>
   <img alt="Go" src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go" />

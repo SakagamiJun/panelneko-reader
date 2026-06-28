@@ -171,7 +171,7 @@ jobs:
           node-version: 22
 
       - name: Update version from Git tag
-        run: node build/update-version.js
+        run: node build/update-version.js ${{ needs.prepare-version.outputs.tag }}
 
       - name: Enable pnpm
         run: |
