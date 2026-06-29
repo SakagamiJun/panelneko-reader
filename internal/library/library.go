@@ -78,7 +78,7 @@ type archiveEntry struct {
 
 type archiveAssetReadCloser struct {
 	entryReader io.ReadCloser
-	archive     *zip.ReadCloser
+	cacheEntry  *archiveCacheEntry
 }
 
 func (r *archiveAssetReadCloser) Read(buffer []byte) (int, error) {
@@ -87,11 +87,8 @@ func (r *archiveAssetReadCloser) Read(buffer []byte) (int, error) {
 
 func (r *archiveAssetReadCloser) Close() error {
 	entryErr := r.entryReader.Close()
-	archiveErr := r.archive.Close()
-	if entryErr != nil {
-		return entryErr
-	}
-	return archiveErr
+	releaseArchive(r.cacheEntry)
+	return entryErr
 }
 
 func getMangaModTime(mangaDir string, fallback int64) int64 {
@@ -257,7 +254,7 @@ func OpenArchiveAsset(outputRoot string, requestPath string) (io.ReadCloser, str
 		return nil, "", -1, fmt.Errorf("archive path is a directory")
 	}
 
-	archiveReader, err := zip.OpenReader(archivePath)
+	cacheEntry, err := acquireArchive(archivePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, "", -1, &os.PathError{
@@ -269,15 +266,15 @@ func OpenArchiveAsset(outputRoot string, requestPath string) (io.ReadCloser, str
 		return nil, "", -1, fmt.Errorf("open archive: %w", err)
 	}
 
-	entry, err := findArchiveImageEntry(archiveReader, entryPath)
+	entry, err := findArchiveImageEntry(cacheEntry.archive, entryPath)
 	if err != nil {
-		_ = archiveReader.Close()
+		releaseArchive(cacheEntry)
 		return nil, "", -1, err
 	}
 
 	entryReader, err := entry.file.Open()
 	if err != nil {
-		_ = archiveReader.Close()
+		releaseArchive(cacheEntry)
 		return nil, "", -1, fmt.Errorf("open archive entry: %w", err)
 	}
 
@@ -289,7 +286,7 @@ func OpenArchiveAsset(outputRoot string, requestPath string) (io.ReadCloser, str
 	contentType := contentTypeForImagePath(entry.normalizedPath)
 	return &archiveAssetReadCloser{
 		entryReader: entryReader,
-		archive:     archiveReader,
+		cacheEntry:  cacheEntry,
 	}, contentType, size, nil
 }
 
@@ -490,11 +487,12 @@ func loadDirectoryChapterSource(outputRoot string, chapterDir string) (chapterSo
 }
 
 func loadArchiveChapterSource(outputRoot string, archivePath string) (chapterSource, error) {
-	archiveReader, err := zip.OpenReader(archivePath)
+	cacheEntry, err := acquireArchive(archivePath)
 	if err != nil {
 		return chapterSource{}, fmt.Errorf("open chapter archive: %w", err)
 	}
-	defer archiveReader.Close()
+	defer releaseArchive(cacheEntry)
+	archiveReader := cacheEntry.archive
 
 	info, hasInfo := readComicInfoFromArchive(archiveReader)
 	baseName := strings.TrimSuffix(filepath.Base(archivePath), filepath.Ext(archivePath))
@@ -525,6 +523,111 @@ func loadArchiveChapterSource(outputRoot string, archivePath string) (chapterSou
 		pages:       pages,
 		updatedAt:   stat.ModTime(),
 	}, nil
+}
+
+// ── Archive Cache ────────────────────────────────────────────────────────────
+
+type archiveCacheEntry struct {
+	path    string
+	archive *zip.ReadCloser
+	refs    int
+	lastUse time.Time
+	modTime time.Time
+}
+
+var (
+	acMutex   sync.Mutex
+	acEntries = make(map[string]*archiveCacheEntry)
+)
+
+func acquireArchive(archivePath string) (*archiveCacheEntry, error) {
+	info, err := os.Stat(archivePath)
+	if err != nil {
+		return nil, err
+	}
+	modTime := info.ModTime()
+
+	acMutex.Lock()
+	defer acMutex.Unlock()
+
+	if entry, ok := acEntries[archivePath]; ok {
+		if entry.modTime.Equal(modTime) {
+			entry.refs++
+			entry.lastUse = time.Now()
+			return entry, nil
+		}
+		// File modified: remove stale entry from cache map
+		if entry.refs == 0 {
+			entry.archive.Close()
+		}
+		delete(acEntries, archivePath)
+	}
+
+	for len(acEntries) >= 3 {
+		var oldestPath string
+		var oldestTime time.Time
+		for p, e := range acEntries {
+			if e.refs == 0 {
+				if oldestPath == "" || e.lastUse.Before(oldestTime) {
+					oldestPath = p
+					oldestTime = e.lastUse
+				}
+			}
+		}
+		if oldestPath != "" {
+			acEntries[oldestPath].archive.Close()
+			delete(acEntries, oldestPath)
+		} else {
+			break
+		}
+	}
+
+	archiveReader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return nil, err
+	}
+
+	entry := &archiveCacheEntry{
+		path:    archivePath,
+		archive: archiveReader,
+		refs:    1,
+		lastUse: time.Now(),
+		modTime: modTime,
+	}
+	acEntries[archivePath] = entry
+	return entry, nil
+}
+
+func releaseArchive(entry *archiveCacheEntry) {
+	acMutex.Lock()
+	defer acMutex.Unlock()
+
+	entry.refs--
+	if entry.refs == 0 {
+		if current, ok := acEntries[entry.path]; !ok || current != entry {
+			// It was evicted or replaced while in use; close it now.
+			entry.archive.Close()
+		} else {
+			for len(acEntries) > 3 {
+				var oldestPath string
+				var oldestTime time.Time
+				for p, e := range acEntries {
+					if e.refs == 0 {
+						if oldestPath == "" || e.lastUse.Before(oldestTime) {
+							oldestPath = p
+							oldestTime = e.lastUse
+						}
+					}
+				}
+				if oldestPath != "" {
+					acEntries[oldestPath].archive.Close()
+					delete(acEntries, oldestPath)
+				} else {
+					break
+				}
+			}
+		}
+	}
 }
 
 func readDirectoryPages(outputRoot string, chapterDir string, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
