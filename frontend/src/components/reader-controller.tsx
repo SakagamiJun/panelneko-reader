@@ -63,7 +63,7 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
     );
   }, [manifest]);
 
-  const cacheRadius = Math.max(1, settings.readerScrollCachePages || 6);
+  const cacheRadius = Math.max(1, settings.readerScrollCachePages || 3);
 
   const nextNavigationRequest = (index: number, reason: ReaderNavigationRequest["reason"]) => {
     navigationRequestIDRef.current += 1;
@@ -102,14 +102,24 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
 
     const image = new Image();
     image.src = page.sourceURL;
+    const releaseImage = () => {
+      image.onload = null;
+      image.onerror = null;
+      image.src = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+    };
+
     image.onload = () => {
+      const width = image.naturalWidth || DEFAULT_ASPECT_RATIO;
+      const height = image.naturalHeight || 1;
+      releaseImage();
       if (metricRequestGenerationRef.current !== requestGeneration) {
         return;
       }
 
-      onMetricMeasured(page.id, image.naturalWidth || DEFAULT_ASPECT_RATIO, image.naturalHeight || 1);
+      onMetricMeasured(page.id, width, height);
     };
     image.onerror = () => {
+      releaseImage();
       if (metricRequestGenerationRef.current !== requestGeneration) {
         return;
       }
