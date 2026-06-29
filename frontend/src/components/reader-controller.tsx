@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { PagedReader } from "@/components/paged-reader";
 import { ScrollReader } from "@/components/scroll-reader";
 import { type FlatReaderPage, type PageMetric, type ReaderNavigationRequest, DEFAULT_ASPECT_RATIO, clampIndex } from "@/components/reader-shared";
@@ -65,16 +65,16 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
 
   const cacheRadius = Math.max(1, settings.readerScrollCachePages || 3);
 
-  const nextNavigationRequest = (index: number, reason: ReaderNavigationRequest["reason"]) => {
+  const nextNavigationRequest = useCallback((index: number, reason: ReaderNavigationRequest["reason"]) => {
     navigationRequestIDRef.current += 1;
     return {
       id: navigationRequestIDRef.current,
       index: clampIndex(index, pages.length),
       reason,
     } satisfies ReaderNavigationRequest;
-  };
+  }, [pages.length]);
 
-  const onMetricMeasured = (pageID: string, width: number, height: number) => {
+  const onMetricMeasured = useCallback((pageID: string, width: number, height: number) => {
     if (!width || !height) {
       return;
     }
@@ -90,10 +90,10 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
         [pageID]: { width, height },
       };
     });
-  };
+  }, []);
 
-  const requestMetric = (page: FlatReaderPage | undefined) => {
-    if (!page || metrics[page.id] || requestedMetricIDsRef.current.has(page.id)) {
+  const requestMetric = useCallback((page: FlatReaderPage | undefined) => {
+    if (!page || requestedMetricIDsRef.current.has(page.id)) {
       return;
     }
 
@@ -126,8 +126,9 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
 
       onMetricMeasured(page.id, DEFAULT_ASPECT_RATIO, 1);
     };
-  };
+  }, [onMetricMeasured]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     metricRequestGenerationRef.current += 1;
     requestedMetricIDsRef.current = new Set();
@@ -180,7 +181,7 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
     return () => {
       cancelled = true;
     };
-  }, [manifest.mangaID, pages.length, settings.autoRestoreReaderProgress]);
+  }, [manifest.mangaID, nextNavigationRequest, pages.length, settings.autoRestoreReaderProgress]);
 
   useEffect(() => {
     if (previousModeRef.current === mode || pages.length === 0) {
@@ -190,7 +191,7 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
 
     previousModeRef.current = mode;
     setNavigationRequest(nextNavigationRequest(currentIndex, "sync"));
-  }, [currentIndex, mode, pages.length]);
+  }, [currentIndex, mode, nextNavigationRequest, pages.length]);
 
   useEffect(() => {
     if (!jumpRequest || pages.length === 0 || handledJumpRequestIDRef.current === jumpRequest.requestID) {
@@ -207,7 +208,7 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
 
     setCurrentIndex(targetIndex);
     setNavigationRequest(nextNavigationRequest(targetIndex, mode === "scroll" ? "sync" : "jump"));
-  }, [jumpRequest, mode, pages]);
+  }, [jumpRequest, mode, nextNavigationRequest, pages]);
 
   useEffect(() => {
     const start = Math.max(0, currentIndex - cacheRadius);
@@ -298,7 +299,7 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentIndex, manifest.chapters, pages, settings.shortcuts]);
+  }, [currentIndex, manifest.chapters, nextNavigationRequest, pages, settings.shortcuts]);
 
   const handleCurrentIndexChange = (nextIndex: number) => {
     const clampedIndex = clampIndex(nextIndex, pages.length);
