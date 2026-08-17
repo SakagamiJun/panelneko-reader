@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.49
-	github.com/wailsapp/wails/v2 v2.13.0
+	github.com/wailsapp/wails/v2 v2.14.0
 )
 
 require (
@@ -35,5 +35,5 @@ require (
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 )
