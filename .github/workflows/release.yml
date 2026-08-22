@@ -28,7 +28,6 @@ concurrency:
 
 env:
   APP_NAME: panelneko-reader
-  PNPM_VERSION: 10.33.2
   WAILS_VERSION: v2.12.0
 
 jobs:
@@ -165,22 +164,15 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Update version from Git tag
-        run: node build/update-version.js ${{ needs.prepare-version.outputs.tag }}
-
-      - name: Enable pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
+        run: bun build/update-version.js ${{ needs.prepare-version.outputs.tag }}
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}

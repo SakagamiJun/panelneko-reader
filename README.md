@@ -63,7 +63,7 @@ brew install panelneko
 ### Environment Requirements
 
 * [Go](https://go.dev/doc/install) (1.21 or later)
-* [Node.js](https://nodejs.org/) & [pnpm](https://pnpm.io/)
+* [Bun](https://bun.sh/)
 * [Wails CLI](https://wails.io/docs/gettingstarted/installation)
 
 ### Local Setup

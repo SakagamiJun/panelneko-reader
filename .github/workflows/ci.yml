@@ -33,27 +33,20 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - name: Enable pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.33.2 --activate
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Test frontend
         working-directory: frontend
-        run: pnpm test
+        run: bun run test
 
       - name: Build frontend
         working-directory: frontend
-        run: pnpm build
+        run: bun run build
 
       - name: Test Go
         run: go test -tags webkit2_41 ./...

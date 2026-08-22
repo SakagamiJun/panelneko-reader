@@ -63,7 +63,7 @@ brew install panelneko
 ### 环境依赖
 
 * [Go](https://go.dev/doc/install) (1.21 或更高版本)
-* [Node.js](https://nodejs.org/) & [pnpm](https://pnpm.io/)
+* [Bun](https://bun.sh/)
 * [Wails CLI](https://wails.io/docs/gettingstarted/installation)
 
 ### 唤醒本地环境
