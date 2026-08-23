@@ -9,8 +9,10 @@ import (
 	"mime"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -372,6 +374,44 @@ func GetReaderManifest(outputRoot string, mangaID string) (contracts.ReaderManif
 
 	return manifest.reader, nil
 }
+
+func ResolveDirectoryPath(outputRoot string, mangaID string) (string, error) {
+	relativePath, err := decodeMangaID(mangaID)
+	if err != nil {
+		relativePath = filepath.FromSlash(mangaID)
+	}
+
+	targetPath, err := resolveWithinRoot(outputRoot, relativePath)
+	if err != nil {
+		return "", err
+	}
+
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		return "", err
+	}
+
+	if !info.IsDir() {
+		return filepath.Dir(targetPath), nil
+	}
+
+	return targetPath, nil
+}
+
+func OpenDirectoryInFileManager(dirPath string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", dirPath)
+	case "windows":
+		cmd = exec.Command("explorer", dirPath)
+	default:
+		cmd = exec.Command("xdg-open", dirPath)
+	}
+	return cmd.Start()
+}
+
+var FileOpener = OpenDirectoryInFileManager
 
 func ResolveLibraryAssetPath(outputRoot string, requestPath string) (string, error) {
 	if !strings.HasPrefix(requestPath, LibraryAssetPrefix) {

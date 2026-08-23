@@ -64,4 +64,8 @@ describe("MockAdapter Pin Functionality", () => {
     const revertedColl = items.find((i) => i.id === collection!.id);
     expect(revertedColl?.coverImageURL).toBe(originalCollCover);
   });
+
+  it("handles openDirectory without throwing", async () => {
+    await expect(adapter.openDirectory("mock-coll-1")).resolves.toBeUndefined();
+  });
 });

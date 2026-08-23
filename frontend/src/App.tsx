@@ -8,6 +8,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Folder,
+  FolderOpen,
   Languages,
   Loader2,
   MoonStar,
@@ -638,6 +639,9 @@ export default function App() {
                   onOpenCollection={setSelectedCollectionPath}
                   onOpenSettings={togglePane}
                   onTogglePin={(id) => togglePinMutation.mutate(id)}
+                  onOpenDirectory={(id) => {
+                    void appAdapter.openDirectory(id);
+                  }}
                 />
               )}
             </div>
@@ -810,6 +814,7 @@ function LibraryGrid({
   onOpenCollection,
   onOpenSettings,
   onTogglePin,
+  onOpenDirectory,
 }: {
   items: LibraryManga[];
   loading: boolean;
@@ -818,6 +823,7 @@ function LibraryGrid({
   onOpenCollection: (collectionPath: string) => void;
   onOpenSettings: () => void;
   onTogglePin: (mangaID: string) => void;
+  onOpenDirectory: (mangaID: string) => void;
 }) {
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const [columns, setColumns] = useState(1);
@@ -980,28 +986,42 @@ function LibraryGrid({
                     <div className="mt-1 truncate text-[11px] text-muted-foreground">{formatDateTime(item.lastUpdated)}</div>
                   </div>
 
-                  <button
-                    type="button"
-                    title={item.isPinned ? t("library.unpin") : t("library.pin")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTogglePin(item.id);
-                    }}
-                    className={cn(
-                      "flex h-7 items-center gap-1 rounded-md px-2 text-xs font-semibold transition-all duration-200 shrink-0",
-                      item.isPinned
-                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
-                        : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    <Pin
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      title={t("library.openDirectory")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenDirectory(item.id);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-semibold text-muted-foreground opacity-0 transition-all duration-200 hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      title={item.isPinned ? t("library.unpin") : t("library.pin")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTogglePin(item.id);
+                      }}
                       className={cn(
-                        "h-3.5 w-3.5 transition-transform",
-                        item.isPinned && "rotate-45 fill-amber-500 text-amber-500 dark:text-amber-400 dark:fill-amber-400"
+                        "flex h-7 items-center gap-1 rounded-md px-2 text-xs font-semibold transition-all duration-200 shrink-0",
+                        item.isPinned
+                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
+                          : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-foreground"
                       )}
-                    />
-                    {item.isPinned && <span className="text-[11px]">{t("library.pinnedBadge")}</span>}
-                  </button>
+                    >
+                      <Pin
+                        className={cn(
+                          "h-3.5 w-3.5 transition-transform",
+                          item.isPinned && "rotate-45 fill-amber-500 text-amber-500 dark:text-amber-400 dark:fill-amber-400"
+                        )}
+                      />
+                      {item.isPinned && <span className="text-[11px]">{t("library.pinnedBadge")}</span>}
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}

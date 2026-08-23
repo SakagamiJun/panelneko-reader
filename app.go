@@ -179,6 +179,19 @@ func (a *App) TogglePin(mangaID string) (bool, error) {
 	return pinned, nil
 }
 
+func (a *App) OpenDirectory(mangaID string) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+
+	dirPath, err := library.ResolveDirectoryPath(a.settings.Get().LibraryRoot, mangaID)
+	if err != nil {
+		return err
+	}
+
+	return library.FileOpener(dirPath)
+}
+
 func (a *App) GetReaderManifest(mangaID string) (contracts.ReaderManifest, error) {
 	if err := a.ensureReady(); err != nil {
 		return contracts.ReaderManifest{}, err

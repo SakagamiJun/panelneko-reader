@@ -54,6 +54,7 @@ export const en = {
     pin: "Pin to top",
     unpin: "Unpin",
     pinnedBadge: "Pinned",
+    openDirectory: "Open directory",
   },
   reader: {
     scrollMode: "Scroll Mode",

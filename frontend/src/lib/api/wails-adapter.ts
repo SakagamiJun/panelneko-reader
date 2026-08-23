@@ -46,6 +46,10 @@ export class WailsAdapter implements AppAdapter {
     return ((await getWailsApp()?.TogglePin?.(mangaID)) ?? false) as boolean;
   }
 
+  async openDirectory(mangaID: string) {
+    await getWailsApp()?.OpenDirectory?.(mangaID);
+  }
+
   subscribe(eventName: string, callback: (payload: unknown) => void) {
     const runtime = getWailsRuntime();
     const unsubscribe = runtime?.EventsOn?.(eventName, callback);

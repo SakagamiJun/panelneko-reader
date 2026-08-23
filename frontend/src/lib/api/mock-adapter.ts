@@ -261,6 +261,10 @@ export class MockAdapter implements AppAdapter {
     return "/Users/example/Downloads/MangaLibrary";
   }
 
+  async openDirectory(_mangaID: string) {
+    // no-op in mock environment
+  }
+
   subscribe(eventName: string, callback: Listener) {
     const listeners = this.listeners.get(eventName) ?? new Set<Listener>();
     listeners.add(callback);

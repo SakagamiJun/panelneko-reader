@@ -41,6 +41,9 @@ export const appAdapter: AppAdapter = {
   togglePin(mangaID) {
     return currentAdapter().togglePin(mangaID);
   },
+  openDirectory(mangaID) {
+    return currentAdapter().openDirectory(mangaID);
+  },
   subscribe(eventName, callback) {
     return currentAdapter().subscribe(eventName, callback);
   },

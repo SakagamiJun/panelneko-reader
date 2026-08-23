@@ -54,6 +54,7 @@ export const zhCN = {
     pin: "置顶",
     unpin: "取消置顶",
     pinnedBadge: "已置顶",
+    openDirectory: "打开目录",
   },
   reader: {
     scrollMode: "卷轴模式",

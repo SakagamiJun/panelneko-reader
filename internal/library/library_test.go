@@ -691,3 +691,65 @@ func sameResolvedPath(left string, right string) bool {
 	}
 	return resolvedLeft == resolvedRight
 }
+
+func TestResolveDirectoryPath(t *testing.T) {
+	root := t.TempDir()
+	mangaDir := filepath.Join(root, "Standalone Manga")
+	if err := os.MkdirAll(mangaDir, 0o755); err != nil {
+		t.Fatalf("mkdir manga: %v", err)
+	}
+
+	collDir := filepath.Join(root, "Collection Folder")
+	childDir := filepath.Join(collDir, "Child Manga")
+	if err := os.MkdirAll(childDir, 0o755); err != nil {
+		t.Fatalf("mkdir child: %v", err)
+	}
+	archiveChild := filepath.Join(collDir, "Archive.cbz")
+	writeZipArchive(t, archiveChild, map[string]string{"001.jpg": "data"})
+
+	// 1. Standalone manga directory
+	mangaID := encodeMangaID("Standalone Manga")
+	resolved, err := ResolveDirectoryPath(root, mangaID)
+	if err != nil {
+		t.Fatalf("resolve standalone manga: %v", err)
+	}
+	if !sameResolvedPath(resolved, mangaDir) {
+		t.Fatalf("expected %q, got %q", mangaDir, resolved)
+	}
+
+	// 2. Collection directory
+	collID := encodeMangaID("Collection Folder")
+	resolved, err = ResolveDirectoryPath(root, collID)
+	if err != nil {
+		t.Fatalf("resolve collection: %v", err)
+	}
+	if !sameResolvedPath(resolved, collDir) {
+		t.Fatalf("expected %q, got %q", collDir, resolved)
+	}
+
+	// 3. Child manga directory inside collection
+	childID := encodeMangaID("Collection Folder/Child Manga")
+	resolved, err = ResolveDirectoryPath(root, childID)
+	if err != nil {
+		t.Fatalf("resolve child manga: %v", err)
+	}
+	if !sameResolvedPath(resolved, childDir) {
+		t.Fatalf("expected %q, got %q", childDir, resolved)
+	}
+
+	// 4. Archive file inside collection -> resolves to parent directory
+	archiveID := encodeMangaID("Collection Folder/Archive.cbz")
+	resolved, err = ResolveDirectoryPath(root, archiveID)
+	if err != nil {
+		t.Fatalf("resolve archive child: %v", err)
+	}
+	if !sameResolvedPath(resolved, collDir) {
+		t.Fatalf("expected %q, got %q", collDir, resolved)
+	}
+
+	// 5. Invalid path traversal should error
+	badID := encodeMangaID("../outside")
+	if _, err := ResolveDirectoryPath(root, badID); err == nil {
+		t.Fatal("expected traversal path to fail")
+	}
+}

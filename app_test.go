@@ -239,6 +239,44 @@ func TestListLibraryMangaPinAndCollectionCover(t *testing.T) {
 	}
 }
 
+func TestAppOpenDirectory(t *testing.T) {
+	libraryRoot := t.TempDir()
+	mangaDir := filepath.Join(libraryRoot, "Manga A")
+	if err := os.MkdirAll(mangaDir, 0o755); err != nil {
+		t.Fatalf("mkdir manga A: %v", err)
+	}
+
+	app, cleanup := newAssetTestApp(t, libraryRoot)
+	defer cleanup()
+
+	var openedPath string
+	origOpener := library.FileOpener
+	library.FileOpener = func(path string) error {
+		openedPath = path
+		return nil
+	}
+	defer func() {
+		library.FileOpener = origOpener
+	}()
+
+	mangaID := encodePathTokenForAppTest("Manga A")
+	if err := app.OpenDirectory(mangaID); err != nil {
+		t.Fatalf("open directory: %v", err)
+	}
+
+	resolvedMangaDir, err := filepath.EvalSymlinks(mangaDir)
+	if err != nil {
+		resolvedMangaDir = mangaDir
+	}
+	resolvedOpened, err := filepath.EvalSymlinks(openedPath)
+	if err != nil {
+		resolvedOpened = openedPath
+	}
+	if resolvedOpened != resolvedMangaDir {
+		t.Fatalf("expected opened path %q, got %q", resolvedMangaDir, resolvedOpened)
+	}
+}
+
 func newAssetTestApp(t *testing.T, libraryRoot string) (*App, func()) {
 	t.Helper()
 

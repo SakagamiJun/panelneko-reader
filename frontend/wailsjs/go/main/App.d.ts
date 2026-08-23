@@ -15,6 +15,8 @@ export function GetSettings():Promise<contracts.AppSettings>;
 
 export function ListLibraryManga():Promise<Array<contracts.LibraryManga>>;
 
+export function OpenDirectory(arg1:string):Promise<void>;
+
 export function SelectDirectory():Promise<string>;
 
 export function TogglePin(arg1:string):Promise<boolean>;

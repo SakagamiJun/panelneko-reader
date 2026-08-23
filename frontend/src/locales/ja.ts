@@ -54,6 +54,7 @@ export const ja = {
     pin: "ピン留め",
     unpin: "ピン留めを解除",
     pinnedBadge: "ピン留め中",
+    openDirectory: "フォルダーを開く",
   },
   reader: {
     scrollMode: "スクロールモード",
