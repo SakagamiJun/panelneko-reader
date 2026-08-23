@@ -29,6 +29,9 @@ export namespace contracts {
 	    title: string;
 	    sourceURL: string;
 	    relativePath: string;
+	    parentPath?: string;
+	    isCollection?: boolean;
+	    mangaCount?: number;
 	    coverImageURL: string;
 	    chapterCount: number;
 	    pageCount: number;
@@ -44,6 +47,9 @@ export namespace contracts {
 	        this.title = source["title"];
 	        this.sourceURL = source["sourceURL"];
 	        this.relativePath = source["relativePath"];
+	        this.parentPath = source["parentPath"];
+	        this.isCollection = source["isCollection"];
+	        this.mangaCount = source["mangaCount"];
 	        this.coverImageURL = source["coverImageURL"];
 	        this.chapterCount = source["chapterCount"];
 	        this.pageCount = source["pageCount"];

@@ -58,9 +58,10 @@ type chapterSource struct {
 }
 
 type chapterSourceDescriptor struct {
-	kind chapterSourceKind
-	path string
-	name string
+	kind      chapterSourceKind
+	path      string
+	name      string
+	mangaPath string
 }
 
 type chapterMetadata struct {
@@ -91,12 +92,39 @@ func (r *archiveAssetReadCloser) Close() error {
 	return entryErr
 }
 
-func getMangaModTime(mangaDir string, fallback int64) int64 {
-	entries, err := os.ReadDir(mangaDir)
+func hasCollectionMarker(dirPath string) bool {
+	markers := []string{
+		".collection",
+		".category",
+		"collection.txt",
+		"_collection",
+		".panelneko-collection",
+	}
+	for _, m := range markers {
+		target := filepath.Join(dirPath, m)
+		if info, err := os.Stat(target); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func getMangaModTime(mangaPath string, fallback int64) int64 {
+	info, err := os.Stat(mangaPath)
 	if err != nil {
 		return fallback
 	}
-	max := fallback
+	if !info.IsDir() {
+		return info.ModTime().UnixNano()
+	}
+	entries, err := os.ReadDir(mangaPath)
+	if err != nil {
+		return fallback
+	}
+	max := info.ModTime().UnixNano()
+	if max < fallback {
+		max = fallback
+	}
 	for _, e := range entries {
 		if info, err := e.Info(); err == nil {
 			if t := info.ModTime().UnixNano(); t > max {
@@ -132,17 +160,154 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 		wg.Add(1)
 		go func(entry os.DirEntry) {
 			defer wg.Done()
-			mangaDir := filepath.Join(outputRoot, entry.Name())
+			entryPath := filepath.Join(outputRoot, entry.Name())
 
 			info, err := entry.Info()
 			if err != nil {
 				return
 			}
 
-			modTime := getMangaModTime(mangaDir, info.ModTime().UnixNano())
+			if hasCollectionMarker(entryPath) {
+				subEntries, err := os.ReadDir(entryPath)
+				if err != nil {
+					return
+				}
 
-			if prevTime, ok := prevModTimes[entry.Name()]; ok && prevTime == modTime {
-				if prevItem, ok := prevItems[entry.Name()]; ok {
+				collRelativePath := filepath.ToSlash(entry.Name())
+
+				// Compute the aggregate mod time for the entire collection.
+				var collModTimeMax int64 = info.ModTime().UnixNano()
+				for _, subEntry := range subEntries {
+					if !subEntry.IsDir() && !isSupportedArchivePath(subEntry.Name()) {
+						continue
+					}
+					subPath := filepath.Join(entryPath, subEntry.Name())
+					subInfo, err := subEntry.Info()
+					if err != nil {
+						continue
+					}
+					subModTime := getMangaModTime(subPath, subInfo.ModTime().UnixNano())
+					if subModTime > collModTimeMax {
+						collModTimeMax = subModTime
+					}
+				}
+
+				// Collection-level cache: if the aggregate mod time is unchanged,
+				// reuse all previously cached items for this collection.
+				if prevTime, ok := prevModTimes[collRelativePath]; ok && prevTime == collModTimeMax {
+					if prevColl, ok := prevItems[collRelativePath]; ok {
+						mu.Lock()
+						items = append(items, prevColl)
+						newModTimes[prevColl.ID] = collModTimeMax
+						for _, prev := range prevItems {
+							if prev.ParentPath == collRelativePath {
+								items = append(items, prev)
+								newModTimes[prev.ID] = prevModTimes[prev.RelativePath]
+							}
+						}
+						mu.Unlock()
+						return
+					}
+				}
+
+				var collItems []contracts.LibraryManga
+				var collModTimes = make(map[string]int64)
+
+				for _, subEntry := range subEntries {
+					if !subEntry.IsDir() && !isSupportedArchivePath(subEntry.Name()) {
+						continue
+					}
+					subPath := filepath.Join(entryPath, subEntry.Name())
+					subRelPath := filepath.ToSlash(filepath.Join(entry.Name(), subEntry.Name()))
+					subInfo, err := subEntry.Info()
+					if err != nil {
+						continue
+					}
+					subModTime := getMangaModTime(subPath, subInfo.ModTime().UnixNano())
+
+					if prevTime, ok := prevModTimes[subRelPath]; ok && prevTime == subModTime {
+						if prevItem, ok := prevItems[subRelPath]; ok {
+							collItems = append(collItems, prevItem)
+							collModTimes[prevItem.ID] = subModTime
+							continue
+						}
+					}
+
+					manifest, err := loadMangaManifest(outputRoot, subPath, subRelPath)
+					if err != nil {
+						continue
+					}
+					if len(manifest.reader.Chapters) == 0 {
+						continue
+					}
+
+					subItem := contracts.LibraryManga{
+						ID:            manifest.reader.MangaID,
+						Title:         manifest.reader.Title,
+						SourceURL:     manifest.sourceURL,
+						RelativePath:  manifest.relativePath,
+						ParentPath:    filepath.ToSlash(entry.Name()),
+						IsCollection:  false,
+						MangaCount:    0,
+						CoverImageURL: manifest.reader.CoverImageURL,
+						ChapterCount:  len(manifest.reader.Chapters),
+						PageCount:     manifest.reader.TotalPages,
+						LastUpdated:   manifest.updatedAt.UTC().Format(time.RFC3339),
+					}
+
+					collItems = append(collItems, subItem)
+					collModTimes[subItem.ID] = subModTime
+				}
+
+				if len(collItems) > 0 {
+					sort.SliceStable(collItems, func(i, j int) bool {
+						return naturalLess(collItems[i].Title, collItems[j].Title)
+					})
+
+					totalChapters := 0
+					totalPages := 0
+					latestUpdate := time.Unix(0, collModTimeMax).UTC()
+					coverURL := collItems[0].CoverImageURL
+
+					for _, child := range collItems {
+						totalChapters += child.ChapterCount
+						totalPages += child.PageCount
+						if t, err := time.Parse(time.RFC3339, child.LastUpdated); err == nil && t.After(latestUpdate) {
+							latestUpdate = t
+						}
+					}
+
+					collItem := contracts.LibraryManga{
+						ID:            encodeMangaID(collRelativePath),
+						Title:         entry.Name(),
+						SourceURL:     "",
+						RelativePath:  collRelativePath,
+						ParentPath:    "",
+						IsCollection:  true,
+						MangaCount:    len(collItems),
+						CoverImageURL: coverURL,
+						ChapterCount:  totalChapters,
+						PageCount:     totalPages,
+						LastUpdated:   latestUpdate.Format(time.RFC3339),
+					}
+
+					mu.Lock()
+					items = append(items, collItem)
+					newModTimes[collItem.ID] = collModTimeMax
+					for _, ci := range collItems {
+						items = append(items, ci)
+						newModTimes[ci.ID] = collModTimes[ci.ID]
+					}
+					mu.Unlock()
+				}
+				return
+			}
+
+			modTime := getMangaModTime(entryPath, info.ModTime().UnixNano())
+			relPath := filepath.ToSlash(entry.Name())
+
+			if prevTime, ok := prevModTimes[relPath]; ok && prevTime == modTime {
+				if prevItem, ok := prevItems[relPath]; ok {
 					mu.Lock()
 					items = append(items, prevItem)
 					newModTimes[prevItem.ID] = modTime
@@ -151,7 +316,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 				}
 			}
 
-			manifest, err := loadMangaManifest(outputRoot, mangaDir, entry.Name())
+			manifest, err := loadMangaManifest(outputRoot, entryPath, relPath)
 			if err != nil {
 				errOnce.Do(func() { firstErr = err })
 				return
@@ -165,6 +330,9 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 				Title:         manifest.reader.Title,
 				SourceURL:     manifest.sourceURL,
 				RelativePath:  manifest.relativePath,
+				ParentPath:    "",
+				IsCollection:  false,
+				MangaCount:    0,
 				CoverImageURL: manifest.reader.CoverImageURL,
 				ChapterCount:  len(manifest.reader.Chapters),
 				PageCount:     manifest.reader.TotalPages,
@@ -332,28 +500,63 @@ func ArchiveSidecarPath(archivePath string) string {
 	return strings.TrimSuffix(archivePath, filepath.Ext(archivePath)) + archiveSidecarSuffix
 }
 
-func loadMangaManifest(outputRoot string, mangaDir string, relativePath string) (mangaManifest, error) {
-	chapterEntries, err := os.ReadDir(mangaDir)
+func loadMangaManifest(outputRoot string, mangaPath string, relativePath string) (mangaManifest, error) {
+	info, err := os.Stat(mangaPath)
 	if err != nil {
-		return mangaManifest{}, fmt.Errorf("read manga directory: %w", err)
+		return mangaManifest{}, fmt.Errorf("stat manga path: %w", err)
 	}
 
-	descriptors := make([]chapterSourceDescriptor, 0, len(chapterEntries))
-	for _, entry := range chapterEntries {
-		switch {
-		case entry.IsDir():
-			resolved, err := resolveChapterDescriptors(filepath.Join(mangaDir, entry.Name()))
-			if err != nil {
-				return mangaManifest{}, fmt.Errorf("resolve chapters in %s: %w", entry.Name(), err)
-			}
-			descriptors = append(descriptors, resolved...)
-		case isSupportedArchivePath(entry.Name()):
+	var descriptors []chapterSourceDescriptor
+	title := filepath.Base(mangaPath)
+
+	if !info.IsDir() {
+		if isSupportedArchivePath(mangaPath) {
+			title = strings.TrimSuffix(title, filepath.Ext(title))
 			descriptors = append(descriptors, chapterSourceDescriptor{
 				kind: chapterSourceArchive,
-				path: filepath.Join(mangaDir, entry.Name()),
-				name: entry.Name(),
+				path: mangaPath,
+				name: title,
 			})
+		} else {
+			return mangaManifest{}, fmt.Errorf("unsupported manga file: %s", mangaPath)
 		}
+	} else {
+		chapterEntries, err := os.ReadDir(mangaPath)
+		if err != nil {
+			return mangaManifest{}, fmt.Errorf("read manga directory: %w", err)
+		}
+
+		for _, entry := range chapterEntries {
+			switch {
+			case entry.IsDir():
+				resolved, err := resolveChapterDescriptors(filepath.Join(mangaPath, entry.Name()))
+				if err != nil {
+					return mangaManifest{}, fmt.Errorf("resolve chapters in %s: %w", entry.Name(), err)
+				}
+				descriptors = append(descriptors, resolved...)
+			case isSupportedArchivePath(entry.Name()):
+				descriptors = append(descriptors, chapterSourceDescriptor{
+					kind: chapterSourceArchive,
+					path: filepath.Join(mangaPath, entry.Name()),
+					name: entry.Name(),
+				})
+			}
+		}
+
+		if len(descriptors) == 0 {
+			if hasImages, _ := dirHasImages(mangaPath); hasImages {
+				descriptors = append(descriptors, chapterSourceDescriptor{
+					kind:      chapterSourceDirectory,
+					path:      mangaPath,
+					name:      title,
+					mangaPath: mangaPath,
+				})
+			}
+		}
+	}
+
+	for i := range descriptors {
+		descriptors[i].mangaPath = mangaPath
 	}
 
 	chapters := make([]chapterSource, 0, len(descriptors))
@@ -434,7 +637,7 @@ func loadMangaManifest(outputRoot string, mangaDir string, relativePath string) 
 		sourceURL:    sourceURL,
 		reader: contracts.ReaderManifest{
 			MangaID:       encodeMangaID(relativePath),
-			Title:         filepath.Base(mangaDir),
+			Title:         title,
 			CoverImageURL: coverImageURL,
 			TotalPages:    totalPages,
 			Chapters:      readerChapters,
@@ -445,20 +648,25 @@ func loadMangaManifest(outputRoot string, mangaDir string, relativePath string) 
 func loadChapterSource(outputRoot string, descriptor chapterSourceDescriptor) (chapterSource, error) {
 	switch descriptor.kind {
 	case chapterSourceDirectory:
-		return loadDirectoryChapterSource(outputRoot, descriptor.path)
+		return loadDirectoryChapterSource(outputRoot, descriptor)
 	case chapterSourceArchive:
-		return loadArchiveChapterSource(outputRoot, descriptor.path)
+		return loadArchiveChapterSource(outputRoot, descriptor)
 	default:
 		return chapterSource{}, fmt.Errorf("unsupported chapter source type: %s", descriptor.kind)
 	}
 }
 
-func loadDirectoryChapterSource(outputRoot string, chapterDir string) (chapterSource, error) {
+func loadDirectoryChapterSource(outputRoot string, descriptor chapterSourceDescriptor) (chapterSource, error) {
+	chapterDir := descriptor.path
 	info, hasInfo := readComicInfoFromDir(chapterDir)
 
 	baseName := filepath.Base(chapterDir)
 	metadata := resolveChapterMetadata(baseName, info, hasInfo)
-	if relToRoot, err := relativePathWithinRoot(outputRoot, chapterDir); err == nil {
+	if descriptor.mangaPath != "" {
+		if relToManga, err := filepath.Rel(descriptor.mangaPath, chapterDir); err == nil && relToManga != "." {
+			metadata.id = filepath.ToSlash(relToManga)
+		}
+	} else if relToRoot, err := relativePathWithinRoot(outputRoot, chapterDir); err == nil {
 		parts := strings.SplitN(relToRoot, "/", 2)
 		if len(parts) == 2 {
 			metadata.id = parts[1]
@@ -486,7 +694,8 @@ func loadDirectoryChapterSource(outputRoot string, chapterDir string) (chapterSo
 	}, nil
 }
 
-func loadArchiveChapterSource(outputRoot string, archivePath string) (chapterSource, error) {
+func loadArchiveChapterSource(outputRoot string, descriptor chapterSourceDescriptor) (chapterSource, error) {
+	archivePath := descriptor.path
 	cacheEntry, err := acquireArchive(archivePath)
 	if err != nil {
 		return chapterSource{}, fmt.Errorf("open chapter archive: %w", err)
@@ -497,7 +706,11 @@ func loadArchiveChapterSource(outputRoot string, archivePath string) (chapterSou
 	info, hasInfo := readComicInfoFromArchive(archiveReader)
 	baseName := strings.TrimSuffix(filepath.Base(archivePath), filepath.Ext(archivePath))
 	metadata := resolveChapterMetadata(baseName, info, hasInfo)
-	if relToRoot, err := relativePathWithinRoot(outputRoot, archivePath); err == nil {
+	if descriptor.mangaPath != "" {
+		if relToManga, err := filepath.Rel(descriptor.mangaPath, archivePath); err == nil && relToManga != "." {
+			metadata.id = strings.TrimSuffix(filepath.ToSlash(relToManga), filepath.Ext(relToManga))
+		}
+	} else if relToRoot, err := relativePathWithinRoot(outputRoot, archivePath); err == nil {
 		parts := strings.SplitN(relToRoot, "/", 2)
 		if len(parts) == 2 {
 			metadata.id = strings.TrimSuffix(parts[1], filepath.Ext(parts[1]))

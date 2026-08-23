@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 )
 
 func TestResolveLibraryAssetPathRejectsTraversal(t *testing.T) {
@@ -441,6 +443,108 @@ func writeFile(t *testing.T, filePath string, content string) {
 	}
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write file %s: %v", filePath, err)
+	}
+}
+
+func TestScanLibraryMangaWithCollectionMarker(t *testing.T) {
+	root := t.TempDir()
+
+	// 1. Regular Manga at root
+	regDir := filepath.Join(root, "Regular Manga")
+	writeFile(t, filepath.Join(regDir, "Vol 1", "001.jpg"), "reg1")
+	writeFile(t, filepath.Join(regDir, "Vol 2", "001.jpg"), "reg2")
+
+	// 2. Collection with .collection marker
+	collDir := filepath.Join(root, "Author Collection")
+	writeFile(t, filepath.Join(collDir, ".collection"), "")
+
+	// 2a. Multi-chapter manga inside collection
+	manga1Dir := filepath.Join(collDir, "Manga One")
+	writeFile(t, filepath.Join(manga1Dir, "Vol 1", "001.jpg"), "m1v1")
+	writeFile(t, filepath.Join(manga1Dir, "Vol 2", "001.jpg"), "m1v2")
+
+	// 2b. Standalone CBZ manga inside collection
+	writeZipArchive(t, filepath.Join(collDir, "Manga Two.cbz"), map[string]string{
+		"001.png": "m2p1",
+		"002.png": "m2p2",
+	})
+
+	// 2c. One-shot direct images manga inside collection
+	manga3Dir := filepath.Join(collDir, "Manga Three")
+	writeFile(t, filepath.Join(manga3Dir, "001.jpg"), "m3p1")
+	writeFile(t, filepath.Join(manga3Dir, "002.jpg"), "m3p2")
+	writeFile(t, filepath.Join(manga3Dir, "003.jpg"), "m3p3")
+
+	items, _, err := ScanLibraryManga(root, nil, nil)
+	if err != nil {
+		t.Fatalf("ScanLibraryManga error: %v", err)
+	}
+
+	// Expect 5 items: 1 Regular + 1 Collection + 3 mangas in Collection
+	if len(items) != 5 {
+		t.Fatalf("expected 5 items, got %d", len(items))
+	}
+
+	itemMap := make(map[string]contracts.LibraryManga)
+	for _, item := range items {
+		itemMap[item.RelativePath] = item
+	}
+
+	// Verify Regular Manga
+	regItem, ok := itemMap["Regular Manga"]
+	if !ok || regItem.IsCollection || regItem.ParentPath != "" || regItem.ChapterCount != 2 || regItem.PageCount != 2 {
+		t.Fatalf("unexpected regular manga item: %+v", regItem)
+	}
+
+	// Verify Collection Item
+	collItem, ok := itemMap["Author Collection"]
+	if !ok || !collItem.IsCollection || collItem.MangaCount != 3 || collItem.ParentPath != "" {
+		t.Fatalf("unexpected collection item: %+v", collItem)
+	}
+
+	// Verify Manga One
+	m1, ok := itemMap["Author Collection/Manga One"]
+	if !ok || m1.IsCollection || m1.ParentPath != "Author Collection" || m1.Title != "Manga One" || m1.ChapterCount != 2 {
+		t.Fatalf("unexpected manga 1 item: %+v", m1)
+	}
+
+	// Verify Manga Two (archive)
+	m2, ok := itemMap["Author Collection/Manga Two.cbz"]
+	if !ok || m2.IsCollection || m2.ParentPath != "Author Collection" || m2.Title != "Manga Two" || m2.PageCount != 2 {
+		t.Fatalf("unexpected manga 2 item: %+v", m2)
+	}
+
+	// Verify Manga Three (one-shot direct images)
+	m3, ok := itemMap["Author Collection/Manga Three"]
+	if !ok || m3.IsCollection || m3.ParentPath != "Author Collection" || m3.Title != "Manga Three" || m3.PageCount != 3 || m3.ChapterCount != 1 {
+		t.Fatalf("unexpected manga 3 item: %+v", m3)
+	}
+
+	// Verify GetReaderManifest for Manga One
+	manifest1, err := GetReaderManifest(root, m1.ID)
+	if err != nil {
+		t.Fatalf("GetReaderManifest(m1) error: %v", err)
+	}
+	if len(manifest1.Chapters) != 2 || manifest1.Title != "Manga One" {
+		t.Fatalf("unexpected manifest1: %+v", manifest1)
+	}
+
+	// Verify GetReaderManifest for Manga Two (archive)
+	manifest2, err := GetReaderManifest(root, m2.ID)
+	if err != nil {
+		t.Fatalf("GetReaderManifest(m2) error: %v", err)
+	}
+	if len(manifest2.Chapters) != 1 || manifest2.TotalPages != 2 || manifest2.Title != "Manga Two" {
+		t.Fatalf("unexpected manifest2: %+v", manifest2)
+	}
+
+	// Verify GetReaderManifest for Manga Three (one-shot)
+	manifest3, err := GetReaderManifest(root, m3.ID)
+	if err != nil {
+		t.Fatalf("GetReaderManifest(m3) error: %v", err)
+	}
+	if len(manifest3.Chapters) != 1 || manifest3.TotalPages != 3 || manifest3.Title != "Manga Three" {
+		t.Fatalf("unexpected manifest3: %+v", manifest3)
 	}
 }
 

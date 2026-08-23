@@ -72,6 +72,9 @@ func (s *SQLiteStore) init() error {
 			title TEXT NOT NULL,
 			source_url TEXT NOT NULL,
 			relative_path TEXT NOT NULL,
+			parent_path TEXT NOT NULL DEFAULT '',
+			is_collection INTEGER NOT NULL DEFAULT 0,
+			manga_count INTEGER NOT NULL DEFAULT 0,
 			cover_image_url TEXT NOT NULL,
 			chapter_count INTEGER NOT NULL,
 			page_count INTEGER NOT NULL,
@@ -86,7 +89,33 @@ func (s *SQLiteStore) init() error {
 		}
 	}
 
+	s.addColumnIfNotExists("library_manga", "parent_path", "TEXT NOT NULL DEFAULT ''")
+	s.addColumnIfNotExists("library_manga", "is_collection", "INTEGER NOT NULL DEFAULT 0")
+	s.addColumnIfNotExists("library_manga", "manga_count", "INTEGER NOT NULL DEFAULT 0")
+
 	return nil
+}
+
+func (s *SQLiteStore) addColumnIfNotExists(table, column, colDef string) {
+	rows, err := s.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue *string
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			return
+		}
+		if name == column {
+			return
+		}
+	}
+	s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, colDef))
 }
 
 func (s *SQLiteStore) GetSettings() (contracts.AppSettings, bool, error) {
@@ -160,8 +189,8 @@ func (s *SQLiteStore) SaveLibraryManga(mangas []contracts.LibraryManga, modTimes
 	}
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO library_manga (id, title, source_url, relative_path, cover_image_url, chapter_count, page_count, last_updated, mod_time)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO library_manga (id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -170,7 +199,11 @@ func (s *SQLiteStore) SaveLibraryManga(mangas []contracts.LibraryManga, modTimes
 
 	for _, m := range mangas {
 		modTime := modTimes[m.ID]
-		if _, err := stmt.Exec(m.ID, m.Title, m.SourceURL, m.RelativePath, m.CoverImageURL, m.ChapterCount, m.PageCount, m.LastUpdated, modTime); err != nil {
+		isColl := 0
+		if m.IsCollection {
+			isColl = 1
+		}
+		if _, err := stmt.Exec(m.ID, m.Title, m.SourceURL, m.RelativePath, m.ParentPath, isColl, m.MangaCount, m.CoverImageURL, m.ChapterCount, m.PageCount, m.LastUpdated, modTime); err != nil {
 			return err
 		}
 	}
@@ -185,7 +218,7 @@ type LibraryMangaRecord struct {
 
 func (s *SQLiteStore) ListLibraryManga() ([]LibraryMangaRecord, error) {
 	rows, err := s.db.Query(`
-		SELECT id, title, source_url, relative_path, cover_image_url, chapter_count, page_count, last_updated, mod_time
+		SELECT id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time
 		FROM library_manga
 		ORDER BY last_updated DESC
 	`)
@@ -197,12 +230,14 @@ func (s *SQLiteStore) ListLibraryManga() ([]LibraryMangaRecord, error) {
 	var records []LibraryMangaRecord
 	for rows.Next() {
 		var r LibraryMangaRecord
+		var isColl int
 		if err := rows.Scan(
-			&r.ID, &r.Title, &r.SourceURL, &r.RelativePath, &r.CoverImageURL,
+			&r.ID, &r.Title, &r.SourceURL, &r.RelativePath, &r.ParentPath, &isColl, &r.MangaCount, &r.CoverImageURL,
 			&r.ChapterCount, &r.PageCount, &r.LastUpdated, &r.ModTime,
 		); err != nil {
 			return nil, err
 		}
+		r.IsCollection = (isColl == 1)
 		records = append(records, r)
 	}
 	return records, rows.Err()

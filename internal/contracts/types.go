@@ -30,6 +30,9 @@ type LibraryManga struct {
 	Title         string `json:"title"`
 	SourceURL     string `json:"sourceURL"`
 	RelativePath  string `json:"relativePath"`
+	ParentPath    string `json:"parentPath,omitempty"`
+	IsCollection  bool   `json:"isCollection,omitempty"`
+	MangaCount    int    `json:"mangaCount,omitempty"`
 	CoverImageURL string `json:"coverImageURL"`
 	ChapterCount  int    `json:"chapterCount"`
 	PageCount     int    `json:"pageCount"`

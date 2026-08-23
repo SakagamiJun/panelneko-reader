@@ -7,6 +7,7 @@ import {
   BookImage,
   ChevronsLeft,
   ChevronsRight,
+  Folder,
   Languages,
   Loader2,
   MoonStar,
@@ -73,6 +74,7 @@ export default function App() {
 
   const [paneVisible, setPaneVisible] = useState(false);
   const [paneWidth, setPaneWidth] = useState(380);
+  const [selectedCollectionPath, setSelectedCollectionPath] = useState<string | null>(null);
   const [selectedLibraryID, setSelectedLibraryID] = useState<string | null>(null);
   const [readerMode, setReaderMode] = useState<"scroll" | "paged">("paged");
   const [readerJumpMenuOpen, setReaderJumpMenuOpen] = useState(false);
@@ -208,6 +210,28 @@ export default function App() {
   }, [selectedLibraryID, settingsQuery.data]);
 
   useEffect(() => {
+    if (selectedLibraryID || !selectedCollectionPath) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "SELECT" ||
+        document.activeElement?.tagName === "TEXTAREA"
+      ) {
+        return;
+      }
+
+      if (e.key === "Escape" || e.key === "Backspace") {
+        e.preventDefault();
+        setSelectedCollectionPath(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedLibraryID, selectedCollectionPath]);
+
+  useEffect(() => {
     setReaderJumpMenuOpen(false);
     setReaderJumpPageInput("");
     setReaderJumpRequest(null);
@@ -244,6 +268,20 @@ export default function App() {
 
   const library = libraryQuery.data ?? [];
   const selectedLibrary = library.find((item) => item.id === selectedLibraryID) ?? null;
+  const parentCollection = selectedLibrary?.parentPath
+    ? library.find((item) => item.relativePath === selectedLibrary.parentPath && item.isCollection)
+    : null;
+  const currentCollection = selectedCollectionPath
+    ? library.find((item) => item.relativePath === selectedCollectionPath && item.isCollection)
+    : null;
+
+  const displayedItems = library.filter((item) => {
+    if (selectedCollectionPath) {
+      return item.parentPath === selectedCollectionPath;
+    }
+    return !item.parentPath;
+  });
+
   const readerManifest = readerQuery.data ?? null;
   const manualReaderPage = Number(readerJumpPageInput);
   const canJumpToReaderPage =
@@ -351,11 +389,37 @@ export default function App() {
             {!(selectedLibraryID && readerMenuCollapsed) && (
               <div className="app-window-drag-region absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 pl-20 pr-4 py-2">
                 <div className={cn("flex max-w-[min(58vw,32rem)] items-center gap-2 px-3 py-1.5 text-xs font-semibold", floatingSurfaceClass)}>
-                  <span className="truncate">{selectedLibrary ? selectedLibrary.title : t("library.title")}</span>
-                  {selectedLibrary && readerChapterTitle && (
-                    <Badge tone="running" className="max-w-[200px] truncate">
-                      {readerChapterTitle}
-                    </Badge>
+                  {selectedLibrary ? (
+                    <>
+                      <span className="truncate">{selectedLibrary.title}</span>
+                      {readerChapterTitle && (
+                        <Badge tone="running" className="max-w-[200px] truncate">
+                          {readerChapterTitle}
+                        </Badge>
+                      )}
+                    </>
+                  ) : selectedCollectionPath ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-1.5 text-xs gap-1 text-slate-700 hover:text-slate-900 app-window-no-drag"
+                        onClick={() => setSelectedCollectionPath(null)}
+                      >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                        {t("library.backToMain")}
+                      </Button>
+                      <span className="text-slate-400">/</span>
+                      <span className="truncate">{currentCollection ? currentCollection.title : selectedCollectionPath}</span>
+                      {currentCollection && (
+                        <Badge tone="running" className="max-w-[120px] truncate">
+                          {t("library.mangaUnit", { count: currentCollection.mangaCount || displayedItems.length })}
+                        </Badge>
+                      )}
+                    </>
+                  ) : (
+                    <span className="truncate">{t("library.title")}</span>
                   )}
                 </div>
 
@@ -480,13 +544,16 @@ export default function App() {
                       onClick={() => {
                         setReaderJumpMenuOpen(false);
                         setReaderMenuCollapsed(false);
+                        if (parentCollection) {
+                          setSelectedCollectionPath(parentCollection.relativePath);
+                        }
                         setSelectedLibraryID(null);
                       }}
                       size="sm"
                       variant="outline"
                     >
                       <ArrowLeft className="h-4 w-4" />
-                      {t("library.back")}
+                      {parentCollection ? parentCollection.title : t("library.back")}
                     </Button>
                     <Button
                       className={cn("gap-2 px-3 text-slate-800 hover:bg-[rgba(236,241,246,0.92)]", floatingSurfaceClass)}
@@ -543,9 +610,10 @@ export default function App() {
               ) : (
                 <LibraryGrid
                   emptyLabel={t("library.empty")}
-                  items={library}
+                  items={displayedItems}
                   loading={libraryQuery.isLoading}
-                  onOpen={setSelectedLibraryID}
+                  onOpenManga={setSelectedLibraryID}
+                  onOpenCollection={setSelectedCollectionPath}
                   onOpenSettings={togglePane}
                 />
               )}
@@ -715,13 +783,15 @@ function LibraryGrid({
   items,
   loading,
   emptyLabel,
-  onOpen,
+  onOpenManga,
+  onOpenCollection,
   onOpenSettings,
 }: {
   items: LibraryManga[];
   loading: boolean;
   emptyLabel: string;
-  onOpen: (mangaID: string) => void;
+  onOpenManga: (mangaID: string) => void;
+  onOpenCollection: (collectionPath: string) => void;
   onOpenSettings: () => void;
 }) {
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -811,7 +881,17 @@ function LibraryGrid({
           >
             {items.slice(virtualRow.index * columns, (virtualRow.index + 1) * columns).map((item) => (
               <article className="group relative overflow-hidden bg-background/92 transition hover:bg-background" key={item.id}>
-                <button className="flex w-full flex-col text-left" onClick={() => onOpen(item.id)} type="button">
+                <button
+                  className="flex w-full flex-col text-left"
+                  onClick={() => {
+                    if (item.isCollection) {
+                      onOpenCollection(item.relativePath);
+                    } else {
+                      onOpenManga(item.id);
+                    }
+                  }}
+                  type="button"
+                >
                   <div className="relative aspect-[4/5] overflow-hidden bg-muted w-full">
                     {item.coverImageURL ? (
                       <img
@@ -822,17 +902,31 @@ function LibraryGrid({
                       />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                        <BookImage className="h-9 w-9" />
+                        {item.isCollection ? <Folder className="h-10 w-10 text-muted-foreground/60" /> : <BookImage className="h-9 w-9" />}
+                      </div>
+                    )}
+                    {item.isCollection && (
+                      <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5 rounded-lg bg-slate-900/80 px-2 py-1 text-[11px] font-bold text-white shadow-md backdrop-blur-md">
+                        <Folder className="h-3.5 w-3.5" />
+                        <span>{t("library.collectionBadge")}</span>
                       </div>
                     )}
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/74 via-black/18 to-transparent px-3 py-3 text-black drop-shadow-[0_0_10px_rgba(255,255,255,1)]">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black drop-shadow-[0_0_10px_rgba(255,255,255,1)]">{item.chapterCount} chapters</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black drop-shadow-[0_0_10px_rgba(255,255,255,1)]">
+                        {item.isCollection
+                          ? t("library.mangaUnit", { count: item.mangaCount || 0 })
+                          : t("library.chapterUnit", { count: item.chapterCount })}
+                      </div>
                       <div className="mt-1 line-clamp-2 text-base font-black">{item.title}</div>
                     </div>
                   </div>
                   <div className="flex flex-1 items-center gap-3 px-3 py-3">
                     <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground">{item.pageCount} pages</div>
+                      <div className="text-xs text-muted-foreground">
+                        {item.isCollection
+                          ? `${t("library.chapterUnit", { count: item.chapterCount })} · ${t("library.pageUnit", { count: item.pageCount })}`
+                          : t("library.pageUnit", { count: item.pageCount })}
+                      </div>
                       <div className="mt-1 truncate text-[11px] text-muted-foreground">{formatDateTime(item.lastUpdated)}</div>
                     </div>
                   </div>

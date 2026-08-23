@@ -17,6 +17,9 @@ export interface LibraryManga {
   title: string;
   sourceURL: string;
   relativePath: string;
+  parentPath?: string;
+  isCollection?: boolean;
+  mangaCount?: number;
   coverImageURL: string;
   chapterCount: number;
   pageCount: number;
