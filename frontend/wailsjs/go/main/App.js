@@ -30,6 +30,10 @@ export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
+export function TogglePin(arg1) {
+  return window['go']['main']['App']['TogglePin'](arg1);
+}
+
 export function UpdateReaderProgress(arg1) {
   return window['go']['main']['App']['UpdateReaderProgress'](arg1);
 }

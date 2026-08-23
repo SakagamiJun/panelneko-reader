@@ -36,6 +36,8 @@ export namespace contracts {
 	    chapterCount: number;
 	    pageCount: number;
 	    lastUpdated: string;
+	    isPinned?: boolean;
+	    pinnedAt?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new LibraryManga(source);
@@ -54,6 +56,8 @@ export namespace contracts {
 	        this.chapterCount = source["chapterCount"];
 	        this.pageCount = source["pageCount"];
 	        this.lastUpdated = source["lastUpdated"];
+	        this.isPinned = source["isPinned"];
+	        this.pinnedAt = source["pinnedAt"];
 	    }
 	}
 	export class ReaderPage {

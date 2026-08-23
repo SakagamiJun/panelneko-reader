@@ -548,6 +548,105 @@ func TestScanLibraryMangaWithCollectionMarker(t *testing.T) {
 	}
 }
 
+func TestApplyPinsAndSort(t *testing.T) {
+	items := []contracts.LibraryManga{
+		{
+			ID:            "manga-a",
+			Title:         "Manga A",
+			RelativePath:  "Manga A",
+			ParentPath:    "",
+			IsCollection:  false,
+			CoverImageURL: "/covers/a.jpg",
+			LastUpdated:   "2026-08-01T00:00:00Z",
+		},
+		{
+			ID:            "manga-b",
+			Title:         "Manga B",
+			RelativePath:  "Manga B",
+			ParentPath:    "",
+			IsCollection:  false,
+			CoverImageURL: "/covers/b.jpg",
+			LastUpdated:   "2026-08-02T00:00:00Z",
+		},
+		{
+			ID:            "coll-c",
+			Title:         "Collection C",
+			RelativePath:  "Collection C",
+			ParentPath:    "",
+			IsCollection:  true,
+			CoverImageURL: "/covers/c1.jpg",
+			LastUpdated:   "2026-08-03T00:00:00Z",
+		},
+		{
+			ID:            "coll-c-1",
+			Title:         "C Manga 1",
+			RelativePath:  "Collection C/C Manga 1",
+			ParentPath:    "Collection C",
+			IsCollection:  false,
+			CoverImageURL: "/covers/c1.jpg",
+			LastUpdated:   "2026-08-01T00:00:00Z",
+		},
+		{
+			ID:            "coll-c-2",
+			Title:         "C Manga 2",
+			RelativePath:  "Collection C/C Manga 2",
+			ParentPath:    "Collection C",
+			IsCollection:  false,
+			CoverImageURL: "/covers/c2.jpg",
+			LastUpdated:   "2026-08-02T00:00:00Z",
+		},
+	}
+
+	// 1. Without pins: root items sorted by LastUpdated DESC
+	sorted := ApplyPinsAndSort(items, nil)
+	if sorted[0].ID != "coll-c" || sorted[1].ID != "manga-b" || sorted[2].ID != "manga-a" {
+		t.Fatalf("unexpected unpinned root order: %s, %s, %s", sorted[0].ID, sorted[1].ID, sorted[2].ID)
+	}
+	// Collection C's cover is still c1.jpg
+	if sorted[0].CoverImageURL != "/covers/c1.jpg" {
+		t.Fatalf("unexpected coll cover: %s", sorted[0].CoverImageURL)
+	}
+
+	// 2. Pin Manga A at root: Manga A should be first at root
+	pins := map[string]string{
+		"manga-a": "2026-08-23T10:00:00Z",
+	}
+	sorted = ApplyPinsAndSort(items, pins)
+	if sorted[0].ID != "manga-a" {
+		t.Fatalf("expected manga-a to be pinned first, got %s", sorted[0].ID)
+	}
+	if !sorted[0].IsPinned || sorted[0].PinnedAt != "2026-08-23T10:00:00Z" {
+		t.Fatalf("expected manga-a to have pin fields set: %+v", sorted[0])
+	}
+
+	// 3. Pin Manga C 2 inside Collection C:
+	// - Collection C's cover must become /covers/c2.jpg
+	// - Inside Collection C, C Manga 2 must be sorted before C Manga 1
+	pins = map[string]string{
+		"coll-c-2": "2026-08-23T11:00:00Z",
+	}
+	sorted = ApplyPinsAndSort(items, pins)
+	var foundColl *contracts.LibraryManga
+	var cChildren []contracts.LibraryManga
+	for _, it := range sorted {
+		if it.ID == "coll-c" {
+			c := it
+			foundColl = &c
+		} else if it.ParentPath == "Collection C" {
+			cChildren = append(cChildren, it)
+		}
+	}
+	if foundColl == nil {
+		t.Fatal("coll-c not found")
+	}
+	if foundColl.CoverImageURL != "/covers/c2.jpg" {
+		t.Fatalf("expected coll-c cover to be /covers/c2.jpg, got %s", foundColl.CoverImageURL)
+	}
+	if len(cChildren) != 2 || cChildren[0].ID != "coll-c-2" || cChildren[1].ID != "coll-c-1" {
+		t.Fatalf("expected coll-c-2 to be sorted first in collection, got %+v", cChildren)
+	}
+}
+
 func writeZipArchive(t *testing.T, archivePath string, files map[string]string) {
 	t.Helper()
 

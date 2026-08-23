@@ -51,6 +51,9 @@ export const zhCN = {
     pageUnit: "{{count}} 页",
     loadingTitle: "正在加载书库...",
     loadingDescription: "如果您的书库过大，首次加载可能会需要一些时间。请耐心等待。",
+    pin: "置顶",
+    unpin: "取消置顶",
+    pinnedBadge: "已置顶",
   },
   reader: {
     scrollMode: "卷轴模式",

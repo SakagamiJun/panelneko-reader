@@ -51,6 +51,9 @@ export const ja = {
     pageUnit: "{{count}} ページ",
     loadingTitle: "ライブラリを読み込み中...",
     loadingDescription: "漫画のコレクションが多い場合、初回読み込みに時間がかかることがあります。しばらくお待ちください。",
+    pin: "ピン留め",
+    unpin: "ピン留めを解除",
+    pinnedBadge: "ピン留め中",
   },
   reader: {
     scrollMode: "スクロールモード",

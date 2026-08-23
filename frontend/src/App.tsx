@@ -11,6 +11,7 @@ import {
   Languages,
   Loader2,
   MoonStar,
+  Pin,
   Settings2,
   Sparkles,
   SunMedium,
@@ -115,9 +116,13 @@ export default function App() {
     const offSettings = appAdapter.subscribe(EVENTS.SETTINGS_UPDATED, () => {
       void queryClient.invalidateQueries({ queryKey: ["library"] });
     });
+    const offLibrary = appAdapter.subscribe(EVENTS.LIBRARY_UPDATED, () => {
+      void queryClient.invalidateQueries({ queryKey: ["library"] });
+    });
 
     return () => {
       offSettings();
+      offLibrary();
     };
   }, [queryClient]);
 
@@ -264,6 +269,13 @@ export default function App() {
     },
   });
 
+  const togglePinMutation = useMutation({
+    mutationFn: (mangaID: string) => appAdapter.togglePin(mangaID),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["library"] });
+    },
+  });
+
   const settings = settingsQuery.data;
 
   const library = libraryQuery.data ?? [];
@@ -275,12 +287,22 @@ export default function App() {
     ? library.find((item) => item.relativePath === selectedCollectionPath && item.isCollection)
     : null;
 
-  const displayedItems = library.filter((item) => {
-    if (selectedCollectionPath) {
-      return item.parentPath === selectedCollectionPath;
-    }
-    return !item.parentPath;
-  });
+  const displayedItems = library
+    .filter((item) => {
+      if (selectedCollectionPath) {
+        return item.parentPath === selectedCollectionPath;
+      }
+      return !item.parentPath;
+    })
+    .sort((a, b) => {
+      if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+        return a.isPinned ? -1 : 1;
+      }
+      if (a.isPinned && b.isPinned && a.pinnedAt !== b.pinnedAt) {
+        return (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? "");
+      }
+      return 0;
+    });
 
   const readerManifest = readerQuery.data ?? null;
   const manualReaderPage = Number(readerJumpPageInput);
@@ -615,6 +637,7 @@ export default function App() {
                   onOpenManga={setSelectedLibraryID}
                   onOpenCollection={setSelectedCollectionPath}
                   onOpenSettings={togglePane}
+                  onTogglePin={(id) => togglePinMutation.mutate(id)}
                 />
               )}
             </div>
@@ -786,6 +809,7 @@ function LibraryGrid({
   onOpenManga,
   onOpenCollection,
   onOpenSettings,
+  onTogglePin,
 }: {
   items: LibraryManga[];
   loading: boolean;
@@ -793,6 +817,7 @@ function LibraryGrid({
   onOpenManga: (mangaID: string) => void;
   onOpenCollection: (collectionPath: string) => void;
   onOpenSettings: () => void;
+  onTogglePin: (mangaID: string) => void;
 }) {
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const [columns, setColumns] = useState(1);
@@ -880,9 +905,14 @@ function LibraryGrid({
             }}
           >
             {items.slice(virtualRow.index * columns, (virtualRow.index + 1) * columns).map((item) => (
-              <article className="group relative overflow-hidden bg-background/92 transition hover:bg-background" key={item.id}>
-                <button
-                  className="flex w-full flex-col text-left"
+              <article
+                className="group relative flex flex-col overflow-hidden bg-background/92 transition hover:bg-background"
+                key={item.id}
+              >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="flex flex-col text-left cursor-pointer focus:outline-none"
                   onClick={() => {
                     if (item.isCollection) {
                       onOpenCollection(item.relativePath);
@@ -890,7 +920,16 @@ function LibraryGrid({
                       onOpenManga(item.id);
                     }
                   }}
-                  type="button"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      if (item.isCollection) {
+                        onOpenCollection(item.relativePath);
+                      } else {
+                        onOpenManga(item.id);
+                      }
+                    }
+                  }}
                 >
                   <div className="relative aspect-[4/5] overflow-hidden bg-muted w-full">
                     {item.coverImageURL ? (
@@ -920,17 +959,50 @@ function LibraryGrid({
                       <div className="mt-1 line-clamp-2 text-base font-black">{item.title}</div>
                     </div>
                   </div>
-                  <div className="flex flex-1 items-center gap-3 px-3 py-3">
-                    <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground">
-                        {item.isCollection
-                          ? `${t("library.chapterUnit", { count: item.chapterCount })} · ${t("library.pageUnit", { count: item.pageCount })}`
-                          : t("library.pageUnit", { count: item.pageCount })}
-                      </div>
-                      <div className="mt-1 truncate text-[11px] text-muted-foreground">{formatDateTime(item.lastUpdated)}</div>
+                </div>
+
+                <div className="flex flex-1 items-center justify-between gap-2 px-3 py-3">
+                  <div
+                    className="min-w-0 flex-1 cursor-pointer"
+                    onClick={() => {
+                      if (item.isCollection) {
+                        onOpenCollection(item.relativePath);
+                      } else {
+                        onOpenManga(item.id);
+                      }
+                    }}
+                  >
+                    <div className="text-xs text-muted-foreground">
+                      {item.isCollection
+                        ? `${t("library.chapterUnit", { count: item.chapterCount })} · ${t("library.pageUnit", { count: item.pageCount })}`
+                        : t("library.pageUnit", { count: item.pageCount })}
                     </div>
+                    <div className="mt-1 truncate text-[11px] text-muted-foreground">{formatDateTime(item.lastUpdated)}</div>
                   </div>
-                </button>
+
+                  <button
+                    type="button"
+                    title={item.isPinned ? t("library.unpin") : t("library.pin")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTogglePin(item.id);
+                    }}
+                    className={cn(
+                      "flex h-7 items-center gap-1 rounded-md px-2 text-xs font-semibold transition-all duration-200 shrink-0",
+                      item.isPinned
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
+                        : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <Pin
+                      className={cn(
+                        "h-3.5 w-3.5 transition-transform",
+                        item.isPinned && "rotate-45 fill-amber-500 text-amber-500 dark:text-amber-400 dark:fill-amber-400"
+                      )}
+                    />
+                    {item.isPinned && <span className="text-[11px]">{t("library.pinnedBadge")}</span>}
+                  </button>
+                </div>
               </article>
             ))}
           </div>

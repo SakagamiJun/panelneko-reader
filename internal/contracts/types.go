@@ -37,6 +37,8 @@ type LibraryManga struct {
 	ChapterCount  int    `json:"chapterCount"`
 	PageCount     int    `json:"pageCount"`
 	LastUpdated   string `json:"lastUpdated"`
+	IsPinned      bool   `json:"isPinned,omitempty"`
+	PinnedAt      string `json:"pinnedAt,omitempty"`
 }
 
 type ReaderManifest struct {

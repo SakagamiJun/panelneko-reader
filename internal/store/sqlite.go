@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
@@ -80,6 +81,10 @@ func (s *SQLiteStore) init() error {
 			page_count INTEGER NOT NULL,
 			last_updated TEXT NOT NULL,
 			mod_time INTEGER NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS pinned_items (
+			id TEXT PRIMARY KEY,
+			pinned_at TEXT NOT NULL
 		);`,
 	}
 
@@ -258,4 +263,63 @@ func (s *SQLiteStore) SaveReaderProgress(progress contracts.ReaderProgress) erro
 	}
 
 	return nil
+}
+
+func (s *SQLiteStore) GetPinnedMap() (map[string]string, error) {
+	rows, err := s.db.Query(`SELECT id, pinned_at FROM pinned_items`)
+	if err != nil {
+		return nil, fmt.Errorf("query pinned items: %w", err)
+	}
+	defer rows.Close()
+
+	pinned := make(map[string]string)
+	for rows.Next() {
+		var id, pinnedAt string
+		if err := rows.Scan(&id, &pinnedAt); err != nil {
+			return nil, fmt.Errorf("scan pinned item: %w", err)
+		}
+		pinned[id] = pinnedAt
+	}
+	return pinned, rows.Err()
+}
+
+func (s *SQLiteStore) TogglePin(id string) (bool, error) {
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM pinned_items WHERE id = ?`, id).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("check pin status: %w", err)
+	}
+
+	if count > 0 {
+		_, err := s.db.Exec(`DELETE FROM pinned_items WHERE id = ?`, id)
+		if err != nil {
+			return false, fmt.Errorf("unpin item: %w", err)
+		}
+		return false, nil
+	}
+
+	pinnedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err = s.db.Exec(`INSERT INTO pinned_items (id, pinned_at) VALUES (?, ?)`, id, pinnedAt)
+	if err != nil {
+		return false, fmt.Errorf("pin item: %w", err)
+	}
+
+	return true, nil
+}
+
+func (s *SQLiteStore) SetPin(id string, isPinned bool, pinnedAt string) error {
+	if isPinned {
+		if pinnedAt == "" {
+			pinnedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		}
+		_, err := s.db.Exec(`
+			INSERT INTO pinned_items (id, pinned_at)
+			VALUES (?, ?)
+			ON CONFLICT(id) DO UPDATE SET pinned_at = excluded.pinned_at
+		`, id, pinnedAt)
+		return err
+	}
+
+	_, err := s.db.Exec(`DELETE FROM pinned_items WHERE id = ?`, id)
+	return err
 }

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -155,11 +154,29 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 		return nil, err
 	}
 
-	sort.SliceStable(items, func(i, j int) bool {
-		return items[i].LastUpdated > items[j].LastUpdated
-	})
+	pins, err := a.store.GetPinnedMap()
+	if err != nil {
+		return nil, err
+	}
+
+	items = library.ApplyPinsAndSort(items, pins)
 
 	return items, nil
+}
+
+func (a *App) TogglePin(mangaID string) (bool, error) {
+	if err := a.ensureReady(); err != nil {
+		return false, err
+	}
+
+	pinned, err := a.store.TogglePin(mangaID)
+	if err != nil {
+		return false, err
+	}
+
+	a.emit(contracts.EventLibraryUpdated, nil)
+
+	return pinned, nil
 }
 
 func (a *App) GetReaderManifest(mangaID string) (contracts.ReaderManifest, error) {

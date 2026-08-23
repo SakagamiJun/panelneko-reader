@@ -110,6 +110,135 @@ func TestAssetHandlerArchiveNotFoundScenarios(t *testing.T) {
 	}
 }
 
+func TestListLibraryMangaPinAndCollectionCover(t *testing.T) {
+	libraryRoot := t.TempDir()
+
+	// 1. Standalone Manga A
+	mangaADir := filepath.Join(libraryRoot, "Manga A", "Chapter 1")
+	if err := os.MkdirAll(mangaADir, 0o755); err != nil {
+		t.Fatalf("mkdir manga A: %v", err)
+	}
+	_ = os.WriteFile(filepath.Join(mangaADir, "001.jpg"), []byte("a"), 0o644)
+
+	// 2. Standalone Manga B
+	mangaBDir := filepath.Join(libraryRoot, "Manga B", "Chapter 1")
+	if err := os.MkdirAll(mangaBDir, 0o755); err != nil {
+		t.Fatalf("mkdir manga B: %v", err)
+	}
+	_ = os.WriteFile(filepath.Join(mangaBDir, "001.jpg"), []byte("b"), 0o644)
+
+	// 3. Collection C with marker and two child mangas
+	collDir := filepath.Join(libraryRoot, "Coll C")
+	if err := os.MkdirAll(collDir, 0o755); err != nil {
+		t.Fatalf("mkdir coll C: %v", err)
+	}
+	_ = os.WriteFile(filepath.Join(collDir, ".collection"), []byte(""), 0o644)
+
+	child1Dir := filepath.Join(collDir, "Child 1", "Chapter 1")
+	if err := os.MkdirAll(child1Dir, 0o755); err != nil {
+		t.Fatalf("mkdir child 1: %v", err)
+	}
+	_ = os.WriteFile(filepath.Join(child1Dir, "001.jpg"), []byte("c1"), 0o644)
+
+	child2Dir := filepath.Join(collDir, "Child 2", "Chapter 1")
+	if err := os.MkdirAll(child2Dir, 0o755); err != nil {
+		t.Fatalf("mkdir child 2: %v", err)
+	}
+	_ = os.WriteFile(filepath.Join(child2Dir, "002.jpg"), []byte("c2"), 0o644)
+
+	app, cleanup := newAssetTestApp(t, libraryRoot)
+	defer cleanup()
+
+	items, err := app.ListLibraryManga()
+	if err != nil {
+		t.Fatalf("initial list library: %v", err)
+	}
+
+	itemMap := make(map[string]contracts.LibraryManga)
+	for _, it := range items {
+		itemMap[it.RelativePath] = it
+	}
+
+	coll := itemMap["Coll C"]
+	child1 := itemMap["Coll C/Child 1"]
+	child2 := itemMap["Coll C/Child 2"]
+	mangaA := itemMap["Manga A"]
+
+	defaultCollCover := coll.CoverImageURL
+	if defaultCollCover == "" || defaultCollCover != child1.CoverImageURL {
+		t.Fatalf("expected default coll cover to be child 1 cover (%q), got %q", child1.CoverImageURL, defaultCollCover)
+	}
+
+	// Pin Manga A
+	pinned, err := app.TogglePin(mangaA.ID)
+	if err != nil || !pinned {
+		t.Fatalf("toggle pin manga A: %v, %v", pinned, err)
+	}
+
+	items, err = app.ListLibraryManga()
+	if err != nil {
+		t.Fatalf("list after pin manga A: %v", err)
+	}
+	// Manga A must be first in root
+	if items[0].ID != mangaA.ID || !items[0].IsPinned {
+		t.Fatalf("expected manga A to be first and pinned, got %+v", items[0])
+	}
+
+	// Pin Child 2 in Collection C
+	pinned, err = app.TogglePin(child2.ID)
+	if err != nil || !pinned {
+		t.Fatalf("toggle pin child 2: %v, %v", pinned, err)
+	}
+
+	items, err = app.ListLibraryManga()
+	if err != nil {
+		t.Fatalf("list after pin child 2: %v", err)
+	}
+
+	var updatedColl *contracts.LibraryManga
+	var collChildren []contracts.LibraryManga
+	for _, it := range items {
+		if it.RelativePath == "Coll C" {
+			c := it
+			updatedColl = &c
+		} else if it.ParentPath == "Coll C" {
+			collChildren = append(collChildren, it)
+		}
+	}
+
+	if updatedColl == nil {
+		t.Fatal("collection C not found")
+	}
+	// Requirement 2: Collection C cover must now be Child 2's cover!
+	if updatedColl.CoverImageURL != child2.CoverImageURL {
+		t.Fatalf("expected collection cover to be child 2 cover (%q), got %q", child2.CoverImageURL, updatedColl.CoverImageURL)
+	}
+
+	// Inside collection, child 2 should be first
+	if len(collChildren) != 2 || collChildren[0].ID != child2.ID {
+		t.Fatalf("expected child 2 to be first in collection, got %+v", collChildren)
+	}
+
+	// Unpin Child 2
+	pinned, err = app.TogglePin(child2.ID)
+	if err != nil || pinned {
+		t.Fatalf("toggle unpin child 2: %v, %v", pinned, err)
+	}
+
+	items, err = app.ListLibraryManga()
+	if err != nil {
+		t.Fatalf("list after unpin child 2: %v", err)
+	}
+
+	for _, it := range items {
+		if it.RelativePath == "Coll C" {
+			if it.CoverImageURL != defaultCollCover {
+				t.Fatalf("expected collection cover to revert to default (%q), got %q", defaultCollCover, it.CoverImageURL)
+			}
+		}
+	}
+}
+
 func newAssetTestApp(t *testing.T, libraryRoot string) (*App, func()) {
 	t.Helper()
 
@@ -127,11 +256,11 @@ func newAssetTestApp(t *testing.T, libraryRoot string) (*App, func()) {
 	}
 
 	return &App{
-			store:    storeValue,
-			settings: settingsService,
-		}, func() {
-			_ = storeValue.Close()
-		}
+		store:    storeValue,
+		settings: settingsService,
+	}, func() {
+		_ = storeValue.Close()
+	}
 }
 
 func encodePathTokenForAppTest(value string) string {

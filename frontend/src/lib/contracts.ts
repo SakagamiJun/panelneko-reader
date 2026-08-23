@@ -24,6 +24,8 @@ export interface LibraryManga {
   chapterCount: number;
   pageCount: number;
   lastUpdated: string;
+  isPinned?: boolean;
+  pinnedAt?: string;
 }
 
 export interface ReaderManifest {
@@ -65,4 +67,5 @@ export const EVENTS = {
   SETTINGS_UPDATED: "settings:updated",
   THEME_RESOLVED: "theme:resolved",
   LOCALE_RESOLVED: "locale:resolved",
+  LIBRARY_UPDATED: "library:updated",
 } as const;

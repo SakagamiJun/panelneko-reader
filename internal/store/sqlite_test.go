@@ -102,3 +102,65 @@ func TestLibraryMangaCollectionRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestPinnedItemsRoundTrip(t *testing.T) {
+	sqliteStore, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	pinnedMap, err := sqliteStore.GetPinnedMap()
+	if err != nil {
+		t.Fatalf("get pinned map: %v", err)
+	}
+	if len(pinnedMap) != 0 {
+		t.Fatalf("expected empty pinned map, got %d items", len(pinnedMap))
+	}
+
+	// Toggle pin on
+	pinned, err := sqliteStore.TogglePin("manga-1")
+	if err != nil {
+		t.Fatalf("toggle pin on: %v", err)
+	}
+	if !pinned {
+		t.Fatal("expected pinned to be true")
+	}
+
+	pinnedMap, err = sqliteStore.GetPinnedMap()
+	if err != nil {
+		t.Fatalf("get pinned map: %v", err)
+	}
+	if len(pinnedMap) != 1 || pinnedMap["manga-1"] == "" {
+		t.Fatalf("expected 1 pinned item, got %+v", pinnedMap)
+	}
+
+	// Toggle pin off
+	pinned, err = sqliteStore.TogglePin("manga-1")
+	if err != nil {
+		t.Fatalf("toggle pin off: %v", err)
+	}
+	if pinned {
+		t.Fatal("expected pinned to be false")
+	}
+
+	pinnedMap, err = sqliteStore.GetPinnedMap()
+	if err != nil {
+		t.Fatalf("get pinned map: %v", err)
+	}
+	if len(pinnedMap) != 0 {
+		t.Fatalf("expected empty pinned map after unpin, got %d items", len(pinnedMap))
+	}
+
+	// Test SetPin
+	if err := sqliteStore.SetPin("manga-2", true, "2026-08-23T12:00:00Z"); err != nil {
+		t.Fatalf("set pin: %v", err)
+	}
+	pinnedMap, err = sqliteStore.GetPinnedMap()
+	if err != nil {
+		t.Fatalf("get pinned map: %v", err)
+	}
+	if pinnedMap["manga-2"] != "2026-08-23T12:00:00Z" {
+		t.Fatalf("expected custom pinnedAt timestamp, got %q", pinnedMap["manga-2"])
+	}
+}

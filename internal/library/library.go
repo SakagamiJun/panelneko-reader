@@ -1438,3 +1438,116 @@ func robustRel(base, targ string) (string, error) {
 
 	return rel, err
 }
+
+// ApplyPinsAndSort applies pin statuses, updates collection covers if child mangas are pinned,
+// and sorts items (pinned items first, followed by default sorting).
+func ApplyPinsAndSort(items []contracts.LibraryManga, pins map[string]string) []contracts.LibraryManga {
+	if len(items) == 0 {
+		return []contracts.LibraryManga{}
+	}
+
+	result := make([]contracts.LibraryManga, len(items))
+	copy(result, items)
+
+	// 1. Assign pin status to each item
+	for i := range result {
+		if pinnedAt, ok := pins[result[i].ID]; ok {
+			result[i].IsPinned = true
+			result[i].PinnedAt = pinnedAt
+		} else {
+			result[i].IsPinned = false
+			result[i].PinnedAt = ""
+		}
+	}
+
+	// 2. Map collection children by ParentPath
+	collChildren := make(map[string][]contracts.LibraryManga)
+	for _, item := range result {
+		if item.ParentPath != "" {
+			collChildren[item.ParentPath] = append(collChildren[item.ParentPath], item)
+		}
+	}
+
+	// 3. For each collection, check if any of its children are pinned.
+	// If so, update the collection's cover to the top pinned child manga's cover.
+	for i := range result {
+		if result[i].IsCollection {
+			children := collChildren[result[i].RelativePath]
+			var pinnedChildren []contracts.LibraryManga
+			for _, child := range children {
+				if child.IsPinned {
+					pinnedChildren = append(pinnedChildren, child)
+				}
+			}
+			if len(pinnedChildren) > 0 {
+				sort.SliceStable(pinnedChildren, func(ci, cj int) bool {
+					if pinnedChildren[ci].PinnedAt != pinnedChildren[cj].PinnedAt {
+						return pinnedChildren[ci].PinnedAt > pinnedChildren[cj].PinnedAt
+					}
+					return pinnedChildren[ci].LastUpdated > pinnedChildren[cj].LastUpdated
+				})
+				if pinnedChildren[0].CoverImageURL != "" {
+					result[i].CoverImageURL = pinnedChildren[0].CoverImageURL
+				}
+			}
+		}
+	}
+
+	// 4. Separate root items and child items for sorting
+	var rootItems []contracts.LibraryManga
+	collChildrenMap := make(map[string][]contracts.LibraryManga)
+	for _, item := range result {
+		if item.ParentPath == "" {
+			rootItems = append(rootItems, item)
+		} else {
+			collChildrenMap[item.ParentPath] = append(collChildrenMap[item.ParentPath], item)
+		}
+	}
+
+	// Sort root items: pinned first (by PinnedAt DESC), then by LastUpdated DESC
+	sort.SliceStable(rootItems, func(i, j int) bool {
+		if rootItems[i].IsPinned != rootItems[j].IsPinned {
+			return rootItems[i].IsPinned
+		}
+		if rootItems[i].IsPinned && rootItems[j].IsPinned {
+			if rootItems[i].PinnedAt != rootItems[j].PinnedAt {
+				return rootItems[i].PinnedAt > rootItems[j].PinnedAt
+			}
+		}
+		return rootItems[i].LastUpdated > rootItems[j].LastUpdated
+	})
+
+	// Sort each collection's children: pinned first (by PinnedAt DESC), then natural title order
+	for parentPath := range collChildrenMap {
+		children := collChildrenMap[parentPath]
+		sort.SliceStable(children, func(i, j int) bool {
+			if children[i].IsPinned != children[j].IsPinned {
+				return children[i].IsPinned
+			}
+			if children[i].IsPinned && children[j].IsPinned {
+				if children[i].PinnedAt != children[j].PinnedAt {
+					return children[i].PinnedAt > children[j].PinnedAt
+				}
+			}
+			return naturalLess(children[i].Title, children[j].Title)
+		})
+		collChildrenMap[parentPath] = children
+	}
+
+	// Combine rootItems and all children in order
+	sortedResult := make([]contracts.LibraryManga, 0, len(result))
+	sortedResult = append(sortedResult, rootItems...)
+	for _, item := range rootItems {
+		if item.IsCollection {
+			if children, ok := collChildrenMap[item.RelativePath]; ok {
+				sortedResult = append(sortedResult, children...)
+				delete(collChildrenMap, item.RelativePath)
+			}
+		}
+	}
+	for _, children := range collChildrenMap {
+		sortedResult = append(sortedResult, children...)
+	}
+
+	return sortedResult
+}

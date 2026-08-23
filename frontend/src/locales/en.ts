@@ -51,6 +51,9 @@ export const en = {
     pageUnit: "{{count}} pages",
     loadingTitle: "Loading Library...",
     loadingDescription: "This might take a moment if you have a large comic collection. Please wait patiently.",
+    pin: "Pin to top",
+    unpin: "Unpin",
+    pinnedBadge: "Pinned",
   },
   reader: {
     scrollMode: "Scroll Mode",
