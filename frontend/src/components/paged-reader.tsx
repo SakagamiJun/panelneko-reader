@@ -99,20 +99,33 @@ export function PagedReader({
     jumpToIndex(currentIndex + (event.deltaY > 0 ? pageStep : -pageStep));
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const key = event.key.toLowerCase();
-    const nextKey = shortcuts.nextPage?.toLowerCase();
-    const prevKey = shortcuts.prevPage?.toLowerCase();
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "SELECT" ||
+        document.activeElement?.tagName === "TEXTAREA" ||
+        (document.activeElement as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
 
-    if ((nextKey && key === nextKey) || (!nextKey && (event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === " "))) {
-      event.preventDefault();
-      jumpToIndex(currentIndex + pageStep);
-    }
-    if ((prevKey && key === prevKey) || (!prevKey && (event.key === "ArrowLeft" || event.key === "ArrowUp"))) {
-      event.preventDefault();
-      jumpToIndex(currentIndex - pageStep);
-    }
-  };
+      const key = event.key.toLowerCase();
+      const nextKey = shortcuts.nextPage?.toLowerCase();
+      const prevKey = shortcuts.prevPage?.toLowerCase();
+
+      if ((nextKey && key === nextKey) || (!nextKey && (event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === " "))) {
+        event.preventDefault();
+        jumpToIndex(currentIndex + pageStep);
+      } else if ((prevKey && key === prevKey) || (!prevKey && (event.key === "ArrowLeft" || event.key === "ArrowUp"))) {
+        event.preventDefault();
+        jumpToIndex(currentIndex - pageStep);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentIndex, onCurrentIndexChange, pageStep, pages.length, shortcuts.nextPage, shortcuts.prevPage]);
 
   const pagedPages = activePage ? [activePage, ...(canDoublePage && nextPage ? [nextPage] : [])] : [];
   const maxPageWidth = canDoublePage ? contentWidth / 2 : contentWidth;
@@ -121,7 +134,6 @@ export function PagedReader({
     <div
       ref={containerRef}
       className="flex h-full min-h-0 overflow-hidden border-l border-border/40 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.02))] outline-none backdrop-blur-xl"
-      onKeyDown={handleKeyDown}
       onWheel={handleWheel}
       tabIndex={0}
     >

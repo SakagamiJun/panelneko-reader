@@ -190,7 +190,8 @@ export default function App() {
       if (
         document.activeElement?.tagName === "INPUT" ||
         document.activeElement?.tagName === "SELECT" ||
-        document.activeElement?.tagName === "TEXTAREA"
+        document.activeElement?.tagName === "TEXTAREA" ||
+        (document.activeElement as HTMLElement)?.isContentEditable
       ) {
         return;
       }
@@ -222,7 +223,8 @@ export default function App() {
       if (
         document.activeElement?.tagName === "INPUT" ||
         document.activeElement?.tagName === "SELECT" ||
-        document.activeElement?.tagName === "TEXTAREA"
+        document.activeElement?.tagName === "TEXTAREA" ||
+        (document.activeElement as HTMLElement)?.isContentEditable
       ) {
         return;
       }
@@ -1188,6 +1190,7 @@ function ShortcutEditor({
     if (!editing) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       if (e.key !== "Escape") {
         setForm((current) => ({
           ...current,
@@ -1196,8 +1199,8 @@ function ShortcutEditor({
       }
       setEditing(false);
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [editing, action, setForm]);
 
   return (

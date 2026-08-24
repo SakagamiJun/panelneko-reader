@@ -260,7 +260,8 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
       if (
         document.activeElement?.tagName === "INPUT" ||
         document.activeElement?.tagName === "SELECT" ||
-        document.activeElement?.tagName === "TEXTAREA"
+        document.activeElement?.tagName === "TEXTAREA" ||
+        (document.activeElement as HTMLElement)?.isContentEditable
       ) {
         return;
       }

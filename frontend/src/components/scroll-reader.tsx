@@ -193,24 +193,37 @@ export function ScrollReader({
     });
   }, [pageLayouts.offsets, pages.length]);
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!scrollRef.current) {
-      return;
-    }
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "SELECT" ||
+        document.activeElement?.tagName === "TEXTAREA" ||
+        (document.activeElement as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
 
-    const key = event.key.toLowerCase();
-    const nextKey = shortcuts.nextPage?.toLowerCase();
-    const prevKey = shortcuts.prevPage?.toLowerCase();
+      if (!scrollRef.current) {
+        return;
+      }
 
-    if ((nextKey && key === nextKey) || (!nextKey && event.key === "ArrowDown")) {
-      event.preventDefault();
-      scrollRef.current.scrollBy({ top: contentHeight * 0.85, behavior: "smooth" });
-    }
-    if ((prevKey && key === prevKey) || (!prevKey && event.key === "ArrowUp")) {
-      event.preventDefault();
-      scrollRef.current.scrollBy({ top: -contentHeight * 0.85, behavior: "smooth" });
-    }
-  };
+      const key = event.key.toLowerCase();
+      const nextKey = shortcuts.nextPage?.toLowerCase();
+      const prevKey = shortcuts.prevPage?.toLowerCase();
+
+      if ((nextKey && key === nextKey) || (!nextKey && (event.key === "ArrowDown" || event.key === "PageDown" || event.key === " "))) {
+        event.preventDefault();
+        scrollRef.current.scrollBy({ top: contentHeight * 0.85, behavior: "smooth" });
+      } else if ((prevKey && key === prevKey) || (!prevKey && (event.key === "ArrowUp" || event.key === "PageUp"))) {
+        event.preventDefault();
+        scrollRef.current.scrollBy({ top: -contentHeight * 0.85, behavior: "smooth" });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [contentHeight, shortcuts.nextPage, shortcuts.prevPage]);
 
   return (
     <div
@@ -220,7 +233,6 @@ export function ScrollReader({
       <div
         ref={scrollRef}
         className="h-full overflow-y-auto outline-none"
-        onKeyDown={handleKeyDown}
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
         tabIndex={0}
       >
