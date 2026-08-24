@@ -366,6 +366,15 @@ export default function App() {
     setReaderJumpMenuOpen(false);
   };
 
+  const handleExitReader = () => {
+    setReaderJumpMenuOpen(false);
+    setReaderMenuCollapsed(false);
+    if (parentCollection) {
+      setSelectedCollectionPath(parentCollection.relativePath);
+    }
+    setSelectedLibraryID(null);
+  };
+
   const cycleTheme = () => {
     if (!settings) {
       return;
@@ -564,14 +573,7 @@ export default function App() {
                     </div>
                     <Button
                       className={cn("gap-2 px-3 text-slate-800 hover:bg-[rgba(236,241,246,0.92)]", floatingSurfaceClass)}
-                      onClick={() => {
-                        setReaderJumpMenuOpen(false);
-                        setReaderMenuCollapsed(false);
-                        if (parentCollection) {
-                          setSelectedCollectionPath(parentCollection.relativePath);
-                        }
-                        setSelectedLibraryID(null);
-                      }}
+                      onClick={handleExitReader}
                       size="sm"
                       variant="outline"
                     >
@@ -594,19 +596,34 @@ export default function App() {
             )}
 
             {selectedLibraryID && readerMenuCollapsed && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className={cn(
-                  "absolute top-2 right-4 z-20 gap-2 px-2.5 opacity-40 hover:opacity-100",
-                  floatingSurfaceClass
-                )}
-                onClick={() => setReaderMenuCollapsed(false)}
-                title={t("reader.expandMenu")}
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
+              <div className="app-window-no-drag absolute top-2 right-4 z-20 flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    "gap-2 px-2.5 opacity-40 hover:opacity-100 text-slate-800 hover:bg-[rgba(236,241,246,0.92)]",
+                    floatingSurfaceClass
+                  )}
+                  onClick={handleExitReader}
+                  title={parentCollection ? parentCollection.title : t("library.back")}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    "gap-2 px-2.5 opacity-40 hover:opacity-100 text-slate-800 hover:bg-[rgba(236,241,246,0.92)]",
+                    floatingSurfaceClass
+                  )}
+                  onClick={() => setReaderMenuCollapsed(false)}
+                  title={t("reader.expandMenu")}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </div>
             )}
 
             <div className="h-full pt-0">
