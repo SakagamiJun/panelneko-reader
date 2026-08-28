@@ -84,7 +84,7 @@ export default function App() {
   const [readerJumpPageInput, setReaderJumpPageInput] = useState("");
   const [readerJumpRequest, setReaderJumpRequest] = useState<ReaderJumpRequest | null>(null);
   const [readerChapterTitle, setReaderChapterTitle] = useState<string | null>(null);
-  const [readerMenuCollapsed, setReaderMenuCollapsed] = useState(false);
+  const [readerMenuCollapsed, setReaderMenuCollapsed] = useState(true);
 
   const readerJumpPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -201,7 +201,7 @@ export default function App() {
       if (s.backToLibrary && key === s.backToLibrary.toLowerCase()) {
         e.preventDefault();
         setReaderJumpMenuOpen(false);
-        setReaderMenuCollapsed(false);
+        setReaderMenuCollapsed(true);
         setSelectedLibraryID(null);
       } else if (s.toggleMode && key === s.toggleMode.toLowerCase()) {
         e.preventDefault();
@@ -370,7 +370,7 @@ export default function App() {
 
   const handleExitReader = () => {
     setReaderJumpMenuOpen(false);
-    setReaderMenuCollapsed(false);
+    setReaderMenuCollapsed(true);
     if (parentCollection) {
       setSelectedCollectionPath(parentCollection.relativePath);
     }
@@ -654,7 +654,10 @@ export default function App() {
                   emptyLabel={t("library.empty")}
                   items={displayedItems}
                   loading={libraryQuery.isLoading}
-                  onOpenManga={setSelectedLibraryID}
+                  onOpenManga={(id) => {
+                    setReaderMenuCollapsed(true);
+                    setSelectedLibraryID(id);
+                  }}
                   onOpenCollection={setSelectedCollectionPath}
                   onOpenSettings={togglePane}
                   onTogglePin={(id) => togglePinMutation.mutate(id)}
