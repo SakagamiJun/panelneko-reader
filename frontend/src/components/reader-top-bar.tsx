@@ -1,0 +1,446 @@
+import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  EyeOff,
+  List,
+  Maximize2,
+  Minimize2,
+  RotateCw,
+  Settings2,
+  SlidersHorizontal,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select } from "@/components/ui/select";
+import type { FlatReaderPage } from "@/components/reader-shared";
+import type {
+  ReaderDirection,
+  ReaderFitMode,
+  ReaderFilter,
+  ReaderSpreadMode,
+  ReaderManifest,
+} from "@/lib/contracts";
+import { cn } from "@/lib/utils";
+
+interface ReaderTopBarProps {
+  manifest: ReaderManifest;
+  activePage: FlatReaderPage | undefined;
+  currentIndex: number;
+  totalPages: number;
+  mode: "paged" | "scroll";
+  onModeChange: (mode: "paged" | "scroll") => void;
+  direction: ReaderDirection;
+  onDirectionChange: (dir: ReaderDirection) => void;
+  spreadMode: ReaderSpreadMode;
+  onSpreadModeChange: (spread: ReaderSpreadMode) => void;
+  coverSolo: boolean;
+  onCoverSoloChange: (solo: boolean) => void;
+  fitMode: ReaderFitMode;
+  onFitModeChange: (fit: ReaderFitMode) => void;
+  filter: ReaderFilter;
+  onFilterChange: (filter: ReaderFilter) => void;
+  rotation: number;
+  onRotate: () => void;
+  onSeekPage: (pageNumber: number) => void;
+  onPrevChapter: () => void;
+  onNextChapter: () => void;
+  onToggleChapterDrawer: () => void;
+  onExitReader: () => void;
+  visible: boolean;
+  onHide: () => void;
+}
+
+export function ReaderTopBar({
+  manifest,
+  activePage,
+  currentIndex,
+  totalPages,
+  mode,
+  onModeChange,
+  direction,
+  onDirectionChange,
+  spreadMode,
+  onSpreadModeChange,
+  coverSolo,
+  onCoverSoloChange,
+  fitMode,
+  onFitModeChange,
+  filter,
+  onFilterChange,
+  rotation,
+  onRotate,
+  onSeekPage,
+  onPrevChapter,
+  onNextChapter,
+  onToggleChapterDrawer,
+  onExitReader,
+  visible,
+  onHide,
+}: ReaderTopBarProps) {
+  const { t } = useTranslation();
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pageInput, setPageInput] = useState("");
+
+  const jumpRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  const currentPage = activePage ? activePage.globalPage : currentIndex + 1;
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (jumpRef.current && !jumpRef.current.contains(e.target as Node)) {
+        setJumpOpen(false);
+      }
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      void document.documentElement.requestFullscreen();
+    } else {
+      void document.exitFullscreen();
+    }
+  };
+
+  const handleJumpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = Number(pageInput);
+    if (!isNaN(target) && target >= 1 && target <= totalPages) {
+      onSeekPage(target);
+      setJumpOpen(false);
+      setPageInput("");
+    }
+  };
+
+  return (
+    <header
+      className={cn(
+        "app-window-drag-region absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-3 py-2 transition-all duration-300 ease-out",
+        "border-b border-border/50 bg-background/90 text-foreground shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-2xl",
+        visible
+          ? "translate-y-0 opacity-100 pointer-events-auto"
+          : "-translate-y-full opacity-0 pointer-events-none"
+      )}
+    >
+      {/* Left section: Exit button, Manga Title, Chapter, Page count */}
+      <div className="app-window-no-drag flex items-center gap-2 min-w-0">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onExitReader}
+          className="h-8 gap-1.5 px-2.5 text-xs text-foreground hover:bg-muted font-medium shrink-0"
+          title={t("library.back")}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="hidden sm:inline">{t("library.back")}</span>
+        </Button>
+
+        <div className="h-4 w-[1px] bg-border/60 shrink-0" />
+
+        <div className="flex items-center gap-1.5 min-w-0 text-xs">
+          <span className="font-semibold text-foreground truncate max-w-[140px] sm:max-w-[200px]">
+            {manifest.title}
+          </span>
+          {activePage?.chapterTitle && (
+            <>
+              <span className="text-muted-foreground/60">/</span>
+              <span className="text-muted-foreground truncate max-w-[120px] sm:max-w-[180px]">
+                {activePage.chapterTitle}
+              </span>
+            </>
+          )}
+        </div>
+
+        <Badge tone="running" className="text-[11px] font-mono shrink-0 ml-1">
+          {currentPage} / {totalPages}
+        </Badge>
+      </div>
+
+      {/* Right section: Mode toggle, Chapter drawer, Jump popover, Settings popover, Hide UI */}
+      <div className="app-window-no-drag flex items-center gap-1.5 shrink-0">
+        {/* Mode Toggle: Paged vs Scroll */}
+        <div className="flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5">
+          <button
+            type="button"
+            onClick={() => onModeChange("paged")}
+            className={cn(
+              "px-2 py-1 text-xs rounded-md transition-colors font-medium",
+              mode === "paged"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {t("reader.pagedMode")}
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange("scroll")}
+            className={cn(
+              "px-2 py-1 text-xs rounded-md transition-colors font-medium",
+              mode === "scroll"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {t("reader.scrollMode")}
+          </button>
+        </div>
+
+        {/* Chapters list button */}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={onToggleChapterDrawer}
+          className="h-8 gap-1.5 px-2.5 text-xs text-foreground"
+          title={t("reader.chapterList")}
+        >
+          <List className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">{t("reader.chapters")}</span>
+        </Button>
+
+        {/* Quick jump & Scrubber popover */}
+        <div className="relative" ref={jumpRef}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setJumpOpen(!jumpOpen);
+              setSettingsOpen(false);
+            }}
+            className={cn("h-8 gap-1.5 px-2.5 text-xs text-foreground", jumpOpen && "bg-muted")}
+            title={t("reader.jumpTitle")}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">{t("reader.jump")}</span>
+          </Button>
+
+          {jumpOpen && (
+            <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-border/80 bg-background/95 p-3 shadow-xl backdrop-blur-2xl z-40 space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                <span>{t("reader.jumpTitle")}</span>
+                <span className="font-mono text-foreground">{currentPage} / {totalPages}</span>
+              </div>
+
+              {/* Scrubber slider */}
+              <div className="space-y-1">
+                <input
+                  type="range"
+                  min={1}
+                  max={totalPages}
+                  value={currentPage}
+                  onChange={(e) => onSeekPage(Number(e.target.value))}
+                  className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+              </div>
+
+              {/* Chapter prev/next navigation */}
+              <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    onPrevChapter();
+                    setJumpOpen(false);
+                  }}
+                  className="h-7 text-xs gap-1 flex-1"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  <span>{t("reader.prevChapter")}</span>
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    onNextChapter();
+                    setJumpOpen(false);
+                  }}
+                  className="h-7 text-xs gap-1 flex-1"
+                >
+                  <span>{t("reader.nextChapter")}</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              {/* Direct page number jump */}
+              <form onSubmit={handleJumpSubmit} className="flex gap-2 border-t border-border/60 pt-2.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  placeholder={`${currentPage}`}
+                  value={pageInput}
+                  onChange={(e) => setPageInput(e.target.value)}
+                  className="h-8 flex-1 rounded-lg border border-border bg-muted/40 px-2.5 text-xs text-foreground outline-none focus:border-primary/60"
+                />
+                <Button type="submit" size="sm" variant="outline" className="h-8 text-xs px-3">
+                  {t("reader.jumpPageAction")}
+                </Button>
+              </form>
+            </div>
+          )}
+        </div>
+
+        {/* Reader Preferences Popover */}
+        <div className="relative" ref={settingsRef}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setSettingsOpen(!settingsOpen);
+              setJumpOpen(false);
+            }}
+            className={cn("h-8 gap-1.5 px-2.5 text-xs text-foreground", settingsOpen && "bg-muted")}
+            title={t("settings.readerPreferences")}
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </Button>
+
+          {settingsOpen && (
+            <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-border/80 bg-background/95 p-3.5 shadow-xl backdrop-blur-2xl z-40 space-y-3">
+              <div className="text-xs font-semibold text-foreground border-b border-border/60 pb-2">
+                {t("settings.readerPreferences")}
+              </div>
+
+              {/* Spread layout */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("reader.spreadMode")}
+                </label>
+                <Select
+                  value={spreadMode}
+                  onChange={(e) => onSpreadModeChange(e.target.value as ReaderSpreadMode)}
+                  className="h-8 text-xs"
+                >
+                  <option value="auto">{t("reader.spreadAuto")}</option>
+                  <option value="single">{t("reader.spreadSingle")}</option>
+                  <option value="double">{t("reader.spreadDouble")}</option>
+                </Select>
+              </div>
+
+              {/* Reading Direction */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("reader.direction")}
+                </label>
+                <Select
+                  value={direction}
+                  onChange={(e) => onDirectionChange(e.target.value as ReaderDirection)}
+                  className="h-8 text-xs"
+                >
+                  <option value="rtl">{t("reader.directionRTL")}</option>
+                  <option value="ltr">{t("reader.directionLTR")}</option>
+                </Select>
+              </div>
+
+              {/* Cover Solo */}
+              <label className="flex items-center gap-2 cursor-pointer py-1">
+                <Checkbox
+                  checked={coverSolo}
+                  onChange={(e) => onCoverSoloChange(e.target.checked)}
+                />
+                <span className="text-xs font-medium text-foreground">{t("reader.coverSolo")}</span>
+              </label>
+
+              {/* Fit Mode */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("reader.fitMode")}
+                </label>
+                <Select
+                  value={fitMode}
+                  onChange={(e) => onFitModeChange(e.target.value as ReaderFitMode)}
+                  className="h-8 text-xs"
+                >
+                  <option value="contain">{t("reader.fitContain")}</option>
+                  <option value="width">{t("reader.fitWidth")}</option>
+                  <option value="height">{t("reader.fitHeight")}</option>
+                  <option value="original">{t("reader.fitOriginal")}</option>
+                </Select>
+              </div>
+
+              {/* Visual Filter */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("reader.filter")}
+                </label>
+                <Select
+                  value={filter}
+                  onChange={(e) => onFilterChange(e.target.value as ReaderFilter)}
+                  className="h-8 text-xs"
+                >
+                  <option value="none">{t("reader.filterNone")}</option>
+                  <option value="invert">{t("reader.filterInvert")}</option>
+                  <option value="sepia">{t("reader.filterSepia")}</option>
+                  <option value="high-contrast">{t("reader.filterHighContrast")}</option>
+                </Select>
+              </div>
+
+              {/* Rotate and Fullscreen actions */}
+              <div className="flex items-center gap-2 border-t border-border/60 pt-2.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={onRotate}
+                  className="h-8 text-xs gap-1.5 flex-1"
+                  title={t("reader.rotate")}
+                >
+                  <RotateCw className="h-3.5 w-3.5" />
+                  <span>{rotation > 0 ? `${rotation}°` : t("reader.rotate")}</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={toggleFullscreen}
+                  className="h-8 text-xs gap-1.5 flex-1"
+                >
+                  {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                  <span>{isFullscreen ? t("reader.exitFullscreen") : t("reader.fullscreen")}</span>
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Hide menu button */}
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onHide}
+          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+          title={t("reader.collapseMenu")}
+        >
+          <EyeOff className="h-4 w-4" />
+        </Button>
+      </div>
+    </header>
+  );
+}

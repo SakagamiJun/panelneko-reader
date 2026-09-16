@@ -31,6 +31,10 @@ import {
   type AppSettings,
   EVENTS,
   type LibraryManga,
+  type ReaderDirection,
+  type ReaderSpreadMode,
+  type ReaderFitMode,
+  type ReaderFilter,
 } from "@/lib/contracts";
 import { i18n } from "@/lib/i18n";
 import { emitRuntimeEvent } from "@/lib/runtime";
@@ -79,14 +83,8 @@ export default function App() {
   const [selectedCollectionPath, setSelectedCollectionPath] = useState<string | null>(null);
   const [selectedLibraryID, setSelectedLibraryID] = useState<string | null>(null);
   const [readerMode, setReaderMode] = useState<"scroll" | "paged">("paged");
-  const [readerJumpMenuOpen, setReaderJumpMenuOpen] = useState(false);
-  const [readerJumpChapterID, setReaderJumpChapterID] = useState("");
-  const [readerJumpPageInput, setReaderJumpPageInput] = useState("");
   const [readerJumpRequest, setReaderJumpRequest] = useState<ReaderJumpRequest | null>(null);
   const [readerChapterTitle, setReaderChapterTitle] = useState<string | null>(null);
-  const [readerMenuCollapsed, setReaderMenuCollapsed] = useState(true);
-
-  const readerJumpPanelRef = useRef<HTMLDivElement | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -166,22 +164,6 @@ export default function App() {
     }
   }, [settingsQuery.data]);
 
-  useEffect(() => {
-    const chapters = readerQuery.data?.chapters ?? [];
-    if (chapters.length === 0) {
-      setReaderJumpChapterID("");
-      setReaderJumpPageInput("");
-      setReaderJumpMenuOpen(false);
-      return;
-    }
-
-    setReaderJumpChapterID((current) => {
-      if (chapters.some((chapter) => chapter.id === current)) {
-        return current;
-      }
-      return chapters[0]?.id ?? "";
-    });
-  }, [readerQuery.data]);
 
   useEffect(() => {
     if (!selectedLibraryID || !settingsQuery.data) return;
@@ -200,15 +182,10 @@ export default function App() {
       const key = e.key.toLowerCase();
       if (s.backToLibrary && key === s.backToLibrary.toLowerCase()) {
         e.preventDefault();
-        setReaderJumpMenuOpen(false);
-        setReaderMenuCollapsed(true);
         setSelectedLibraryID(null);
       } else if (s.toggleMode && key === s.toggleMode.toLowerCase()) {
         e.preventDefault();
         setReaderMode((m) => (m === "scroll" ? "paged" : "scroll"));
-      } else if (s.toggleMenu && key === s.toggleMenu.toLowerCase()) {
-        e.preventDefault();
-        setReaderMenuCollapsed((c) => !c);
       }
     };
 
@@ -240,26 +217,8 @@ export default function App() {
   }, [selectedLibraryID, selectedCollectionPath]);
 
   useEffect(() => {
-    setReaderJumpMenuOpen(false);
-    setReaderJumpPageInput("");
     setReaderJumpRequest(null);
   }, [selectedLibraryID]);
-
-  useEffect(() => {
-    if (!readerJumpMenuOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (readerJumpPanelRef.current?.contains(event.target as Node)) {
-        return;
-      }
-      setReaderJumpMenuOpen(false);
-    };
-
-    window.addEventListener("mousedown", handlePointerDown);
-    return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [readerJumpMenuOpen]);
 
   const settingsMutation = useMutation({
     mutationFn: (input: AppSettings) => appAdapter.updateSettings(input),
@@ -308,9 +267,6 @@ export default function App() {
     });
 
   const readerManifest = readerQuery.data ?? null;
-  const manualReaderPage = Number(readerJumpPageInput);
-  const canJumpToReaderPage =
-    Number.isInteger(manualReaderPage) && manualReaderPage >= 1 && manualReaderPage <= (readerManifest?.totalPages ?? 0);
   const localeState = formatLocaleState(settings, t);
   const localeBadge = formatLocaleBadge(settings);
   const themeState = formatThemeState(settings, t);
@@ -342,35 +298,7 @@ export default function App() {
     window.addEventListener("mouseup", handleMouseUp);
   };
 
-  const submitReaderChapterJump = () => {
-    if (!readerJumpChapterID) {
-      return;
-    }
-
-    setReaderJumpRequest({
-      requestID: Date.now(),
-      target: "chapter",
-      chapterID: readerJumpChapterID,
-    });
-    setReaderJumpMenuOpen(false);
-  };
-
-  const submitReaderPageJump = () => {
-    if (!canJumpToReaderPage) {
-      return;
-    }
-
-    setReaderJumpRequest({
-      requestID: Date.now(),
-      target: "page",
-      page: manualReaderPage,
-    });
-    setReaderJumpMenuOpen(false);
-  };
-
   const handleExitReader = () => {
-    setReaderJumpMenuOpen(false);
-    setReaderMenuCollapsed(true);
     if (parentCollection) {
       setSelectedCollectionPath(parentCollection.relativePath);
     }
@@ -420,19 +348,10 @@ export default function App() {
       <div className="flex h-full border border-border/60">
         <div className="relative min-w-0 flex-1">
           <section className="relative h-full overflow-hidden bg-card/20 ">
-            {!(selectedLibraryID && readerMenuCollapsed) && (
+            {!selectedLibraryID && (
               <div className="app-window-drag-region absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 pl-20 pr-4 py-2">
                 <div className={cn("flex max-w-[min(58vw,32rem)] items-center gap-2 px-3 py-1.5 text-xs font-semibold", floatingSurfaceClass)}>
-                  {selectedLibrary ? (
-                    <>
-                      <span className="truncate">{selectedLibrary.title}</span>
-                      {readerChapterTitle && (
-                        <Badge tone="running" className="max-w-[200px] truncate">
-                          {readerChapterTitle}
-                        </Badge>
-                      )}
-                    </>
-                  ) : selectedCollectionPath ? (
+                  {selectedCollectionPath ? (
                     <>
                       <Button
                         type="button"
@@ -456,175 +375,6 @@ export default function App() {
                     <span className="truncate">{t("library.title")}</span>
                   )}
                 </div>
-
-                {selectedLibraryID ? (
-                  <div className="app-window-no-drag flex flex-wrap items-center justify-end gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className={cn(
-                        "gap-2 px-3",
-                        floatingSurfaceClass,
-                        readerMode === "scroll"
-                          ? "border-slate-400/70 bg-[rgba(230,236,242,0.96)] text-slate-900"
-                          : "text-slate-700 hover:bg-[rgba(236,241,246,0.92)]"
-                      )}
-                      onClick={() => setReaderMode("scroll")}
-                    >
-                      {t("reader.scrollMode")}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className={cn(
-                        "gap-2 px-3",
-                        floatingSurfaceClass,
-                        readerMode === "paged"
-                          ? "border-slate-400/70 bg-[rgba(230,236,242,0.96)] text-slate-900"
-                          : "text-slate-700 hover:bg-[rgba(236,241,246,0.92)]"
-                      )}
-                      onClick={() => setReaderMode("paged")}
-                    >
-                      {t("reader.pagedMode")}
-                    </Button>
-                    <div className="relative" ref={readerJumpPanelRef}>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className={cn(
-                          "gap-2 px-3 text-slate-800 hover:bg-[rgba(236,241,246,0.92)]",
-                          floatingSurfaceClass,
-                          readerJumpMenuOpen ? "border-slate-400/70 bg-[rgba(230,236,242,0.96)] text-slate-900" : null
-                        )}
-                        disabled={!readerManifest}
-                        onClick={() => setReaderJumpMenuOpen((current) => !current)}
-                      >
-                        <Telescope className="h-4 w-4" />
-                        {t("reader.jump")}
-                      </Button>
-
-                      {readerJumpMenuOpen && readerManifest ? (
-                        <div
-                          className={cn(
-                            "absolute right-0 top-full z-20 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-2xl p-3 text-left",
-                            floatingSurfaceClass
-                          )}
-                        >
-                          <div className="space-y-3">
-                            <div className="border-b border-slate-200/80 pb-2">
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">{t("reader.jumpTitle")}</p>
-                              <p className="mt-1 text-xs text-slate-600">{t("reader.jumpRange", { total: readerManifest.totalPages })}</p>
-                            </div>
-
-                            <form
-                              className="space-y-3.5"
-                              onSubmit={(event) => {
-                                event.preventDefault();
-                                submitReaderChapterJump();
-                              }}
-                            >
-                              <label className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                                {t("reader.jumpChapterLabel")}
-                              </label>
-                              <Select
-                                className="h-10 rounded-xl border-slate-300/80 bg-white/88 text-sm text-slate-900"
-                                onChange={(event) => setReaderJumpChapterID(event.target.value)}
-                                value={readerJumpChapterID}
-                              >
-                                {readerManifest.chapters.map((chapter) => (
-                                  <option key={chapter.id} value={chapter.id}>
-                                    {chapter.number > 0 ? `${chapter.number} · ${chapter.title}` : chapter.title}
-                                  </option>
-                                ))}
-                              </Select>
-                              <Button className="w-full" size="sm" type="submit" variant="outline">
-                                {t("reader.jumpChapterAction")}
-                              </Button>
-                            </form>
-
-                            <form
-                              className="space-y-3.5 border-t border-slate-200/80 pt-3"
-                              onSubmit={(event) => {
-                                event.preventDefault();
-                                submitReaderPageJump();
-                              }}
-                            >
-                              <label className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                                {t("reader.jumpPageLabel")}
-                              </label>
-                              <Input
-                                className="h-10 rounded-xl border-slate-300/80 bg-white/88 text-slate-900"
-                                inputMode="numeric"
-                                max={readerManifest.totalPages}
-                                min={1}
-                                onChange={(event) => setReaderJumpPageInput(event.target.value)}
-                                placeholder={t("reader.jumpPagePlaceholder")}
-                                type="number"
-                                value={readerJumpPageInput}
-                              />
-                              <Button className="w-full" disabled={!canJumpToReaderPage} size="sm" type="submit" variant="outline">
-                                {t("reader.jumpPageAction")}
-                              </Button>
-                            </form>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                    <Button
-                      className={cn("gap-2 px-3 text-slate-800 hover:bg-[rgba(236,241,246,0.92)]", floatingSurfaceClass)}
-                      onClick={handleExitReader}
-                      size="sm"
-                      variant="outline"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      {parentCollection ? parentCollection.title : t("library.back")}
-                    </Button>
-                    <Button
-                      className={cn("gap-2 px-3 text-slate-800 hover:bg-[rgba(236,241,246,0.92)]", floatingSurfaceClass)}
-                      onClick={() => setReaderMenuCollapsed(true)}
-                      size="sm"
-                      variant="outline"
-                      title={t("reader.collapseMenu")}
-                    >
-                      <EyeOff className="h-4 w-4" />
-                      {t("reader.collapseMenu")}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {selectedLibraryID && readerMenuCollapsed && (
-              <div className="app-window-no-drag absolute top-2 right-4 z-20 flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className={cn(
-                    "gap-2 px-2.5 opacity-40 hover:opacity-100 text-slate-800 hover:bg-[rgba(236,241,246,0.92)]",
-                    floatingSurfaceClass
-                  )}
-                  onClick={handleExitReader}
-                  title={parentCollection ? parentCollection.title : t("library.back")}
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className={cn(
-                    "gap-2 px-2.5 opacity-40 hover:opacity-100 text-slate-800 hover:bg-[rgba(236,241,246,0.92)]",
-                    floatingSurfaceClass
-                  )}
-                  onClick={() => setReaderMenuCollapsed(false)}
-                  title={t("reader.expandMenu")}
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
               </div>
             )}
 
@@ -662,7 +412,6 @@ export default function App() {
                   items={displayedItems}
                   loading={libraryQuery.isLoading}
                   onOpenManga={(id) => {
-                    setReaderMenuCollapsed(true);
                     setSelectedLibraryID(id);
                   }}
                   onOpenCollection={setSelectedCollectionPath}
@@ -1090,77 +839,165 @@ function SettingsForm({
 
   return (
     <div className="space-y-3 p-3">
-      <PanelSection title={t("settings.title")} subtitle={t("settings.subtitle")}>
-        <form
-          className="space-y-3.5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSave(form);
-          }}
-        >
-          <Field label={t("settings.outputRoot")}>
-            <div className="flex gap-2">
+      <form
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave(form);
+        }}
+      >
+        <PanelSection title={t("settings.title")} subtitle={t("settings.subtitle")}>
+          <div className="space-y-3.5">
+            <Field label={t("settings.outputRoot")}>
+              <div className="flex gap-2">
+                <Input
+                  className="flex-1"
+                  value={form.libraryRoot}
+                  onChange={(event) => setForm((current) => ({ ...current, libraryRoot: event.target.value }))}
+                />
+                <Button type="button" variant="outline" onClick={handleSelectDirectory}>
+                  {t("settings.browse")}
+                </Button>
+              </div>
+            </Field>
+
+            <Field label={t("settings.readerScrollCachePages")} hint={t("settings.readerScrollCachePagesHint")}>
               <Input
-                className="flex-1"
-                value={form.libraryRoot}
-                onChange={(event) => setForm((current) => ({ ...current, libraryRoot: event.target.value }))}
+                min={1}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    readerScrollCachePages: Number(event.target.value) || current.readerScrollCachePages,
+                  }))
+                }
+                type="number"
+                value={form.readerScrollCachePages}
               />
-              <Button type="button" variant="outline" onClick={handleSelectDirectory}>
-                {t("settings.browse")}
-              </Button>
-            </div>
-          </Field>
+            </Field>
 
-          <Field label={t("settings.readerScrollCachePages")} hint={t("settings.readerScrollCachePagesHint")}>
-            <Input
-              min={1}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  readerScrollCachePages: Number(event.target.value) || current.readerScrollCachePages,
-                }))
-              }
-              type="number"
-              value={form.readerScrollCachePages}
-            />
-          </Field>
+            <label className="flex items-start gap-3 rounded-2xl border border-border/60 bg-background/58 px-3 py-3 cursor-pointer">
+              <Checkbox
+                checked={form.autoRestoreReaderProgress}
+                className="mt-0.5"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    autoRestoreReaderProgress: event.target.checked,
+                  }))
+                }
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">{t("settings.autoRestoreReaderProgress")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{t("settings.autoRestoreReaderProgressHint")}</p>
+              </div>
+            </label>
 
-          <label className="flex items-start gap-3 rounded-2xl border border-border/60 bg-background/58 px-3 py-3">
-            <Checkbox
-              checked={form.autoRestoreReaderProgress}
-              className="mt-0.5"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  autoRestoreReaderProgress: event.target.checked,
-                }))
-              }
-            />
-            <div className="min-w-0">
-              <div className="text-sm font-semibold">{t("settings.autoRestoreReaderProgress")}</div>
-              <p className="mt-1 text-xs text-muted-foreground">{t("settings.autoRestoreReaderProgressHint")}</p>
-            </div>
-          </label>
+            <p className="text-[11px] text-muted-foreground">{t("settings.railHint")}</p>
+          </div>
+        </PanelSection>
 
-          <p className="text-[11px] text-muted-foreground">{t("settings.railHint")}</p>
+        <PanelSection title={t("settings.readerPreferences")} subtitle={t("settings.readerPreferencesSubtitle")}>
+          <div className="space-y-3">
+            <Field label={t("reader.direction")}>
+              <Select
+                value={form.readerDirection || "rtl"}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    readerDirection: event.target.value as ReaderDirection,
+                  }))
+                }
+              >
+                <option value="rtl">{t("reader.directionRTL")}</option>
+                <option value="ltr">{t("reader.directionLTR")}</option>
+              </Select>
+            </Field>
 
-          <Button className="w-full" type="submit">
-            {t("settings.save")}
-          </Button>
-        </form>
-      </PanelSection>
+            <Field label={t("reader.spreadMode")}>
+              <Select
+                value={form.readerSpreadMode || "auto"}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    readerSpreadMode: event.target.value as ReaderSpreadMode,
+                  }))
+                }
+              >
+                <option value="auto">{t("reader.spreadAuto")}</option>
+                <option value="single">{t("reader.spreadSingle")}</option>
+                <option value="double">{t("reader.spreadDouble")}</option>
+              </Select>
+            </Field>
 
-      <PanelSection title={t("settings.shortcuts")} subtitle="">
-        <div className="space-y-2 py-1">
-          <ShortcutEditor label={t("settings.shortcutAction_nextPage")} action="nextPage" form={form} setForm={setForm} />
-          <ShortcutEditor label={t("settings.shortcutAction_prevPage")} action="prevPage" form={form} setForm={setForm} />
-          <ShortcutEditor label={t("settings.shortcutAction_nextChapter")} action="nextChapter" form={form} setForm={setForm} />
-          <ShortcutEditor label={t("settings.shortcutAction_prevChapter")} action="prevChapter" form={form} setForm={setForm} />
-          <ShortcutEditor label={t("settings.shortcutAction_toggleMode")} action="toggleMode" form={form} setForm={setForm} />
-          <ShortcutEditor label={t("settings.shortcutAction_backToLibrary")} action="backToLibrary" form={form} setForm={setForm} />
-          <ShortcutEditor label={t("settings.shortcutAction_toggleMenu")} action="toggleMenu" form={form} setForm={setForm} />
-        </div>
-      </PanelSection>
+            <Field label={t("reader.fitMode")}>
+              <Select
+                value={form.readerFitMode || "contain"}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    readerFitMode: event.target.value as ReaderFitMode,
+                  }))
+                }
+              >
+                <option value="contain">{t("reader.fitContain")}</option>
+                <option value="width">{t("reader.fitWidth")}</option>
+                <option value="height">{t("reader.fitHeight")}</option>
+                <option value="original">{t("reader.fitOriginal")}</option>
+              </Select>
+            </Field>
+
+            <Field label={t("reader.filter")}>
+              <Select
+                value={form.readerFilter || "none"}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    readerFilter: event.target.value as ReaderFilter,
+                  }))
+                }
+              >
+                <option value="none">{t("reader.filterNone")}</option>
+                <option value="invert">{t("reader.filterInvert")}</option>
+                <option value="sepia">{t("reader.filterSepia")}</option>
+                <option value="high-contrast">{t("reader.filterHighContrast")}</option>
+              </Select>
+            </Field>
+
+            <label className="flex items-start gap-3 rounded-2xl border border-border/60 bg-background/58 px-3 py-3 cursor-pointer">
+              <Checkbox
+                checked={form.readerCoverSolo !== false}
+                className="mt-0.5"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    readerCoverSolo: event.target.checked,
+                  }))
+                }
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">{t("reader.coverSolo")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{t("settings.coverSoloHint")}</p>
+              </div>
+            </label>
+          </div>
+        </PanelSection>
+
+        <PanelSection title={t("settings.shortcuts")} subtitle="">
+          <div className="space-y-2 py-1">
+            <ShortcutEditor label={t("settings.shortcutAction_nextPage")} action="nextPage" form={form} setForm={setForm} />
+            <ShortcutEditor label={t("settings.shortcutAction_prevPage")} action="prevPage" form={form} setForm={setForm} />
+            <ShortcutEditor label={t("settings.shortcutAction_nextChapter")} action="nextChapter" form={form} setForm={setForm} />
+            <ShortcutEditor label={t("settings.shortcutAction_prevChapter")} action="prevChapter" form={form} setForm={setForm} />
+            <ShortcutEditor label={t("settings.shortcutAction_toggleMode")} action="toggleMode" form={form} setForm={setForm} />
+            <ShortcutEditor label={t("settings.shortcutAction_backToLibrary")} action="backToLibrary" form={form} setForm={setForm} />
+            <ShortcutEditor label={t("settings.shortcutAction_toggleMenu")} action="toggleMenu" form={form} setForm={setForm} />
+          </div>
+        </PanelSection>
+
+        <Button className="w-full" type="submit">
+          {t("settings.save")}
+        </Button>
+      </form>
 
       {version && (
         <div className="pt-2 text-center text-[10px] tracking-[0.1em] text-muted-foreground/60 border-t border-border/40">

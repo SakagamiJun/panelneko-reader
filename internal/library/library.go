@@ -474,7 +474,7 @@ func OpenArchiveAsset(outputRoot string, requestPath string) (io.ReadCloser, str
 		return nil, "", -1, fmt.Errorf("open archive: %w", err)
 	}
 
-	entry, err := findArchiveImageEntry(cacheEntry.archive, entryPath)
+	entry, err := findArchiveImageEntryFromCache(cacheEntry, entryPath)
 	if err != nil {
 		releaseArchive(cacheEntry)
 		return nil, "", -1, err
@@ -781,11 +781,12 @@ func loadArchiveChapterSource(outputRoot string, descriptor chapterSourceDescrip
 // ── Archive Cache ────────────────────────────────────────────────────────────
 
 type archiveCacheEntry struct {
-	path    string
-	archive *zip.ReadCloser
-	refs    int
-	lastUse time.Time
-	modTime time.Time
+	path     string
+	archive  *zip.ReadCloser
+	indexMap map[string]*zip.File
+	refs     int
+	lastUse  time.Time
+	modTime  time.Time
 }
 
 var (
@@ -840,12 +841,23 @@ func acquireArchive(archivePath string) (*archiveCacheEntry, error) {
 		return nil, err
 	}
 
+	indexMap := make(map[string]*zip.File, len(archiveReader.File))
+	for _, file := range archiveReader.File {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+		if normalized, err := normalizeArchiveEntryPath(file.Name); err == nil {
+			indexMap[normalized] = file
+		}
+	}
+
 	entry := &archiveCacheEntry{
-		path:    archivePath,
-		archive: archiveReader,
-		refs:    1,
-		lastUse: time.Now(),
-		modTime: modTime,
+		path:     archivePath,
+		archive:  archiveReader,
+		indexMap: indexMap,
+		refs:     1,
+		lastUse:  time.Now(),
+		modTime:  modTime,
 	}
 	acEntries[archivePath] = entry
 	return entry, nil
@@ -1024,6 +1036,24 @@ func resolveArchiveAssetRequest(outputRoot string, requestPath string) (string, 
 	}
 
 	return archivePath, normalizedEntryPath, nil
+}
+
+func findArchiveImageEntryFromCache(cacheEntry *archiveCacheEntry, entryPath string) (archiveEntry, error) {
+	if cacheEntry.indexMap != nil {
+		if file, ok := cacheEntry.indexMap[entryPath]; ok {
+			if shouldIgnoreArchiveEntry(entryPath) {
+				return archiveEntry{}, fmt.Errorf("unsupported archive entry: %s", entryPath)
+			}
+			if !isSupportedImagePath(entryPath) {
+				return archiveEntry{}, fmt.Errorf("unsupported archive entry extension: %s", entryPath)
+			}
+			return archiveEntry{
+				file:           file,
+				normalizedPath: entryPath,
+			}, nil
+		}
+	}
+	return findArchiveImageEntry(cacheEntry.archive, entryPath)
 }
 
 func findArchiveImageEntry(archiveReader *zip.ReadCloser, entryPath string) (archiveEntry, error) {

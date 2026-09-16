@@ -7,6 +7,11 @@ export namespace contracts {
 	    themeMode: string;
 	    readerScrollCachePages: number;
 	    autoRestoreReaderProgress: boolean;
+	    readerDirection: string;
+	    readerSpreadMode: string;
+	    readerCoverSolo: boolean;
+	    readerFitMode: string;
+	    readerFilter: string;
 	    shortcuts: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
@@ -21,6 +26,11 @@ export namespace contracts {
 	        this.themeMode = source["themeMode"];
 	        this.readerScrollCachePages = source["readerScrollCachePages"];
 	        this.autoRestoreReaderProgress = source["autoRestoreReaderProgress"];
+	        this.readerDirection = source["readerDirection"];
+	        this.readerSpreadMode = source["readerSpreadMode"];
+	        this.readerCoverSolo = source["readerCoverSolo"];
+	        this.readerFitMode = source["readerFitMode"];
+	        this.readerFilter = source["readerFilter"];
 	        this.shortcuts = source["shortcuts"];
 	    }
 	}

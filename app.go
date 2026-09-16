@@ -258,11 +258,18 @@ func (a *App) AssetHandler() http.Handler {
 			}
 			defer reader.Close()
 
+			writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			if contentType != "" {
 				writer.Header().Set("Content-Type", contentType)
 			}
 			if contentLength >= 0 {
 				writer.Header().Set("Content-Length", fmt.Sprintf("%d", contentLength))
+				etag := fmt.Sprintf(`"%x-%x"`, len(request.URL.Path), contentLength)
+				writer.Header().Set("ETag", etag)
+				if match := request.Header.Get("If-None-Match"); match != "" && match == etag {
+					writer.WriteHeader(http.StatusNotModified)
+					return
+				}
 			}
 
 			_, _ = io.Copy(writer, reader)
@@ -279,6 +286,7 @@ func (a *App) AssetHandler() http.Handler {
 			return
 		}
 
+		writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		http.ServeFile(writer, request, targetPath)
 	})
 }

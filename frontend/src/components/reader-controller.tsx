@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { PagedReader } from "@/components/paged-reader";
 import { ScrollReader } from "@/components/scroll-reader";
-import { ReaderBottomHUD } from "@/components/reader-bottom-hud";
+import { ReaderTopBar } from "@/components/reader-top-bar";
 import { ChapterDrawer } from "@/components/chapter-drawer";
 import {
   type FlatReaderPage,
@@ -88,29 +88,60 @@ export function ReaderController({
   const hudTimerRef = useRef<number | null>(null);
 
   const resetHudTimer = useCallback(() => {
-    setHudVisible(true);
     if (hudTimerRef.current) {
       window.clearTimeout(hudTimerRef.current);
     }
     hudTimerRef.current = window.setTimeout(() => {
       setHudVisible(false);
-    }, 3800);
+    }, 3500);
   }, []);
 
   useEffect(() => {
+    setHudVisible(true);
     resetHudTimer();
     return () => {
       if (hudTimerRef.current) window.clearTimeout(hudTimerRef.current);
     };
   }, [resetHudTimer]);
 
-  const handleMouseMove = () => {
-    resetHudTimer();
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (e.clientY < 48 || hudVisible) {
+      setHudVisible(true);
+      resetHudTimer();
+    }
   };
 
   const toggleHUD = () => {
-    setHudVisible((v) => !v);
+    setHudVisible((prev) => {
+      const next = !prev;
+      if (next) {
+        resetHudTimer();
+      } else if (hudTimerRef.current) {
+        window.clearTimeout(hudTimerRef.current);
+      }
+      return next;
+    });
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "SELECT" ||
+        document.activeElement?.tagName === "TEXTAREA"
+      ) {
+        return;
+      }
+      const s = settings.shortcuts || {};
+      const key = e.key.toLowerCase();
+      if ((s.toggleMenu && key === s.toggleMenu.toLowerCase()) || key === "m") {
+        e.preventDefault();
+        toggleHUD();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [settings.shortcuts, toggleHUD]);
 
   const pages = useMemo<FlatReaderPage[]>(() => {
     let globalIndex = 0;
@@ -446,8 +477,17 @@ export function ReaderController({
         />
       )}
 
-      {/* Floating Bottom HUD */}
-      <ReaderBottomHUD
+      {/* Invisible top hover zone to easily reveal top bar with mouse */}
+      <div
+        className="absolute top-0 left-0 right-0 h-4 z-20 pointer-events-auto"
+        onMouseEnter={() => {
+          setHudVisible(true);
+          resetHudTimer();
+        }}
+      />
+
+      {/* Unified Top Navigation and Reader Controls Bar */}
+      <ReaderTopBar
         activePage={activePage}
         coverSolo={coverSolo}
         currentIndex={currentIndex}
@@ -458,8 +498,10 @@ export function ReaderController({
         mode={mode}
         onCoverSoloChange={handleCoverSoloChange}
         onDirectionChange={handleDirectionChange}
+        onExitReader={onExitReader ?? (() => {})}
         onFilterChange={handleFilterChange}
         onFitModeChange={handleFitModeChange}
+        onHide={() => setHudVisible(false)}
         onModeChange={onModeChange ?? (() => {})}
         onNextChapter={handleNextChapter}
         onPrevChapter={handlePrevChapter}

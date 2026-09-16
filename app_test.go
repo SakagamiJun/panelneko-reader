@@ -44,6 +44,13 @@ func TestAssetHandlerStreamsArchiveAssets(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d", recorder.Code)
 	}
+	if got := recorder.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Fatalf("unexpected cache-control: %q", got)
+	}
+	etag := recorder.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("expected ETag header")
+	}
 	if got := recorder.Header().Get("Content-Type"); got != "image/png" {
 		t.Fatalf("unexpected content type: %q", got)
 	}
@@ -52,6 +59,15 @@ func TestAssetHandlerStreamsArchiveAssets(t *testing.T) {
 	}
 	if got := recorder.Body.String(); got != "png-bytes" {
 		t.Fatalf("unexpected body: %q", got)
+	}
+
+	// Test 304 Not Modified with If-None-Match
+	req304 := httptest.NewRequest(http.MethodGet, requestURL, nil)
+	req304.Header.Set("If-None-Match", etag)
+	rec304 := httptest.NewRecorder()
+	app.AssetHandler().ServeHTTP(rec304, req304)
+	if rec304.Code != http.StatusNotModified {
+		t.Fatalf("expected 304, got %d", rec304.Code)
 	}
 }
 
