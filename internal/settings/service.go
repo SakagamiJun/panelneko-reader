@@ -59,6 +59,11 @@ func DefaultSettings() contracts.AppSettings {
 		ThemeMode:                 contracts.ThemeModeSystem,
 		ReaderScrollCachePages:    6,
 		AutoRestoreReaderProgress: true,
+		ReaderDirection:           contracts.ReaderDirectionRTL,
+		ReaderSpreadMode:          contracts.ReaderSpreadModeAuto,
+		ReaderCoverSolo:           true,
+		ReaderFitMode:             contracts.ReaderFitModeContain,
+		ReaderFilter:              contracts.ReaderFilterNone,
 		Shortcuts: map[string]string{
 			"nextPage":      "ArrowRight", // or Space/ArrowDown handled in frontend
 			"prevPage":      "ArrowLeft",  // or ArrowUp handled in frontend
@@ -99,6 +104,47 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 	if input.ReaderScrollCachePages > 0 {
 		settings.ReaderScrollCachePages = input.ReaderScrollCachePages
 		settings.AutoRestoreReaderProgress = input.AutoRestoreReaderProgress
+	}
+
+	if input.ReaderDirection == contracts.ReaderDirectionLTR {
+		settings.ReaderDirection = contracts.ReaderDirectionLTR
+	} else {
+		settings.ReaderDirection = contracts.ReaderDirectionRTL
+	}
+
+	switch input.ReaderSpreadMode {
+	case contracts.ReaderSpreadModeSingle:
+		settings.ReaderSpreadMode = contracts.ReaderSpreadModeSingle
+	case contracts.ReaderSpreadModeDouble:
+		settings.ReaderSpreadMode = contracts.ReaderSpreadModeDouble
+	default:
+		settings.ReaderSpreadMode = contracts.ReaderSpreadModeAuto
+	}
+
+	if input.ReaderDirection != "" || input.ReaderSpreadMode != "" {
+		settings.ReaderCoverSolo = input.ReaderCoverSolo
+	}
+
+	switch input.ReaderFitMode {
+	case contracts.ReaderFitModeWidth:
+		settings.ReaderFitMode = contracts.ReaderFitModeWidth
+	case contracts.ReaderFitModeHeight:
+		settings.ReaderFitMode = contracts.ReaderFitModeHeight
+	case contracts.ReaderFitModeOriginal:
+		settings.ReaderFitMode = contracts.ReaderFitModeOriginal
+	default:
+		settings.ReaderFitMode = contracts.ReaderFitModeContain
+	}
+
+	switch input.ReaderFilter {
+	case contracts.ReaderFilterInvert:
+		settings.ReaderFilter = contracts.ReaderFilterInvert
+	case contracts.ReaderFilterSepia:
+		settings.ReaderFilter = contracts.ReaderFilterSepia
+	case contracts.ReaderFilterHighContrast:
+		settings.ReaderFilter = contracts.ReaderFilterHighContrast
+	default:
+		settings.ReaderFilter = contracts.ReaderFilterNone
 	}
 
 	if input.Shortcuts != nil {

@@ -1,6 +1,10 @@
 export type LocaleMode = "system" | "manual";
 export type Locale = "zh-CN" | "en" | "ja";
 export type ThemeMode = "system" | "light" | "dark";
+export type ReaderDirection = "rtl" | "ltr";
+export type ReaderSpreadMode = "auto" | "single" | "double";
+export type ReaderFitMode = "contain" | "width" | "height" | "original";
+export type ReaderFilter = "none" | "invert" | "sepia" | "high-contrast";
 
 export interface AppSettings {
   libraryRoot: string;
@@ -9,6 +13,11 @@ export interface AppSettings {
   themeMode: ThemeMode;
   readerScrollCachePages: number;
   autoRestoreReaderProgress: boolean;
+  readerDirection: ReaderDirection;
+  readerSpreadMode: ReaderSpreadMode;
+  readerCoverSolo: boolean;
+  readerFitMode: ReaderFitMode;
+  readerFilter: ReaderFilter;
   shortcuts: Record<string, string>;
 }
 

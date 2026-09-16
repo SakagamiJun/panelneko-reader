@@ -18,6 +18,11 @@ const defaultSettings: AppSettings = {
   themeMode: "system",
   readerScrollCachePages: 6,
   autoRestoreReaderProgress: true,
+  readerDirection: "rtl",
+  readerSpreadMode: "auto",
+  readerCoverSolo: true,
+  readerFitMode: "contain",
+  readerFilter: "none",
   shortcuts: {
     nextPage: "ArrowRight",
     prevPage: "ArrowLeft",

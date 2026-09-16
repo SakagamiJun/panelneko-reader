@@ -15,6 +15,39 @@ const (
 	ThemeModeDark   ThemeMode = "dark"
 )
 
+type ReaderDirection string
+
+const (
+	ReaderDirectionRTL ReaderDirection = "rtl"
+	ReaderDirectionLTR ReaderDirection = "ltr"
+)
+
+type ReaderSpreadMode string
+
+const (
+	ReaderSpreadModeAuto   ReaderSpreadMode = "auto"
+	ReaderSpreadModeSingle ReaderSpreadMode = "single"
+	ReaderSpreadModeDouble ReaderSpreadMode = "double"
+)
+
+type ReaderFitMode string
+
+const (
+	ReaderFitModeContain  ReaderFitMode = "contain"
+	ReaderFitModeWidth    ReaderFitMode = "width"
+	ReaderFitModeHeight   ReaderFitMode = "height"
+	ReaderFitModeOriginal ReaderFitMode = "original"
+)
+
+type ReaderFilter string
+
+const (
+	ReaderFilterNone         ReaderFilter = "none"
+	ReaderFilterInvert       ReaderFilter = "invert"
+	ReaderFilterSepia        ReaderFilter = "sepia"
+	ReaderFilterHighContrast ReaderFilter = "high-contrast"
+)
+
 type AppSettings struct {
 	LibraryRoot               string            `json:"libraryRoot"`
 	LocaleMode                LocaleMode        `json:"localeMode"`
@@ -22,6 +55,11 @@ type AppSettings struct {
 	ThemeMode                 ThemeMode         `json:"themeMode"`
 	ReaderScrollCachePages    int               `json:"readerScrollCachePages"`
 	AutoRestoreReaderProgress bool              `json:"autoRestoreReaderProgress"`
+	ReaderDirection           ReaderDirection   `json:"readerDirection"`
+	ReaderSpreadMode          ReaderSpreadMode  `json:"readerSpreadMode"`
+	ReaderCoverSolo           bool              `json:"readerCoverSolo"`
+	ReaderFitMode             ReaderFitMode     `json:"readerFitMode"`
+	ReaderFilter              ReaderFilter      `json:"readerFilter"`
 	Shortcuts                 map[string]string `json:"shortcuts"`
 }
 
