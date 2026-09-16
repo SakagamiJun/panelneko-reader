@@ -12,6 +12,11 @@ describe("resolveLocale", () => {
           themeMode: "system",
           readerScrollCachePages: 6,
           autoRestoreReaderProgress: true,
+          readerDirection: "rtl",
+          readerSpreadMode: "auto",
+          readerCoverSolo: true,
+          readerFitMode: "contain",
+          readerFilter: "none",
           shortcuts: {},
         },
         ["zh-Hans-CN"]
@@ -28,6 +33,11 @@ describe("resolveLocale", () => {
         themeMode: "system",
         readerScrollCachePages: 6,
         autoRestoreReaderProgress: true,
+        readerDirection: "rtl",
+        readerSpreadMode: "auto",
+        readerCoverSolo: true,
+        readerFitMode: "contain",
+        readerFilter: "none",
         shortcuts: {},
       })
     ).toBe("ja");

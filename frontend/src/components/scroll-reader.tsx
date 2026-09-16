@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type FlatReaderPage, type PageMetric, type ReaderNavigationRequest, DEFAULT_ASPECT_RATIO, PAGE_GAP, PAGE_PADDING, clampIndex, findPageIndexAtPosition } from "@/components/reader-shared";
+import type { ReaderFilter } from "@/lib/contracts";
 
 interface ScrollReaderProps {
   cacheRadius: number;
@@ -11,6 +12,22 @@ interface ScrollReaderProps {
   pages: FlatReaderPage[];
   requestMetric: (page: FlatReaderPage | undefined) => void;
   shortcuts?: Record<string, string>;
+  filter?: ReaderFilter;
+  rotation?: number;
+  onToggleHUD?: () => void;
+}
+
+function getFilterCSS(filter: ReaderFilter) {
+  switch (filter) {
+    case "invert":
+      return "invert(1) hue-rotate(180deg) contrast(1.1)";
+    case "sepia":
+      return "sepia(0.35) contrast(1.08) brightness(0.96)";
+    case "high-contrast":
+      return "contrast(1.35) brightness(0.98)";
+    default:
+      return "none";
+  }
 }
 
 export function ScrollReader({
@@ -23,6 +40,9 @@ export function ScrollReader({
   pages,
   requestMetric,
   shortcuts = {},
+  filter = "none",
+  rotation = 0,
+  onToggleHUD,
 }: ScrollReaderProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -260,9 +280,10 @@ export function ScrollReader({
                   ) : null}
                   <img
                     alt={`${page.chapterTitle} #${page.pageIndex + 1}`}
-                    className="block w-full select-none bg-transparent object-contain"
+                    className="block w-full select-none bg-transparent object-contain cursor-pointer"
                     draggable={false}
                     loading={Math.abs(index - currentIndex) <= 1 ? "eager" : "lazy"}
+                    onClick={onToggleHUD}
                     onLoad={(event) => {
                       const image = event.currentTarget;
                       if (!image.naturalWidth || !image.naturalHeight) {
@@ -271,6 +292,10 @@ export function ScrollReader({
                       onMetricMeasured(page.id, image.naturalWidth, image.naturalHeight);
                     }}
                     src={page.sourceURL}
+                    style={{
+                      filter: getFilterCSS(filter),
+                      transform: rotation ? `rotate(${rotation}deg)` : undefined,
+                    }}
                   />
                 </div>
               </div>

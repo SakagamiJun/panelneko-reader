@@ -642,8 +642,15 @@ export default function App() {
                   jumpRequest={readerJumpRequest}
                   manifest={readerQuery.data}
                   mode={readerMode}
+                  onModeChange={setReaderMode}
                   settings={settings}
+                  onUpdateSettings={(patch) => {
+                    if (settings) {
+                      settingsMutation.mutate({ ...settings, ...patch });
+                    }
+                  }}
                   onChapterChange={(_, title) => setReaderChapterTitle(title)}
+                  onExitReader={handleExitReader}
                 />
               ) : selectedLibraryID && readerQuery.data ? (
                 <div className="flex h-full items-center justify-center border-l border-border/40 bg-card/14 text-sm text-muted-foreground">

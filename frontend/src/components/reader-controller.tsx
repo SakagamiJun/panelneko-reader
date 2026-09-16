@@ -1,9 +1,23 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { PagedReader } from "@/components/paged-reader";
 import { ScrollReader } from "@/components/scroll-reader";
-import { type FlatReaderPage, type PageMetric, type ReaderNavigationRequest, DEFAULT_ASPECT_RATIO, clampIndex } from "@/components/reader-shared";
+import { ReaderBottomHUD } from "@/components/reader-bottom-hud";
+import { ChapterDrawer } from "@/components/chapter-drawer";
+import {
+  type FlatReaderPage,
+  type PageMetric,
+  type ReaderNavigationRequest,
+  clampIndex,
+} from "@/components/reader-shared";
 import { appAdapter } from "@/lib/api";
-import type { AppSettings, ReaderManifest } from "@/lib/contracts";
+import type {
+  AppSettings,
+  ReaderDirection,
+  ReaderFitMode,
+  ReaderFilter,
+  ReaderManifest,
+  ReaderSpreadMode,
+} from "@/lib/contracts";
 
 export type ReaderMode = "scroll" | "paged";
 
@@ -23,8 +37,11 @@ interface ReaderControllerProps {
   jumpRequest?: ReaderJumpRequest | null;
   manifest: ReaderManifest;
   mode: ReaderMode;
+  onModeChange?: (mode: ReaderMode) => void;
   onChapterChange?: (chapterID: string, chapterTitle: string) => void;
-  settings: Pick<AppSettings, "autoRestoreReaderProgress" | "readerScrollCachePages" | "shortcuts">;
+  settings: AppSettings;
+  onUpdateSettings?: (patch: Partial<AppSettings>) => void;
+  onExitReader?: () => void;
 }
 
 function resolveJumpTargetIndex(jumpRequest: ReaderJumpRequest, pages: FlatReaderPage[]) {
@@ -35,7 +52,16 @@ function resolveJumpTargetIndex(jumpRequest: ReaderJumpRequest, pages: FlatReade
   return clampIndex(jumpRequest.page - 1, pages.length);
 }
 
-export function ReaderController({ jumpRequest = null, manifest, mode, onChapterChange, settings }: ReaderControllerProps) {
+export function ReaderController({
+  jumpRequest = null,
+  manifest,
+  mode,
+  onModeChange,
+  onChapterChange,
+  settings,
+  onUpdateSettings,
+  onExitReader,
+}: ReaderControllerProps) {
   const handledJumpRequestIDRef = useRef<number | null>(null);
   const lastSavedPageRef = useRef<number | null>(null);
   const metricRequestGenerationRef = useRef(0);
@@ -47,6 +73,44 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
   const [currentIndex, setCurrentIndex] = useState(0);
   const [navigationRequest, setNavigationRequest] = useState<ReaderNavigationRequest | null>(null);
   const [restoreReady, setRestoreReady] = useState(false);
+
+  // Reader preference state
+  const [direction, setDirection] = useState<ReaderDirection>(settings.readerDirection || "rtl");
+  const [spreadMode, setSpreadMode] = useState<ReaderSpreadMode>(settings.readerSpreadMode || "auto");
+  const [coverSolo, setCoverSolo] = useState<boolean>(settings.readerCoverSolo !== false);
+  const [fitMode, setFitMode] = useState<ReaderFitMode>(settings.readerFitMode || "contain");
+  const [filter, setFilter] = useState<ReaderFilter>(settings.readerFilter || "none");
+  const [rotation, setRotation] = useState<number>(0);
+
+  // HUD and Drawer state
+  const [hudVisible, setHudVisible] = useState(true);
+  const [chapterDrawerOpen, setChapterDrawerOpen] = useState(false);
+  const hudTimerRef = useRef<number | null>(null);
+
+  const resetHudTimer = useCallback(() => {
+    setHudVisible(true);
+    if (hudTimerRef.current) {
+      window.clearTimeout(hudTimerRef.current);
+    }
+    hudTimerRef.current = window.setTimeout(() => {
+      setHudVisible(false);
+    }, 3800);
+  }, []);
+
+  useEffect(() => {
+    resetHudTimer();
+    return () => {
+      if (hudTimerRef.current) window.clearTimeout(hudTimerRef.current);
+    };
+  }, [resetHudTimer]);
+
+  const handleMouseMove = () => {
+    resetHudTimer();
+  };
+
+  const toggleHUD = () => {
+    setHudVisible((v) => !v);
+  };
 
   const pages = useMemo<FlatReaderPage[]>(() => {
     let globalIndex = 0;
@@ -65,14 +129,17 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
 
   const cacheRadius = Math.max(1, settings.readerScrollCachePages || 3);
 
-  const nextNavigationRequest = useCallback((index: number, reason: ReaderNavigationRequest["reason"]) => {
-    navigationRequestIDRef.current += 1;
-    return {
-      id: navigationRequestIDRef.current,
-      index: clampIndex(index, pages.length),
-      reason,
-    } satisfies ReaderNavigationRequest;
-  }, [pages.length]);
+  const nextNavigationRequest = useCallback(
+    (index: number, reason: ReaderNavigationRequest["reason"]) => {
+      navigationRequestIDRef.current += 1;
+      return {
+        id: navigationRequestIDRef.current,
+        index: clampIndex(index, pages.length),
+        reason,
+      } satisfies ReaderNavigationRequest;
+    },
+    [pages.length]
+  );
 
   const onMetricMeasured = useCallback((pageID: string, width: number, height: number) => {
     if (!width || !height) {
@@ -92,43 +159,45 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
     });
   }, []);
 
-  const requestMetric = useCallback((page: FlatReaderPage | undefined) => {
-    if (!page || requestedMetricIDsRef.current.has(page.id)) {
-      return;
-    }
-
-    const requestGeneration = metricRequestGenerationRef.current;
-    requestedMetricIDsRef.current.add(page.id);
-
-    const image = new Image();
-    image.src = page.sourceURL;
-    const releaseImage = () => {
-      image.onload = null;
-      image.onerror = null;
-      image.src = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
-    };
-
-    image.onload = () => {
-      const width = image.naturalWidth || DEFAULT_ASPECT_RATIO;
-      const height = image.naturalHeight || 1;
-      releaseImage();
-      if (metricRequestGenerationRef.current !== requestGeneration) {
+  const requestMetric = useCallback(
+    (page: FlatReaderPage | undefined) => {
+      if (!page || requestedMetricIDsRef.current.has(page.id)) {
         return;
       }
 
-      onMetricMeasured(page.id, width, height);
-    };
-    image.onerror = () => {
-      releaseImage();
-      if (metricRequestGenerationRef.current !== requestGeneration) {
-        return;
-      }
+      const requestGeneration = metricRequestGenerationRef.current;
+      requestedMetricIDsRef.current.add(page.id);
 
-      onMetricMeasured(page.id, DEFAULT_ASPECT_RATIO, 1);
-    };
-  }, [onMetricMeasured]);
+      const image = new Image();
+      image.src = page.sourceURL;
+      const releaseImage = () => {
+        image.onload = null;
+        image.onerror = null;
+        image.src = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+      };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      image.onload = () => {
+        const width = image.naturalWidth || 1;
+        const height = image.naturalHeight || 1;
+        releaseImage();
+        if (metricRequestGenerationRef.current !== requestGeneration) {
+          return;
+        }
+
+        onMetricMeasured(page.id, width, height);
+      };
+      image.onerror = () => {
+        releaseImage();
+        if (metricRequestGenerationRef.current !== requestGeneration) {
+          return;
+        }
+
+        onMetricMeasured(page.id, 1, 1);
+      };
+    },
+    [onMetricMeasured]
+  );
+
   useEffect(() => {
     metricRequestGenerationRef.current += 1;
     requestedMetricIDsRef.current = new Set();
@@ -140,7 +209,7 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
     setCurrentIndex(0);
     setNavigationRequest(null);
     setRestoreReady(false);
-  }, [manifest.mangaID]);
+  }, [manifest.mangaID, mode]);
 
   useEffect(() => {
     if (pages.length === 0) {
@@ -224,20 +293,20 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
     onChapterChangeRef.current = onChapterChange;
   }, [onChapterChange]);
 
+  const activePage = pages[clampIndex(currentIndex, pages.length)];
+
   useEffect(() => {
     if (pages.length === 0) return;
-    const activePage = pages[clampIndex(currentIndex, pages.length)];
     if (activePage) {
       onChapterChangeRef.current?.(activePage.chapterID, activePage.chapterTitle);
     }
-  }, [currentIndex, pages]);
+  }, [activePage, pages]);
 
   useEffect(() => {
     if (!restoreReady || pages.length === 0) {
       return;
     }
 
-    const activePage = pages[clampIndex(currentIndex, pages.length)];
     if (!activePage || lastSavedPageRef.current === activePage.globalPage) {
       return;
     }
@@ -253,58 +322,80 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
     }, 300);
 
     return () => window.clearTimeout(timer);
-  }, [currentIndex, manifest.mangaID, pages, restoreReady]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        document.activeElement?.tagName === "INPUT" ||
-        document.activeElement?.tagName === "SELECT" ||
-        document.activeElement?.tagName === "TEXTAREA" ||
-        (document.activeElement as HTMLElement)?.isContentEditable
-      ) {
-        return;
-      }
-      
-      const s = settings.shortcuts || {};
-      const key = e.key.toLowerCase();
-      if (!s.nextChapter && !s.prevChapter) return;
-
-      const activePage = pages[clampIndex(currentIndex, pages.length)];
-      if (!activePage) return;
-
-      if (s.nextChapter && key === s.nextChapter.toLowerCase()) {
-        e.preventDefault();
-        const chapterIdx = manifest.chapters.findIndex((c) => c.id === activePage.chapterID);
-        if (chapterIdx !== -1 && chapterIdx + 1 < manifest.chapters.length) {
-          const nextChapterID = manifest.chapters[chapterIdx + 1].id;
-          const targetIndex = pages.findIndex((p) => p.chapterID === nextChapterID);
-          if (targetIndex !== -1) {
-            setCurrentIndex(targetIndex);
-            setNavigationRequest(nextNavigationRequest(targetIndex, "jump"));
-          }
-        }
-      } else if (s.prevChapter && key === s.prevChapter.toLowerCase()) {
-        e.preventDefault();
-        const chapterIdx = manifest.chapters.findIndex((c) => c.id === activePage.chapterID);
-        if (chapterIdx > 0) {
-          const prevChapterID = manifest.chapters[chapterIdx - 1].id;
-          const targetIndex = pages.findIndex((p) => p.chapterID === prevChapterID);
-          if (targetIndex !== -1) {
-            setCurrentIndex(targetIndex);
-            setNavigationRequest(nextNavigationRequest(targetIndex, "jump"));
-          }
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentIndex, manifest.chapters, nextNavigationRequest, pages, settings.shortcuts]);
+  }, [activePage, manifest.mangaID, pages, restoreReady]);
 
   const handleCurrentIndexChange = (nextIndex: number) => {
     const clampedIndex = clampIndex(nextIndex, pages.length);
     setCurrentIndex((current) => (current === clampedIndex ? current : clampedIndex));
+  };
+
+  const handleSeekPage = (targetPageNumber: number) => {
+    const targetIdx = clampIndex(targetPageNumber - 1, pages.length);
+    setCurrentIndex(targetIdx);
+    setNavigationRequest(nextNavigationRequest(targetIdx, "jump"));
+  };
+
+  const handlePrevChapter = () => {
+    if (!activePage) return;
+    const chapterIdx = manifest.chapters.findIndex((c) => c.id === activePage.chapterID);
+    if (chapterIdx > 0) {
+      const prevChapter = manifest.chapters[chapterIdx - 1];
+      const targetIndex = pages.findIndex((p) => p.chapterID === prevChapter.id);
+      if (targetIndex !== -1) {
+        setCurrentIndex(targetIndex);
+        setNavigationRequest(nextNavigationRequest(targetIndex, "jump"));
+      }
+    }
+  };
+
+  const handleNextChapter = () => {
+    if (!activePage) return;
+    const chapterIdx = manifest.chapters.findIndex((c) => c.id === activePage.chapterID);
+    if (chapterIdx !== -1 && chapterIdx + 1 < manifest.chapters.length) {
+      const nextChapter = manifest.chapters[chapterIdx + 1];
+      const targetIndex = pages.findIndex((p) => p.chapterID === nextChapter.id);
+      if (targetIndex !== -1) {
+        setCurrentIndex(targetIndex);
+        setNavigationRequest(nextNavigationRequest(targetIndex, "jump"));
+      }
+    }
+  };
+
+  const handleSelectChapter = (chapterID: string) => {
+    const targetIndex = pages.findIndex((p) => p.chapterID === chapterID);
+    if (targetIndex !== -1) {
+      setCurrentIndex(targetIndex);
+      setNavigationRequest(nextNavigationRequest(targetIndex, "jump"));
+    }
+  };
+
+  const handleDirectionChange = (d: ReaderDirection) => {
+    setDirection(d);
+    onUpdateSettings?.({ readerDirection: d });
+  };
+
+  const handleSpreadModeChange = (s: ReaderSpreadMode) => {
+    setSpreadMode(s);
+    onUpdateSettings?.({ readerSpreadMode: s });
+  };
+
+  const handleCoverSoloChange = (solo: boolean) => {
+    setCoverSolo(solo);
+    onUpdateSettings?.({ readerCoverSolo: solo });
+  };
+
+  const handleFitModeChange = (f: ReaderFitMode) => {
+    setFitMode(f);
+    onUpdateSettings?.({ readerFitMode: f });
+  };
+
+  const handleFilterChange = (fl: ReaderFilter) => {
+    setFilter(fl);
+    onUpdateSettings?.({ readerFilter: fl });
+  };
+
+  const handleRotate = () => {
+    setRotation((r) => (r + 90) % 360);
   };
 
   if (pages.length === 0) {
@@ -315,32 +406,81 @@ export function ReaderController({ jumpRequest = null, manifest, mode, onChapter
     );
   }
 
-  if (mode === "scroll") {
-    return (
-      <ScrollReader
-        cacheRadius={cacheRadius}
-        currentIndex={currentIndex}
-        metrics={metrics}
-        navigationRequest={navigationRequest}
-        onCurrentIndexChange={handleCurrentIndexChange}
-        onMetricMeasured={onMetricMeasured}
-        pages={pages}
-        requestMetric={requestMetric}
-        shortcuts={settings.shortcuts}
-      />
-    );
-  }
-
   return (
-    <PagedReader
-      currentIndex={currentIndex}
-      metrics={metrics}
-      navigationRequest={navigationRequest}
-      onCurrentIndexChange={handleCurrentIndexChange}
-      onMetricMeasured={onMetricMeasured}
-      pages={pages}
-      requestMetric={requestMetric}
-      shortcuts={settings.shortcuts}
-    />
+    <div
+      className="relative h-full w-full overflow-hidden select-none"
+      onMouseMove={handleMouseMove}
+    >
+      {mode === "scroll" ? (
+        <ScrollReader
+          cacheRadius={cacheRadius}
+          currentIndex={currentIndex}
+          filter={filter}
+          metrics={metrics}
+          navigationRequest={navigationRequest}
+          onCurrentIndexChange={handleCurrentIndexChange}
+          onMetricMeasured={onMetricMeasured}
+          onToggleHUD={toggleHUD}
+          pages={pages}
+          requestMetric={requestMetric}
+          rotation={rotation}
+          shortcuts={settings.shortcuts}
+        />
+      ) : (
+        <PagedReader
+          coverSolo={coverSolo}
+          currentIndex={currentIndex}
+          direction={direction}
+          filter={filter}
+          fitMode={fitMode}
+          metrics={metrics}
+          navigationRequest={navigationRequest}
+          onCurrentIndexChange={handleCurrentIndexChange}
+          onMetricMeasured={onMetricMeasured}
+          onToggleHUD={toggleHUD}
+          pages={pages}
+          requestMetric={requestMetric}
+          rotation={rotation}
+          shortcuts={settings.shortcuts}
+          spreadMode={spreadMode}
+        />
+      )}
+
+      {/* Floating Bottom HUD */}
+      <ReaderBottomHUD
+        activePage={activePage}
+        coverSolo={coverSolo}
+        currentIndex={currentIndex}
+        direction={direction}
+        filter={filter}
+        fitMode={fitMode}
+        manifest={manifest}
+        mode={mode}
+        onCoverSoloChange={handleCoverSoloChange}
+        onDirectionChange={handleDirectionChange}
+        onFilterChange={handleFilterChange}
+        onFitModeChange={handleFitModeChange}
+        onModeChange={onModeChange ?? (() => {})}
+        onNextChapter={handleNextChapter}
+        onPrevChapter={handlePrevChapter}
+        onRotate={handleRotate}
+        onSeekPage={handleSeekPage}
+        onSpreadModeChange={handleSpreadModeChange}
+        onToggleChapterDrawer={() => setChapterDrawerOpen(true)}
+        rotation={rotation}
+        spreadMode={spreadMode}
+        totalPages={pages.length}
+        visible={hudVisible}
+      />
+
+      {/* Slide-over Chapter Drawer */}
+      <ChapterDrawer
+        activeChapterID={activePage?.chapterID}
+        chapters={manifest.chapters}
+        onClose={() => setChapterDrawerOpen(false)}
+        onSelectChapter={handleSelectChapter}
+        open={chapterDrawerOpen}
+      />
+    </div>
   );
 }
