@@ -48,3 +48,5 @@ go.work
 # Log files
 *.log
 logs/
+
+AGENT.md
