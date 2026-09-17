@@ -10,6 +10,8 @@ import {
   clampIndex,
 } from "@/components/reader-shared";
 import { appAdapter } from "@/lib/api";
+import { isMacPlatform } from "@/lib/system";
+import { cn } from "@/lib/utils";
 import type {
   AppSettings,
   ReaderDirection,
@@ -84,6 +86,7 @@ export function ReaderController({
 
   // HUD and Drawer state
   const [hudVisible, setHudVisible] = useState(true);
+  const [menuLocked, setMenuLocked] = useState(false);
   const [chapterDrawerOpen, setChapterDrawerOpen] = useState(false);
   const hudTimerRef = useRef<number | null>(null);
 
@@ -105,13 +108,38 @@ export function ReaderController({
   }, [resetHudTimer]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (menuLocked) {
+      return;
+    }
     if (e.clientY < 48 || hudVisible) {
       setHudVisible(true);
       resetHudTimer();
     }
   };
 
-  const toggleHUD = () => {
+  const handleToggleLock = useCallback(() => {
+    setMenuLocked((prev) => {
+      const next = !prev;
+      if (next) {
+        if (hudTimerRef.current) {
+          window.clearTimeout(hudTimerRef.current);
+        }
+        setHudVisible(false);
+      } else {
+        setHudVisible(true);
+        resetHudTimer();
+      }
+      return next;
+    });
+  }, [resetHudTimer]);
+
+  const toggleHUD = useCallback(() => {
+    if (menuLocked) {
+      setMenuLocked(false);
+      setHudVisible(true);
+      resetHudTimer();
+      return;
+    }
     setHudVisible((prev) => {
       const next = !prev;
       if (next) {
@@ -121,7 +149,7 @@ export function ReaderController({
       }
       return next;
     });
-  };
+  }, [menuLocked, resetHudTimer]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -474,17 +502,24 @@ export function ReaderController({
           rotation={rotation}
           shortcuts={settings.shortcuts}
           spreadMode={spreadMode}
+          clickCenterZoom={settings.readerClickCenterZoom === true}
+          doubleClickZoom={settings.readerDoubleClickZoom === true}
         />
       )}
 
       {/* Invisible top hover zone to easily reveal top bar with mouse */}
-      <div
-        className="absolute top-0 left-0 right-0 h-4 z-20 pointer-events-auto"
-        onMouseEnter={() => {
-          setHudVisible(true);
-          resetHudTimer();
-        }}
-      />
+      {!menuLocked && (
+        <div
+          className={cn(
+            "absolute top-0 right-0 h-4 z-20 pointer-events-auto",
+            isMacPlatform() ? "left-20" : "left-0"
+          )}
+          onMouseEnter={() => {
+            setHudVisible(true);
+            resetHudTimer();
+          }}
+        />
+      )}
 
       {/* Unified Top Navigation and Reader Controls Bar */}
       <ReaderTopBar
@@ -495,13 +530,14 @@ export function ReaderController({
         filter={filter}
         fitMode={fitMode}
         manifest={manifest}
+        menuLocked={menuLocked}
         mode={mode}
         onCoverSoloChange={handleCoverSoloChange}
         onDirectionChange={handleDirectionChange}
         onExitReader={onExitReader ?? (() => {})}
         onFilterChange={handleFilterChange}
         onFitModeChange={handleFitModeChange}
-        onHide={() => setHudVisible(false)}
+        onHide={handleToggleLock}
         onModeChange={onModeChange ?? (() => {})}
         onNextChapter={handleNextChapter}
         onPrevChapter={handlePrevChapter}
@@ -509,6 +545,7 @@ export function ReaderController({
         onSeekPage={handleSeekPage}
         onSpreadModeChange={handleSpreadModeChange}
         onToggleChapterDrawer={() => setChapterDrawerOpen(true)}
+        onToggleLock={handleToggleLock}
         rotation={rotation}
         spreadMode={spreadMode}
         totalPages={pages.length}

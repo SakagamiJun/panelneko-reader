@@ -64,6 +64,8 @@ func DefaultSettings() contracts.AppSettings {
 		ReaderCoverSolo:           true,
 		ReaderFitMode:             contracts.ReaderFitModeContain,
 		ReaderFilter:              contracts.ReaderFilterNone,
+		ReaderClickCenterZoom:     false,
+		ReaderDoubleClickZoom:     false,
 		Shortcuts: map[string]string{
 			"nextPage":      "ArrowRight", // or Space/ArrowDown handled in frontend
 			"prevPage":      "ArrowLeft",  // or ArrowUp handled in frontend
@@ -146,6 +148,9 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 	default:
 		settings.ReaderFilter = contracts.ReaderFilterNone
 	}
+
+	settings.ReaderClickCenterZoom = input.ReaderClickCenterZoom
+	settings.ReaderDoubleClickZoom = input.ReaderDoubleClickZoom
 
 	if input.Shortcuts != nil {
 		for k, v := range input.Shortcuts {

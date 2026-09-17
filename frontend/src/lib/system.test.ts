@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveLocale, resolveTheme } from "@/lib/system";
+import { resolveLocale, resolveTheme, isMacPlatform } from "@/lib/system";
 
 describe("resolveLocale", () => {
   it("maps zh locales to zh-CN", () => {
@@ -17,6 +17,8 @@ describe("resolveLocale", () => {
           readerCoverSolo: true,
           readerFitMode: "contain",
           readerFilter: "none",
+          readerClickCenterZoom: false,
+          readerDoubleClickZoom: false,
           shortcuts: {},
         },
         ["zh-Hans-CN"]
@@ -38,6 +40,8 @@ describe("resolveLocale", () => {
         readerCoverSolo: true,
         readerFitMode: "contain",
         readerFilter: "none",
+        readerClickCenterZoom: false,
+        readerDoubleClickZoom: false,
         shortcuts: {},
       })
     ).toBe("ja");
@@ -47,5 +51,11 @@ describe("resolveLocale", () => {
 describe("resolveTheme", () => {
   it("returns system dark when prefersDark is true", () => {
     expect(resolveTheme("system", true)).toBe("dark");
+  });
+});
+
+describe("isMacPlatform", () => {
+  it("returns boolean value without throwing", () => {
+    expect(typeof isMacPlatform()).toBe("boolean");
   });
 });

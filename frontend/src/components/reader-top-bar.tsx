@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  Eye,
   EyeOff,
   List,
   Maximize2,
@@ -24,6 +25,7 @@ import type {
   ReaderSpreadMode,
   ReaderManifest,
 } from "@/lib/contracts";
+import { isMacPlatform } from "@/lib/system";
 import { cn } from "@/lib/utils";
 
 interface ReaderTopBarProps {
@@ -51,6 +53,8 @@ interface ReaderTopBarProps {
   onToggleChapterDrawer: () => void;
   onExitReader: () => void;
   visible: boolean;
+  menuLocked?: boolean;
+  onToggleLock?: () => void;
   onHide: () => void;
 }
 
@@ -79,6 +83,8 @@ export function ReaderTopBar({
   onToggleChapterDrawer,
   onExitReader,
   visible,
+  menuLocked,
+  onToggleLock,
   onHide,
 }: ReaderTopBarProps) {
   const { t } = useTranslation();
@@ -91,13 +97,28 @@ export function ReaderTopBar({
   const settingsRef = useRef<HTMLDivElement>(null);
 
   const currentPage = activePage ? activePage.globalPage : currentIndex + 1;
+  const isMac = isMacPlatform();
+  const hasTrafficLights = isMac && !isFullscreen;
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+    const checkFullscreen = () => {
+      const isDocFs = Boolean(document.fullscreenElement);
+      const isMediaFs = typeof window !== "undefined" && window.matchMedia?.("(display-mode: fullscreen)").matches;
+      const isScreenFs =
+        typeof window !== "undefined" &&
+        window.innerWidth === window.screen.width &&
+        window.innerHeight === window.screen.height;
+      setIsFullscreen(Boolean(isDocFs || isMediaFs || isScreenFs));
     };
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+
+    checkFullscreen();
+    document.addEventListener("fullscreenchange", checkFullscreen);
+    window.addEventListener("resize", checkFullscreen);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", checkFullscreen);
+      window.removeEventListener("resize", checkFullscreen);
+    };
   }, []);
 
   useEffect(() => {
@@ -132,15 +153,17 @@ export function ReaderTopBar({
   };
 
   return (
-    <header
-      className={cn(
-        "app-window-drag-region absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-3 py-2 transition-all duration-300 ease-out",
-        "border-b border-border/50 bg-background/90 text-foreground shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-2xl",
-        visible
-          ? "translate-y-0 opacity-100 pointer-events-auto"
-          : "-translate-y-full opacity-0 pointer-events-none"
-      )}
-    >
+    <>
+      <header
+        className={cn(
+          "app-window-drag-region absolute top-0 left-0 right-0 z-30 flex items-center justify-between py-2 transition-all duration-300 ease-out",
+          hasTrafficLights ? "pl-20 pr-3" : "px-3",
+          "border-b border-border/50 bg-background/90 text-foreground shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-2xl",
+          visible
+            ? "translate-y-0 opacity-100 pointer-events-auto"
+            : "-translate-y-full opacity-0 pointer-events-none"
+        )}
+      >
       {/* Left section: Exit button, Manga Title, Chapter, Page count */}
       <div className="app-window-no-drag flex items-center gap-2 min-w-0">
         <Button
@@ -434,7 +457,7 @@ export function ReaderTopBar({
           type="button"
           size="sm"
           variant="ghost"
-          onClick={onHide}
+          onClick={onToggleLock ?? onHide}
           className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
           title={t("reader.collapseMenu")}
         >
@@ -442,5 +465,22 @@ export function ReaderTopBar({
         </Button>
       </div>
     </header>
-  );
+
+    {/* Floating expand button when menu is locked collapsed */}
+    {menuLocked && !visible && (
+      <div className="app-window-no-drag absolute top-2 right-3 z-40">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onToggleLock ?? onHide}
+          className="h-8 w-8 p-0 rounded-md bg-background/60 hover:bg-background/90 text-muted-foreground/70 hover:text-foreground border border-border/40 shadow-sm backdrop-blur-md transition-all"
+          title={t("reader.expandMenu")}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+      </div>
+    )}
+  </>
+);
 }

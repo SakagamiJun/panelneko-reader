@@ -20,6 +20,7 @@ import type {
   ReaderFilter,
   ReaderSpreadMode,
 } from "@/lib/contracts";
+import { cn } from "@/lib/utils";
 
 interface PagedReaderProps {
   currentIndex: number;
@@ -37,6 +38,8 @@ interface PagedReaderProps {
   filter?: ReaderFilter;
   rotation?: number;
   onToggleHUD?: () => void;
+  clickCenterZoom?: boolean;
+  doubleClickZoom?: boolean;
 }
 
 function getFilterCSS(filter: ReaderFilter) {
@@ -68,15 +71,20 @@ export function PagedReader({
   filter = "none",
   rotation = 0,
   onToggleHUD,
+  clickCenterZoom = false,
+  doubleClickZoom = false,
 }: PagedReaderProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const spreadStageRef = useRef<HTMLDivElement | null>(null);
   const handledNavigationIDRef = useRef<number | null>(null);
 
   const [viewportWidth, setViewportWidth] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
+  const hasDraggedRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
   useEffect(() => {
@@ -161,6 +169,21 @@ export function PagedReader({
     }
   }, [currentSpreadIndex, spreads]);
 
+  // Reset zoom and pan on spread change
+  useEffect(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [currentSpreadIndex]);
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+    };
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
+  }, []);
+
   const goToNextSpread = useCallback(() => {
     if (currentSpreadIndex < spreads.length - 1) {
       const nextSpread = spreads[currentSpreadIndex + 1];
@@ -182,9 +205,9 @@ export function PagedReader({
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
-      const delta = event.deltaY < 0 ? 0.2 : -0.2;
+      const delta = event.deltaY < 0 ? 0.25 : -0.25;
       setZoom((z) => {
-        const nextZoom = Math.min(4, Math.max(1, z + delta));
+        const nextZoom = Math.min(8, Math.max(1, Number((z + delta).toFixed(2))));
         if (nextZoom === 1) {
           setPan({ x: 0, y: 0 });
         }
@@ -266,15 +289,74 @@ export function PagedReader({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [direction, goToNextSpread, goToPrevSpread, shortcuts.nextPage, shortcuts.prevPage]);
 
+  const calculateOriginalScale = useCallback(() => {
+    if (!spreadStageRef.current) return 2;
+    const imgs = spreadStageRef.current.querySelectorAll("img");
+    if (imgs.length === 0) return 2;
+
+    let maxScale = 1;
+    imgs.forEach((img) => {
+      if (img.naturalHeight > 0 && img.clientHeight > 0) {
+        const scaleH = img.naturalHeight / img.clientHeight;
+        const scaleW = img.naturalWidth / img.clientWidth;
+        const scale = Math.max(scaleH, scaleW);
+        if (scale > maxScale) {
+          maxScale = scale;
+        }
+      }
+    });
+
+    if (maxScale === 1 && currentSpread) {
+      for (const page of currentSpread.pages) {
+        const metric = metrics[page.id];
+        if (metric && metric.height > 0 && contentHeight > 0) {
+          const scale = metric.height / contentHeight;
+          if (scale > maxScale) {
+            maxScale = scale;
+          }
+        }
+      }
+    }
+
+    return maxScale > 1.05 ? Number(maxScale.toFixed(2)) : 2;
+  }, [currentSpread, metrics, contentHeight]);
+
+  const toggleOriginalScaleZoom = useCallback(() => {
+    if (zoom > 1) {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    } else {
+      const targetZoom = calculateOriginalScale();
+      setZoom(targetZoom);
+      setPan({ x: 0, y: 0 });
+    }
+  }, [zoom, calculateOriginalScale]);
+
   // Click zone handling (left, center, right)
   const handleClickZone = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (isDraggingRef.current || zoom > 1) {
+    if (hasDraggedRef.current) {
+      hasDraggedRef.current = false;
       return;
     }
 
     const rect = event.currentTarget.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     const ratio = clickX / rect.width;
+
+    if (ratio >= 0.3 && ratio <= 0.7) {
+      // Center zone (30% ~ 70%)
+      if (clickCenterZoom) {
+        toggleOriginalScaleZoom();
+      } else {
+        onToggleHUD?.();
+      }
+      return;
+    }
+
+    // If currently zoomed in, avoid side clicks accidentally triggering page flips
+    if (zoom > 1) {
+      return;
+    }
 
     if (ratio < 0.3) {
       // Left zone
@@ -290,26 +372,22 @@ export function PagedReader({
       } else {
         goToNextSpread();
       }
-    } else {
-      // Center zone toggles HUD
-      onToggleHUD?.();
     }
   };
 
   const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     event.stopPropagation();
-    if (zoom > 1) {
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
-    } else {
-      setZoom(2);
-      setPan({ x: 0, y: 0 });
+    if (!doubleClickZoom) {
+      return;
     }
+    toggleOriginalScaleZoom();
   };
 
   const handleMouseDown = (event: React.MouseEvent) => {
-    if (zoom <= 1) return;
+    if (zoom <= 1 || event.button !== 0) return;
     isDraggingRef.current = true;
+    setIsDragging(true);
+    hasDraggedRef.current = false;
     dragStartRef.current = {
       x: event.clientX,
       y: event.clientY,
@@ -322,14 +400,35 @@ export function PagedReader({
     if (!isDraggingRef.current || zoom <= 1) return;
     const dx = event.clientX - dragStartRef.current.x;
     const dy = event.clientY - dragStartRef.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      hasDraggedRef.current = true;
+    }
+
+    let nextPanX = dragStartRef.current.panX + dx;
+    let nextPanY = dragStartRef.current.panY + dy;
+
+    if (containerRef.current && spreadStageRef.current) {
+      const containerW = containerRef.current.clientWidth;
+      const containerH = containerRef.current.clientHeight;
+      const stageW = spreadStageRef.current.clientWidth * zoom;
+      const stageH = spreadStageRef.current.clientHeight * zoom;
+
+      const maxPanX = Math.max(0, (stageW - containerW) / 2) + 120;
+      const maxPanY = Math.max(0, (stageH - containerH) / 2) + 120;
+
+      nextPanX = Math.max(-maxPanX, Math.min(maxPanX, nextPanX));
+      nextPanY = Math.max(-maxPanY, Math.min(maxPanY, nextPanY));
+    }
+
     setPan({
-      x: dragStartRef.current.panX + dx,
-      y: dragStartRef.current.panY + dy,
+      x: nextPanX,
+      y: nextPanY,
     });
   };
 
   const handleMouseUp = () => {
     isDraggingRef.current = false;
+    setIsDragging(false);
   };
 
   const displayPages = useMemo(() => {
@@ -347,15 +446,21 @@ export function PagedReader({
 
   const maxPageWidth = currentSpread?.pages.length === 2 ? contentWidth / 2 : contentWidth;
 
-  const getImageStyle = (page: FlatReaderPage) => {
-    const filterCSS = getFilterCSS(filter);
-    const transformCSS = `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px) rotate(${rotation}deg)`;
+  const stageStyle: React.CSSProperties = {
+    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`,
+    transformOrigin: "center center",
+    transition: isDraggingRef.current ? "none" : zoom === 1 ? "transform 0.15s ease-out" : "none",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
 
+  const getImageStyle = (page: FlatReaderPage): React.CSSProperties => {
+    const filterCSS = getFilterCSS(filter);
     const baseStyle: React.CSSProperties = {
       filter: filterCSS,
-      transform: transformCSS,
-      transformOrigin: "center center",
-      transition: zoom === 1 ? "transform 0.15s ease-out" : "none",
+      display: "block",
+      flexShrink: 0,
     };
 
     switch (fitMode) {
@@ -396,7 +501,10 @@ export function PagedReader({
   return (
     <div
       ref={containerRef}
-      className="relative flex h-full min-h-0 w-full overflow-hidden border-l border-border/40 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.02))] outline-none backdrop-blur-xl select-none cursor-pointer"
+      className={cn(
+        "relative flex h-full min-h-0 w-full overflow-hidden border-l border-border/40 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.02))] outline-none backdrop-blur-xl select-none",
+        zoom > 1 ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-pointer"
+      )}
       onClick={handleClickZone}
       onDoubleClick={handleDoubleClick}
       onMouseDown={handleMouseDown}
@@ -406,24 +514,30 @@ export function PagedReader({
       tabIndex={0}
     >
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden pointer-events-none">
-        {displayPages.map((page) => (
-          <img
-            key={page.id}
-            alt={`${page.chapterTitle} #${page.pageIndex + 1}`}
-            className="select-none object-contain pointer-events-auto"
-            draggable={false}
-            loading="eager"
-            onLoad={(event) => {
-              const image = event.currentTarget;
-              if (!image.naturalWidth || !image.naturalHeight) {
-                return;
-              }
-              onMetricMeasured(page.id, image.naturalWidth, image.naturalHeight);
-            }}
-            src={page.sourceURL}
-            style={getImageStyle(page)}
-          />
-        ))}
+        <div
+          ref={spreadStageRef}
+          className="flex items-center justify-center pointer-events-auto"
+          style={stageStyle}
+        >
+          {displayPages.map((page) => (
+            <img
+              key={page.id}
+              alt={`${page.chapterTitle} #${page.pageIndex + 1}`}
+              className="select-none object-contain"
+              draggable={false}
+              loading="eager"
+              onLoad={(event) => {
+                const image = event.currentTarget;
+                if (!image.naturalWidth || !image.naturalHeight) {
+                  return;
+                }
+                onMetricMeasured(page.id, image.naturalWidth, image.naturalHeight);
+              }}
+              src={page.sourceURL}
+              style={getImageStyle(page)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

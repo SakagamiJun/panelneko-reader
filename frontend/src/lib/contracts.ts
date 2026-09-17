@@ -18,6 +18,8 @@ export interface AppSettings {
   readerCoverSolo: boolean;
   readerFitMode: ReaderFitMode;
   readerFilter: ReaderFilter;
+  readerClickCenterZoom?: boolean;
+  readerDoubleClickZoom?: boolean;
   shortcuts: Record<string, string>;
 }
 

@@ -12,6 +12,8 @@ export namespace contracts {
 	    readerCoverSolo: boolean;
 	    readerFitMode: string;
 	    readerFilter: string;
+	    readerClickCenterZoom: boolean;
+	    readerDoubleClickZoom: boolean;
 	    shortcuts: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
@@ -31,6 +33,8 @@ export namespace contracts {
 	        this.readerCoverSolo = source["readerCoverSolo"];
 	        this.readerFitMode = source["readerFitMode"];
 	        this.readerFilter = source["readerFilter"];
+	        this.readerClickCenterZoom = source["readerClickCenterZoom"];
+	        this.readerDoubleClickZoom = source["readerDoubleClickZoom"];
 	        this.shortcuts = source["shortcuts"];
 	    }
 	}

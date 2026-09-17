@@ -25,3 +25,13 @@ export function resolveTheme(mode: ThemeMode, prefersDark: boolean) {
   }
   return prefersDark ? ("dark" as const) : ("light" as const);
 }
+
+export function isMacPlatform(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  return (
+    /Mac|iPod|iPhone|iPad/.test(navigator.platform || "") ||
+    /Macintosh|Mac OS X/.test(navigator.userAgent || "")
+  );
+}

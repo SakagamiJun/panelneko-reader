@@ -86,4 +86,14 @@ func TestNormalizeAppliesReaderDefaults(t *testing.T) {
 	if normalized.AutoRestoreReaderProgress {
 		t.Fatal("expected auto restore reader progress to follow explicit false value")
 	}
+
+	input.ReaderClickCenterZoom = true
+	input.ReaderDoubleClickZoom = true
+	updated, err := service.Normalize(input)
+	if err != nil {
+		t.Fatalf("normalize zoom settings: %v", err)
+	}
+	if !updated.ReaderClickCenterZoom || !updated.ReaderDoubleClickZoom {
+		t.Fatal("expected zoom settings to be true")
+	}
 }

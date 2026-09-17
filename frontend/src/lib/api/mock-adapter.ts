@@ -23,6 +23,8 @@ const defaultSettings: AppSettings = {
   readerCoverSolo: true,
   readerFitMode: "contain",
   readerFilter: "none",
+  readerClickCenterZoom: false,
+  readerDoubleClickZoom: false,
   shortcuts: {
     nextPage: "ArrowRight",
     prevPage: "ArrowLeft",

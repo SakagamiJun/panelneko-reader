@@ -979,6 +979,40 @@ function SettingsForm({
                 <p className="mt-1 text-xs text-muted-foreground">{t("settings.coverSoloHint")}</p>
               </div>
             </label>
+
+            <label className="flex items-start gap-3 rounded-2xl border border-border/60 bg-background/58 px-3 py-3 cursor-pointer">
+              <Checkbox
+                checked={form.readerClickCenterZoom === true}
+                className="mt-0.5"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    readerClickCenterZoom: event.target.checked,
+                  }))
+                }
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">{t("reader.clickCenterZoom")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{t("settings.clickCenterZoomHint")}</p>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 rounded-2xl border border-border/60 bg-background/58 px-3 py-3 cursor-pointer">
+              <Checkbox
+                checked={form.readerDoubleClickZoom === true}
+                className="mt-0.5"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    readerDoubleClickZoom: event.target.checked,
+                  }))
+                }
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">{t("reader.doubleClickZoom")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{t("settings.doubleClickZoomHint")}</p>
+              </div>
+            </label>
           </div>
         </PanelSection>
 

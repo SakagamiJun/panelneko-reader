@@ -60,6 +60,8 @@ type AppSettings struct {
 	ReaderCoverSolo           bool              `json:"readerCoverSolo"`
 	ReaderFitMode             ReaderFitMode     `json:"readerFitMode"`
 	ReaderFilter              ReaderFilter      `json:"readerFilter"`
+	ReaderClickCenterZoom     bool              `json:"readerClickCenterZoom"`
+	ReaderDoubleClickZoom     bool              `json:"readerDoubleClickZoom"`
 	Shortcuts                 map[string]string `json:"shortcuts"`
 }
 
