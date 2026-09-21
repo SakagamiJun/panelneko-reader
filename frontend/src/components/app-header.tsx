@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   BookOpen,
   FolderOpen,
+  Folders,
   Languages,
   MoonStar,
   Search,
@@ -24,6 +25,7 @@ interface AppHeaderProps {
   currentCollection?: LibraryManga | null;
   totalCount: number;
   onBackToMain: () => void;
+  onToggleCollection?: (collection: LibraryManga) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   settings?: AppSettings;
@@ -40,6 +42,7 @@ export function AppHeader({
   currentCollection,
   totalCount,
   onBackToMain,
+  onToggleCollection,
   searchQuery,
   onSearchChange,
   settings,
@@ -127,6 +130,19 @@ export function AppHeader({
             <Badge tone="running" className="shrink-0 font-mono text-[10px]">
               {totalCount}
             </Badge>
+            {currentCollection && onToggleCollection && (
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                className="text-[11px] text-muted-foreground hover:text-foreground shrink-0 h-6 px-1.5 ml-1 gap-1"
+                title={t("library.unsetCollection")}
+                onClick={() => onToggleCollection(currentCollection)}
+              >
+                <Folders className="h-3 w-3" />
+                <span className="hidden sm:inline">{t("library.unsetCollection")}</span>
+              </Button>
+            )}
           </div>
         ) : (
           <div className="flex items-center gap-2 min-w-0">

@@ -68,4 +68,26 @@ describe("MockAdapter Pin Functionality", () => {
   it("handles openDirectory without throwing", async () => {
     await expect(adapter.openDirectory("mock-coll-1")).resolves.toBeUndefined();
   });
+
+  it("toggles collection state on and off", async () => {
+    const items = await adapter.listLibraryManga();
+    const regular = items.find((i) => !i.isCollection && !i.parentPath);
+    expect(regular).toBeDefined();
+
+    // Toggle to collection
+    const isColl = await adapter.toggleCollection(regular!.id);
+    expect(isColl).toBe(true);
+
+    let updated = await adapter.listLibraryManga();
+    let found = updated.find((i) => i.id === regular!.id);
+    expect(found?.isCollection).toBe(true);
+
+    // Toggle back to regular
+    const revertedColl = await adapter.toggleCollection(regular!.id);
+    expect(revertedColl).toBe(false);
+
+    updated = await adapter.listLibraryManga();
+    found = updated.find((i) => i.id === regular!.id);
+    expect(found?.isCollection).toBe(false);
+  });
 });

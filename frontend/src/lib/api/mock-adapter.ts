@@ -139,6 +139,7 @@ export class MockAdapter implements AppAdapter {
   readonly mode = "mock" as const;
 
   private listeners = new Map<string, Set<Listener>>();
+  private collectionOverrides = new Map<string, boolean>();
 
   async getSettings() {
     return this.readSettings();
@@ -154,8 +155,11 @@ export class MockAdapter implements AppAdapter {
     const pins = this.readPins();
     const items: LibraryManga[] = mockLibrary.map((item) => {
       const isPinned = Boolean(pins[item.id]);
+      const overrideColl = this.collectionOverrides.get(item.id);
+      const isCollection = overrideColl !== undefined ? overrideColl : item.isCollection;
       return {
         ...item,
+        isCollection,
         isPinned,
         pinnedAt: pins[item.id] || undefined,
       };
@@ -236,6 +240,16 @@ export class MockAdapter implements AppAdapter {
     localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(pins));
     this.emit(EVENTS.LIBRARY_UPDATED, { mangaID, pinned });
     return pinned;
+  }
+
+  async toggleCollection(mangaID: string) {
+    const current = this.collectionOverrides.get(mangaID);
+    const item = mockLibrary.find((i) => i.id === mangaID);
+    const wasCollection = current !== undefined ? current : Boolean(item?.isCollection);
+    const nextState = !wasCollection;
+    this.collectionOverrides.set(mangaID, nextState);
+    this.emit(EVENTS.LIBRARY_UPDATED, { mangaID, isCollection: nextState });
+    return nextState;
   }
 
   async getReaderManifest(mangaID: string) {

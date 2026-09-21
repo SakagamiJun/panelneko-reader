@@ -7,6 +7,7 @@ import {
   ChevronsLeft,
   Folder,
   FolderOpen,
+  Folders,
   Loader2,
   Pin,
   Search,
@@ -16,6 +17,7 @@ import { AppHeader } from "@/components/app-header";
 import { SettingsDialog, type SettingsTab } from "@/components/sections/settings-dialog";
 import { ReaderController, type ReaderJumpRequest } from "@/components/reader-controller";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { appAdapter } from "@/lib/api";
 import {
   type AppSettings,
@@ -39,6 +41,7 @@ export default function App() {
   const [readerJumpRequest, setReaderJumpRequest] = useState<ReaderJumpRequest | null>(null);
   const [, setReaderChapterTitle] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [collectionToToggle, setCollectionToToggle] = useState<LibraryManga | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -198,6 +201,17 @@ export default function App() {
     },
   });
 
+  const toggleCollectionMutation = useMutation({
+    mutationFn: (mangaID: string) => appAdapter.toggleCollection(mangaID),
+    onSuccess: async (isColl, mangaID) => {
+      await queryClient.invalidateQueries({ queryKey: ["library"] });
+      setCollectionToToggle(null);
+      if (!isColl && currentCollection?.id === mangaID) {
+        setSelectedCollectionPath(null);
+      }
+    },
+  });
+
   const settings = settingsQuery.data;
   const library = libraryQuery.data ?? [];
   const selectedLibrary = library.find((item) => item.id === selectedLibraryID) ?? null;
@@ -308,6 +322,7 @@ export default function App() {
           currentCollection={currentCollection}
           totalCount={displayedItems.length}
           onBackToMain={() => setSelectedCollectionPath(null)}
+          onToggleCollection={setCollectionToToggle}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           settings={settings}
@@ -372,6 +387,7 @@ export default function App() {
             onOpenCollection={setSelectedCollectionPath}
             onOpenSettings={() => openSettingsWithTab("general")}
             onTogglePin={(id) => togglePinMutation.mutate(id)}
+            onToggleCollection={setCollectionToToggle}
             onOpenDirectory={(id) => {
               void appAdapter.openDirectory(id);
             }}
@@ -391,6 +407,34 @@ export default function App() {
           defaultTab={settingsDefaultTab}
         />
       )}
+
+      {/* Collection Toggle Confirmation Dialog */}
+      <ConfirmDialog
+        open={Boolean(collectionToToggle)}
+        title={
+          collectionToToggle?.isCollection
+            ? t("library.unsetCollectionConfirmTitle", { title: collectionToToggle?.title })
+            : t("library.setCollectionConfirmTitle", { title: collectionToToggle?.title })
+        }
+        description={
+          collectionToToggle?.isCollection
+            ? t("library.unsetCollectionConfirmDesc")
+            : t("library.setCollectionConfirmDesc")
+        }
+        confirmLabel={
+          collectionToToggle?.isCollection
+            ? t("library.unsetCollection")
+            : t("library.setCollection")
+        }
+        confirmVariant={collectionToToggle?.isCollection ? "outline" : "primary"}
+        loading={toggleCollectionMutation.isPending}
+        onCancel={() => setCollectionToToggle(null)}
+        onConfirm={() => {
+          if (collectionToToggle) {
+            toggleCollectionMutation.mutate(collectionToToggle.id);
+          }
+        }}
+      />
     </main>
   );
 }
@@ -406,6 +450,7 @@ function LibraryGrid({
   onOpenCollection,
   onOpenSettings,
   onTogglePin,
+  onToggleCollection,
   onOpenDirectory,
 }: {
   items: LibraryManga[];
@@ -418,6 +463,7 @@ function LibraryGrid({
   onOpenCollection: (collectionPath: string) => void;
   onOpenSettings: () => void;
   onTogglePin: (mangaID: string) => void;
+  onToggleCollection?: (item: LibraryManga) => void;
   onOpenDirectory: (mangaID: string) => void;
 }) {
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -642,6 +688,29 @@ function LibraryGrid({
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
+                        {!item.parentPath && onToggleCollection && (
+                          <button
+                            type="button"
+                            title={
+                              item.isCollection
+                                ? t("library.unsetCollection")
+                                : t("library.setCollection")
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleCollection(item);
+                            }}
+                            className={cn(
+                              "flex h-6 w-6 items-center justify-center rounded-md transition-all duration-150",
+                              item.isCollection
+                                ? "text-primary hover:bg-primary/10 opacity-75 group-hover:opacity-100"
+                                : "text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                            )}
+                          >
+                            <Folders className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           title={t("library.openDirectory")}

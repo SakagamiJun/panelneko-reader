@@ -17,6 +17,7 @@ export interface AppAdapter {
   getAppVersion(): Promise<AppVersionInfo>;
   selectDirectory(): Promise<string>;
   togglePin(mangaID: string): Promise<boolean>;
+  toggleCollection(mangaID: string): Promise<boolean>;
   openDirectory(mangaID: string): Promise<void>;
   subscribe(eventName: string, callback: (payload: unknown) => void): () => void;
 }

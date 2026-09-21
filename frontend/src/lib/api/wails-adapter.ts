@@ -55,6 +55,10 @@ export class WailsAdapter implements AppAdapter {
     return ((await getWailsApp()?.TogglePin?.(mangaID)) ?? false) as boolean;
   }
 
+  async toggleCollection(mangaID: string) {
+    return ((await getWailsApp()?.ToggleCollection?.(mangaID)) ?? false) as boolean;
+  }
+
   async openDirectory(mangaID: string) {
     await getWailsApp()?.OpenDirectory?.(mangaID);
   }
