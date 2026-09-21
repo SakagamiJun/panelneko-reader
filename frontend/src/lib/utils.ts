@@ -34,3 +34,65 @@ export function formatDateTime(value: string) {
   return parsed.toLocaleString();
 }
 
+const rtfCache = new Map<string, Intl.RelativeTimeFormat>();
+function getRelativeTimeFormat(locale?: string): Intl.RelativeTimeFormat {
+  const key = locale || "default";
+  let rtf = rtfCache.get(key);
+  if (!rtf) {
+    rtf = new Intl.RelativeTimeFormat(locale || undefined, { numeric: "auto" });
+    rtfCache.set(key, rtf);
+  }
+  return rtf;
+}
+
+export function formatSmartDate(value: string, locale?: string, now: Date = new Date()): string {
+  if (!value) {
+    return "—";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth();
+  const nowDate = now.getDate();
+
+  const parsedYear = parsed.getFullYear();
+  const parsedMonth = parsed.getMonth();
+  const parsedDate = parsed.getDate();
+
+  // Same calendar day: show HH:mm
+  if (nowYear === parsedYear && nowMonth === parsedMonth && nowDate === parsedDate) {
+    const hh = String(parsed.getHours()).padStart(2, "0");
+    const mm = String(parsed.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+
+  // Yesterday
+  const yesterday = new Date(nowYear, nowMonth, nowDate - 1);
+  if (
+    yesterday.getFullYear() === parsedYear &&
+    yesterday.getMonth() === parsedMonth &&
+    yesterday.getDate() === parsedDate
+  ) {
+    try {
+      return getRelativeTimeFormat(locale).format(-1, "day");
+    } catch {
+      return "昨天";
+    }
+  }
+
+  const mm = String(parsedMonth + 1).padStart(2, "0");
+  const dd = String(parsedDate).padStart(2, "0");
+
+  // Same year: MM-DD
+  if (nowYear === parsedYear) {
+    return `${mm}-${dd}`;
+  }
+
+  // Different year: YYYY-MM
+  return `${parsedYear}-${mm}`;
+}
+

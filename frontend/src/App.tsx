@@ -25,7 +25,7 @@ import {
 import { i18n } from "@/lib/i18n";
 import { emitRuntimeEvent } from "@/lib/runtime";
 import { resolveLocale, resolveTheme } from "@/lib/system";
-import { cn, formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime, formatSmartDate } from "@/lib/utils";
 
 export default function App() {
   const { t } = useTranslation();
@@ -616,9 +616,9 @@ function LibraryGrid({
                       </h4>
                     </div>
 
-                    <div className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
+                    <div className="flex items-center justify-between gap-1.5 text-[11px] text-muted-foreground">
                       <div
-                        className="min-w-0 flex-1 truncate cursor-pointer"
+                        className="min-w-0 flex-1 truncate cursor-pointer flex items-center gap-1"
                         onClick={() => {
                           if (item.isCollection) {
                             onOpenCollection(item.relativePath);
@@ -627,13 +627,17 @@ function LibraryGrid({
                           }
                         }}
                       >
-                        <span>
+                        <span className="shrink-0">
                           {item.isCollection
                             ? `${t("library.mangaUnit", { count: item.mangaCount || 0 })} · ${t("library.chapterUnit", { count: item.chapterCount })}`
                             : `${t("library.chapterUnit", { count: item.chapterCount })} · ${t("library.pageUnit", { count: item.pageCount })}`}
                         </span>
-                        <span className="text-muted-foreground/60 ml-1.5">
-                          {formatDateTime(item.lastUpdated)}
+                        <span className="text-muted-foreground/30 shrink-0">·</span>
+                        <span
+                          className="text-muted-foreground/60 truncate font-mono text-[10.5px]"
+                          title={formatDateTime(item.lastUpdated)}
+                        >
+                          {formatSmartDate(item.lastUpdated, i18n.language)}
                         </span>
                       </div>
 
