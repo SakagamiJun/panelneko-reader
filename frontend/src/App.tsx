@@ -328,13 +328,15 @@ export default function App() {
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
         {selectedLibraryID && readerQuery.isLoading ? (
-          <div className="flex h-full items-center justify-center bg-card/20 text-sm text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin mr-2 text-primary" />
-            Loading reader…
+          <div className="flex h-full flex-col items-center justify-center bg-background text-muted-foreground animate-in fade-in-50 duration-150 gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card border border-border/80 shadow-xs">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+            <span className="text-xs text-muted-foreground">正在加载阅读器…</span>
           </div>
         ) : selectedLibraryID && readerQuery.isError ? (
-          <div className="flex h-full items-center justify-center bg-card/20 text-sm text-danger">
-            Failed to open this manga reader.
+          <div className="flex h-full items-center justify-center bg-background text-xs text-danger font-medium">
+            无法打开当前漫画阅读器。
           </div>
         ) : selectedLibraryID && readerQuery.data && settings ? (
           <ReaderController
@@ -447,14 +449,13 @@ function LibraryGrid({
 
   if (loading) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center">
-        <div className="relative flex items-center justify-center mb-6">
-          <div className="absolute h-20 w-20 animate-ping rounded-full bg-primary/10" />
-          <div className="relative z-10 flex h-14 w-14 items-center justify-center rounded-2xl bg-card border border-border/80 shadow-md">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center animate-in fade-in-50 duration-200">
+        <div className="flex items-center justify-center mb-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-card border border-border/80 shadow-xs">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         </div>
-        <h3 className="mb-2 text-base font-bold text-foreground">
+        <h3 className="mb-1 text-sm font-semibold tracking-tight text-foreground">
           {t("library.loadingTitle")}
         </h3>
         <p className="max-w-xs text-xs text-muted-foreground leading-relaxed">
@@ -467,11 +468,11 @@ function LibraryGrid({
   // Search yielded no results
   if (items.length === 0 && searchQuery) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center text-muted-foreground">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/40 border border-border/60 mb-3 text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center p-6 text-center text-muted-foreground animate-in fade-in-50 duration-200">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-card border border-border/80 shadow-xs mb-3 text-muted-foreground">
           <Search className="h-5 w-5" />
         </div>
-        <h3 className="text-sm font-semibold text-foreground mb-1">
+        <h3 className="text-sm font-semibold tracking-tight text-foreground mb-1">
           {t("library.noMatches")}
         </h3>
         <p className="text-xs text-muted-foreground mb-4">
@@ -487,11 +488,11 @@ function LibraryGrid({
   // Completely empty library
   if (items.length === 0 && totalItemsCount === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center text-muted-foreground">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/40 border border-border/60 mb-3 text-muted-foreground/60">
-          <BookImage className="h-7 w-7" />
+      <div className="flex h-full flex-col items-center justify-center p-6 text-center text-muted-foreground animate-in fade-in-50 duration-200">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-card border border-border/80 shadow-xs mb-3 text-muted-foreground">
+          <BookImage className="h-5 w-5" />
         </div>
-        <p className="max-w-md text-xs sm:text-sm font-medium mb-4 leading-relaxed">
+        <p className="max-w-md text-xs sm:text-sm font-medium mb-4 leading-relaxed text-foreground/80">
           {emptyLabel}
         </p>
         <Button onClick={onOpenSettings} size="sm" variant="outline">
