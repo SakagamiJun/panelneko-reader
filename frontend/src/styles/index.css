@@ -19,39 +19,36 @@
 
 :root {
   color-scheme: light;
-  --bg: 243 247 252;
-  --fg: 19 29 40;
-  --muted: 226 234 242;
-  --muted-fg: 98 113 126;
-  --primary: 27 88 196;
+  --bg: 248 250 252;
+  --fg: 15 23 42;
+  --muted: 241 245 249;
+  --muted-fg: 100 116 139;
+  --primary: 79 70 229;
   --primary-fg: 255 255 255;
   --card: 255 255 255;
-  --border: 210 222 233;
-  --success: 20 141 92;
-  --warning: 202 124 14;
-  --danger: 198 48 69;
+  --border: 226 232 240;
+  --success: 16 185 129;
+  --warning: 245 158 11;
+  --danger: 239 68 68;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: 9 14 23;
-  --fg: 238 244 248;
-  --muted: 31 43 58;
-  --muted-fg: 143 157 171;
-  --primary: 99 170 255;
-  --primary-fg: 11 17 27;
-  --card: 17 24 36;
-  --border: 43 58 77;
-  --success: 76 212 156;
-  --warning: 240 177 79;
-  --danger: 255 117 138;
+  --bg: 13 15 18;
+  --fg: 243 244 246;
+  --muted: 28 32 40;
+  --muted-fg: 156 163 175;
+  --primary: 99 102 241;
+  --primary-fg: 255 255 255;
+  --card: 20 23 28;
+  --border: 38 43 54;
+  --success: 52 211 153;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
 }
 
 body {
   @apply min-h-screen bg-background text-foreground antialiased;
-  background-image:
-    radial-gradient(circle at top left, rgba(71, 151, 255, 0.18), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(33, 191, 124, 0.12), transparent 28%);
 }
 
 #root {
