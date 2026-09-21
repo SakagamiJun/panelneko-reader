@@ -51,6 +51,30 @@ body {
   @apply min-h-screen bg-background text-foreground antialiased;
 }
 
+/* Minimalist Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--muted-fg), 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--muted-fg), 0.4);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--muted-fg), 0.2) transparent;
+}
+
 #root {
   @apply min-h-screen;
 }
