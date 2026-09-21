@@ -560,7 +560,7 @@ function LibraryGrid({
                       }
                     }}
                   >
-                    <div className="relative aspect-[4/5] overflow-hidden bg-muted/50 w-full">
+                    <div className="relative aspect-[4/5] overflow-hidden bg-muted/40 w-full">
                       {item.coverImageURL ? (
                         <img
                           alt={item.title}
@@ -593,25 +593,13 @@ function LibraryGrid({
                           <span>{t("library.pinnedBadge")}</span>
                         </div>
                       )}
-
-                      {/* Cover bottom text overlay */}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-3 text-white pointer-events-none">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-white/70 font-mono">
-                          {item.isCollection
-                            ? t("library.mangaUnit", { count: item.mangaCount || 0 })
-                            : t("library.chapterUnit", { count: item.chapterCount })}
-                        </div>
-                        <div className="mt-0.5 line-clamp-2 text-xs sm:text-sm font-bold text-white leading-snug">
-                          {item.title}
-                        </div>
-                      </div>
                     </div>
                   </div>
 
                   {/* Card bottom info and actions bar */}
-                  <div className="flex flex-1 items-center justify-between gap-2 px-3 py-2 bg-card border-t border-border/40">
+                  <div className="flex flex-col px-3 py-2.5 bg-card border-t border-border/40 gap-1">
                     <div
-                      className="min-w-0 flex-1 cursor-pointer"
+                      className="cursor-pointer"
                       onClick={() => {
                         if (item.isCollection) {
                           onOpenCollection(item.relativePath);
@@ -620,51 +608,71 @@ function LibraryGrid({
                         }
                       }}
                     >
-                      <div className="text-[11px] text-muted-foreground truncate">
-                        {item.isCollection
-                          ? `${t("library.chapterUnit", { count: item.chapterCount })} · ${t("library.pageUnit", { count: item.pageCount })}`
-                          : t("library.pageUnit", { count: item.pageCount })}
-                      </div>
-                      <div className="mt-0.5 truncate text-[10px] text-muted-foreground/60">
-                        {formatDateTime(item.lastUpdated)}
-                      </div>
+                      <h4
+                        className="text-xs sm:text-sm font-semibold tracking-tight text-foreground truncate group-hover:text-primary transition-colors leading-snug"
+                        title={item.title}
+                      >
+                        {item.title}
+                      </h4>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        title={t("library.openDirectory")}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenDirectory(item.id);
+                    <div className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
+                      <div
+                        className="min-w-0 flex-1 truncate cursor-pointer"
+                        onClick={() => {
+                          if (item.isCollection) {
+                            onOpenCollection(item.relativePath);
+                          } else {
+                            onOpenManga(item.id);
+                          }
                         }}
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all duration-150 hover:bg-muted hover:text-foreground group-hover:opacity-100"
                       >
-                        <FolderOpen className="h-3.5 w-3.5" />
-                      </button>
+                        <span>
+                          {item.isCollection
+                            ? `${t("library.mangaUnit", { count: item.mangaCount || 0 })} · ${t("library.chapterUnit", { count: item.chapterCount })}`
+                            : `${t("library.chapterUnit", { count: item.chapterCount })} · ${t("library.pageUnit", { count: item.pageCount })}`}
+                        </span>
+                        <span className="text-muted-foreground/60 ml-1.5">
+                          {formatDateTime(item.lastUpdated)}
+                        </span>
+                      </div>
 
-                      <button
-                        type="button"
-                        title={item.isPinned ? t("library.unpin") : t("library.pin")}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onTogglePin(item.id);
-                        }}
-                        className={cn(
-                          "flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-all duration-150 shrink-0",
-                          item.isPinned
-                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
-                            : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-foreground"
-                        )}
-                      >
-                        <Pin
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          title={t("library.openDirectory")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenDirectory(item.id);
+                          }}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all duration-150 hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                        >
+                          <FolderOpen className="h-3.5 w-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          title={item.isPinned ? t("library.unpin") : t("library.pin")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onTogglePin(item.id);
+                          }}
                           className={cn(
-                            "h-3 w-3 transition-transform",
-                            item.isPinned &&
-                              "rotate-45 fill-amber-500 text-amber-500 dark:text-amber-400 dark:fill-amber-400"
+                            "flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-all duration-150 shrink-0",
+                            item.isPinned
+                              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
+                              : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-foreground"
                           )}
-                        />
-                      </button>
+                        >
+                          <Pin
+                            className={cn(
+                              "h-3 w-3 transition-transform",
+                              item.isPinned &&
+                                "rotate-45 fill-amber-500 text-amber-500 dark:text-amber-400 dark:fill-amber-400"
+                            )}
+                          />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </article>
