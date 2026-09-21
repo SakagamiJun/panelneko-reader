@@ -44,6 +44,7 @@ interface ReaderControllerProps {
   settings: AppSettings;
   onUpdateSettings?: (patch: Partial<AppSettings>) => void;
   onExitReader?: () => void;
+  onOpenFullSettings?: () => void;
 }
 
 function resolveJumpTargetIndex(jumpRequest: ReaderJumpRequest, pages: FlatReaderPage[]) {
@@ -63,6 +64,7 @@ export function ReaderController({
   settings,
   onUpdateSettings,
   onExitReader,
+  onOpenFullSettings,
 }: ReaderControllerProps) {
   const handledJumpRequestIDRef = useRef<number | null>(null);
   const lastSavedPageRef = useRef<number | null>(null);
@@ -547,6 +549,7 @@ export function ReaderController({
         onSpreadModeChange={handleSpreadModeChange}
         onToggleChapterDrawer={() => setChapterDrawerOpen(true)}
         onToggleLock={handleToggleLock}
+        onOpenFullSettings={onOpenFullSettings}
         rotation={rotation}
         spreadMode={spreadMode}
         totalPages={pages.length}

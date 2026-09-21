@@ -229,10 +229,13 @@ export function AppHeader({
               ? "bg-primary/10 text-primary border-primary/30"
               : "text-muted-foreground hover:text-foreground"
           )}
-          title={t("shell.settings")}
+          title={`${t("shell.settings")} (${isMac ? "⌘," : "Ctrl+,"})`}
         >
           <Settings2 className="h-3.5 w-3.5" />
           <span className="hidden sm:inline font-medium">{t("shell.settings")}</span>
+          <Kbd size="sm" className="hidden md:inline-flex text-[9px] h-4 min-w-[1rem] px-1 opacity-60 ml-0.5">
+            {isMac ? "⌘," : "^,"}
+          </Kbd>
         </Button>
       </div>
     </header>

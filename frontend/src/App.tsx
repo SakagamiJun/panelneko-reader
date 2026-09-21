@@ -13,7 +13,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
-import { SettingsPanel } from "@/components/sections/settings-panel";
+import { SettingsDialog, type SettingsTab } from "@/components/sections/settings-dialog";
 import { ReaderController, type ReaderJumpRequest } from "@/components/reader-controller";
 import { Button } from "@/components/ui/button";
 import { appAdapter } from "@/lib/api";
@@ -31,8 +31,8 @@ export default function App() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
-  const [paneVisible, setPaneVisible] = useState(false);
-  const [paneWidth, setPaneWidth] = useState(400);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsDefaultTab, setSettingsDefaultTab] = useState<SettingsTab>("general");
   const [selectedCollectionPath, setSelectedCollectionPath] = useState<string | null>(null);
   const [selectedLibraryID, setSelectedLibraryID] = useState<string | null>(null);
   const [readerMode, setReaderMode] = useState<"scroll" | "paged">("paged");
@@ -234,23 +234,28 @@ export default function App() {
     );
   });
 
-  const togglePane = () => {
-    setPaneVisible((current) => !current);
-  };
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setSettingsOpen((prev) => !prev);
+        return;
+      }
 
-  const startResize = (clientX: number, initialWidth: number) => {
-    const handleMouseMove = (event: MouseEvent) => {
-      const nextWidth = initialWidth + event.clientX - clientX;
-      setPaneWidth(Math.min(520, Math.max(340, nextWidth)));
+      if (e.key === "Escape" && settingsOpen) {
+        e.preventDefault();
+        setSettingsOpen(false);
+        return;
+      }
     };
 
-    const handleMouseUp = () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [settingsOpen]);
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+  const openSettingsWithTab = (tab: SettingsTab = "general") => {
+    setSettingsDefaultTab(tab);
+    setSettingsOpen(true);
   };
 
   const handleExitReader = () => {
@@ -309,8 +314,8 @@ export default function App() {
           settingsPending={settingsMutation.isPending}
           onCycleTheme={cycleTheme}
           onCycleLocale={cycleLocale}
-          settingsOpen={paneVisible}
-          onToggleSettings={togglePane}
+          settingsOpen={settingsOpen}
+          onToggleSettings={() => openSettingsWithTab("general")}
           onOpenLibraryFolder={
             settings?.libraryRoot
               ? () => {
@@ -345,6 +350,7 @@ export default function App() {
             }}
             onChapterChange={(_, title) => setReaderChapterTitle(title)}
             onExitReader={handleExitReader}
+            onOpenFullSettings={() => openSettingsWithTab("reader")}
           />
         ) : selectedLibraryID && readerQuery.data ? (
           <div className="flex h-full items-center justify-center bg-card/20 text-sm text-muted-foreground">
@@ -362,68 +368,26 @@ export default function App() {
               setSelectedLibraryID(id);
             }}
             onOpenCollection={setSelectedCollectionPath}
-            onOpenSettings={togglePane}
+            onOpenSettings={() => openSettingsWithTab("general")}
             onTogglePin={(id) => togglePinMutation.mutate(id)}
             onOpenDirectory={(id) => {
               void appAdapter.openDirectory(id);
             }}
           />
         )}
-
-        {/* Resizable Settings Drawer Panel */}
-        {paneVisible && (
-          <div
-            className="pointer-events-none absolute inset-y-0 left-0 z-30 flex"
-            style={{ width: paneWidth + 10 }}
-          >
-            <section
-              className="pointer-events-auto h-full overflow-hidden border-r border-border/70 bg-card/95 backdrop-blur-2xl shadow-2xl flex flex-col"
-              style={{ width: paneWidth }}
-            >
-              <div className="app-window-drag-region flex items-center justify-between border-b border-border/60 px-4 h-12 shrink-0">
-                <div className="flex items-center gap-2">
-                  <Settings2 className="h-4 w-4 text-primary" />
-                  <h1 className="text-sm font-bold text-foreground">
-                    {t("settings.title")}
-                  </h1>
-                </div>
-                <Button
-                  onClick={togglePane}
-                  size="xs"
-                  variant="ghost"
-                  className="app-window-no-drag h-7 w-7 p-0 hover:bg-muted"
-                  title={t("shell.collapseSidebar")}
-                >
-                  <ChevronsLeft className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="flex-1 overflow-hidden">
-                {settings ? (
-                  <SettingsPanel
-                    settings={settings}
-                    onSave={(nextSettings) => settingsMutation.mutate(nextSettings)}
-                    version={versionQuery.data}
-                    isSaving={settingsMutation.isPending}
-                  />
-                ) : (
-                  <div className="p-4 text-xs text-muted-foreground">
-                    {t("settings.loading")}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <button
-              className="pointer-events-auto relative w-[10px] shrink-0 cursor-col-resize"
-              onMouseDown={(event) => startResize(event.clientX, paneWidth)}
-              type="button"
-            >
-              <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-border/60 transition hover:bg-primary/60" />
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Centered Master-Detail Settings Dialog */}
+      {settings && (
+        <SettingsDialog
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          settings={settings}
+          onSave={(nextSettings) => settingsMutation.mutate(nextSettings)}
+          version={versionQuery.data}
+          defaultTab={settingsDefaultTab}
+        />
+      )}
     </main>
   );
 }

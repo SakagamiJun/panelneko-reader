@@ -56,6 +56,7 @@ interface ReaderTopBarProps {
   menuLocked?: boolean;
   onToggleLock?: () => void;
   onHide: () => void;
+  onOpenFullSettings?: () => void;
 }
 
 export function ReaderTopBar({
@@ -86,6 +87,7 @@ export function ReaderTopBar({
   menuLocked,
   onToggleLock,
   onHide,
+  onOpenFullSettings,
 }: ReaderTopBarProps) {
   const { t } = useTranslation();
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -440,6 +442,24 @@ export function ReaderTopBar({
                   <span>{isFullscreen ? t("reader.exitFullscreen") : t("reader.fullscreen")}</span>
                 </Button>
               </div>
+
+              {onOpenFullSettings && (
+                <div className="pt-2 border-t border-border/40">
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      onOpenFullSettings();
+                    }}
+                    className="w-full h-7 text-[11px] text-muted-foreground hover:text-foreground justify-between px-2"
+                  >
+                    <span>全部设置...</span>
+                    <span className="font-mono text-[9px] opacity-60">⌘,</span>
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
