@@ -19,6 +19,8 @@ export function OpenDirectory(arg1:string):Promise<void>;
 
 export function SelectDirectory():Promise<string>;
 
+export function ToggleCollection(arg1:string):Promise<boolean>;
+
 export function TogglePin(arg1:string):Promise<boolean>;
 
 export function UpdateReaderProgress(arg1:contracts.ReaderProgress):Promise<contracts.ReaderProgress>;

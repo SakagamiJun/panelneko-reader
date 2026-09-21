@@ -210,6 +210,21 @@ func (a *App) TogglePin(mangaID string) (bool, error) {
 	return pinned, nil
 }
 
+func (a *App) ToggleCollection(mangaID string) (bool, error) {
+	if err := a.ensureReady(); err != nil {
+		return false, err
+	}
+
+	isCollection, err := library.ToggleCollectionMarker(a.settings.Get().LibraryRoot, mangaID)
+	if err != nil {
+		return false, err
+	}
+
+	a.emit(contracts.EventLibraryUpdated, nil)
+
+	return isCollection, nil
+}
+
 func (a *App) OpenDirectory(mangaID string) error {
 	if err := a.ensureReady(); err != nil {
 		return err

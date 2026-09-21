@@ -34,6 +34,10 @@ export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
+export function ToggleCollection(arg1) {
+  return window['go']['main']['App']['ToggleCollection'](arg1);
+}
+
 export function TogglePin(arg1) {
   return window['go']['main']['App']['TogglePin'](arg1);
 }

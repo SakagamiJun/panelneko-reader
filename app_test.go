@@ -293,6 +293,40 @@ func TestAppOpenDirectory(t *testing.T) {
 	}
 }
 
+func TestAppToggleCollection(t *testing.T) {
+	libraryRoot := t.TempDir()
+	mangaDir := filepath.Join(libraryRoot, "Series B")
+	if err := os.MkdirAll(filepath.Join(mangaDir, "Ch 1"), 0o755); err != nil {
+		t.Fatalf("mkdir manga B: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(mangaDir, "Ch 1", "001.jpg"), []byte("test"), 0o644); err != nil {
+		t.Fatalf("write page: %v", err)
+	}
+
+	app, cleanup := newAssetTestApp(t, libraryRoot)
+	defer cleanup()
+
+	mangaID := encodePathTokenForAppTest("Series B")
+
+	// 1. Toggle to collection
+	isColl, err := app.ToggleCollection(mangaID)
+	if err != nil {
+		t.Fatalf("toggle collection error: %v", err)
+	}
+	if !isColl {
+		t.Fatal("expected isCollection to be true")
+	}
+
+	// 2. Toggle back to regular
+	isColl, err = app.ToggleCollection(mangaID)
+	if err != nil {
+		t.Fatalf("toggle collection error: %v", err)
+	}
+	if isColl {
+		t.Fatal("expected isCollection to be false")
+	}
+}
+
 func newAssetTestApp(t *testing.T, libraryRoot string) (*App, func()) {
 	t.Helper()
 

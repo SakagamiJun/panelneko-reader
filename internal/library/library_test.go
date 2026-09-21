@@ -753,3 +753,72 @@ func TestResolveDirectoryPath(t *testing.T) {
 		t.Fatal("expected traversal path to fail")
 	}
 }
+
+func TestToggleCollectionMarker(t *testing.T) {
+	root := t.TempDir()
+
+	// 1. Regular directory manga
+	mangaDir := filepath.Join(root, "Series A")
+	writeFile(t, filepath.Join(mangaDir, "Vol 1", "001.jpg"), "test")
+
+	mangaID := encodeMangaID("Series A")
+
+	// Initially not a collection
+	if hasCollectionMarker(mangaDir) {
+		t.Fatal("expected not to be a collection initially")
+	}
+
+	// Toggle to collection
+	isColl, err := ToggleCollectionMarker(root, mangaID)
+	if err != nil {
+		t.Fatalf("toggle to collection failed: %v", err)
+	}
+	if !isColl {
+		t.Fatal("expected isColl to be true")
+	}
+	if !hasCollectionMarker(mangaDir) {
+		t.Fatal("expected .collection marker to exist")
+	}
+
+	// Toggle back to regular
+	isColl, err = ToggleCollectionMarker(root, mangaID)
+	if err != nil {
+		t.Fatalf("toggle back to regular failed: %v", err)
+	}
+	if isColl {
+		t.Fatal("expected isColl to be false")
+	}
+	if hasCollectionMarker(mangaDir) {
+		t.Fatal("expected .collection marker to be removed")
+	}
+
+	// Test with legacy marker collection.txt
+	writeFile(t, filepath.Join(mangaDir, "collection.txt"), "some text")
+	if !hasCollectionMarker(mangaDir) {
+		t.Fatal("expected collection.txt to be recognized as marker")
+	}
+	isColl, err = ToggleCollectionMarker(root, mangaID)
+	if err != nil {
+		t.Fatalf("toggle with legacy marker failed: %v", err)
+	}
+	if isColl {
+		t.Fatal("expected isColl to be false after toggling off legacy marker")
+	}
+	if hasCollectionMarker(mangaDir) {
+		t.Fatal("expected legacy marker to be removed")
+	}
+
+	// Archive file cannot be toggled to collection
+	archivePath := filepath.Join(root, "Archive.cbz")
+	writeZipArchive(t, archivePath, map[string]string{"001.jpg": "img"})
+	archiveID := encodeMangaID("Archive.cbz")
+	if _, err := ToggleCollectionMarker(root, archiveID); err == nil {
+		t.Fatal("expected archive file to fail toggle")
+	}
+
+	// Nested item cannot be toggled to collection
+	nestedID := encodeMangaID("Series A/Nested")
+	if _, err := ToggleCollectionMarker(root, nestedID); err == nil {
+		t.Fatal("expected nested path to fail toggle")
+	}
+}

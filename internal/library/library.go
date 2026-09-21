@@ -94,15 +94,16 @@ func (r *archiveAssetReadCloser) Close() error {
 	return entryErr
 }
 
+var CollectionMarkers = []string{
+	".collection",
+	".category",
+	"collection.txt",
+	"_collection",
+	".panelneko-collection",
+}
+
 func hasCollectionMarker(dirPath string) bool {
-	markers := []string{
-		".collection",
-		".category",
-		"collection.txt",
-		"_collection",
-		".panelneko-collection",
-	}
-	for _, m := range markers {
+	for _, m := range CollectionMarkers {
 		target := filepath.Join(dirPath, m)
 		if info, err := os.Stat(target); err == nil && !info.IsDir() {
 			return true
@@ -197,7 +198,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 				// Collection-level cache: if the aggregate mod time is unchanged,
 				// reuse all previously cached items for this collection.
 				if prevTime, ok := prevModTimes[collRelativePath]; ok && prevTime == collModTimeMax {
-					if prevColl, ok := prevItems[collRelativePath]; ok {
+					if prevColl, ok := prevItems[collRelativePath]; ok && prevColl.IsCollection {
 						mu.Lock()
 						items = append(items, prevColl)
 						newModTimes[prevColl.ID] = collModTimeMax
@@ -309,7 +310,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 			relPath := filepath.ToSlash(entry.Name())
 
 			if prevTime, ok := prevModTimes[relPath]; ok && prevTime == modTime {
-				if prevItem, ok := prevItems[relPath]; ok {
+				if prevItem, ok := prevItems[relPath]; ok && !prevItem.IsCollection {
 					mu.Lock()
 					items = append(items, prevItem)
 					newModTimes[prevItem.ID] = modTime
@@ -396,6 +397,51 @@ func ResolveDirectoryPath(outputRoot string, mangaID string) (string, error) {
 	}
 
 	return targetPath, nil
+}
+
+func ToggleCollectionMarker(outputRoot string, mangaID string) (bool, error) {
+	relativePath, err := decodeMangaID(mangaID)
+	if err != nil {
+		relativePath = filepath.FromSlash(mangaID)
+	}
+
+	relSlash := filepath.ToSlash(filepath.Clean(relativePath))
+	if strings.Contains(relSlash, "/") {
+		return false, fmt.Errorf("nested collections are not supported")
+	}
+
+	targetPath, err := resolveWithinRoot(outputRoot, relativePath)
+	if err != nil {
+		return false, err
+	}
+
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		return false, fmt.Errorf("stat manga directory: %w", err)
+	}
+
+	if !info.IsDir() {
+		return false, fmt.Errorf("only directories can be set as collections")
+	}
+
+	if hasCollectionMarker(targetPath) {
+		for _, m := range CollectionMarkers {
+			target := filepath.Join(targetPath, m)
+			if stat, err := os.Stat(target); err == nil && !stat.IsDir() {
+				if err := os.Remove(target); err != nil {
+					return false, fmt.Errorf("remove collection marker %s: %w", m, err)
+				}
+			}
+		}
+		return false, nil
+	}
+
+	markerPath := filepath.Join(targetPath, ".collection")
+	if err := os.WriteFile(markerPath, []byte{}, 0644); err != nil {
+		return false, fmt.Errorf("create collection marker: %w", err)
+	}
+
+	return true, nil
 }
 
 func OpenDirectoryInFileManager(dirPath string) error {
