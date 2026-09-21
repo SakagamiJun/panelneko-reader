@@ -279,7 +279,7 @@ func (a *App) UpdateReaderProgress(input contracts.ReaderProgress) (contracts.Re
 	return input, nil
 }
 
-func (a *App) AssetHandler() http.Handler {
+func (a *App) assetHandler() http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if !library.IsLibraryAssetRequest(request.URL.Path) {
 			http.NotFound(writer, request)

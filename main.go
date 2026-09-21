@@ -17,7 +17,7 @@ var assets embed.FS
 
 func main() {
 	app := NewApp()
-	assetHandler := app.AssetHandler()
+	assetHandler := app.assetHandler()
 
 	if err := wails.Run(&options.App{
 		Title:     "PanelNeko Reader",

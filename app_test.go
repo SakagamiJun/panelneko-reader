@@ -39,7 +39,7 @@ func TestAssetHandlerStreamsArchiveAssets(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, requestURL, nil)
 	recorder := httptest.NewRecorder()
-	app.AssetHandler().ServeHTTP(recorder, request)
+	app.assetHandler().ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d", recorder.Code)
@@ -65,7 +65,7 @@ func TestAssetHandlerStreamsArchiveAssets(t *testing.T) {
 	req304 := httptest.NewRequest(http.MethodGet, requestURL, nil)
 	req304.Header.Set("If-None-Match", etag)
 	rec304 := httptest.NewRecorder()
-	app.AssetHandler().ServeHTTP(rec304, req304)
+	app.assetHandler().ServeHTTP(rec304, req304)
 	if rec304.Code != http.StatusNotModified {
 		t.Fatalf("expected 304, got %d", rec304.Code)
 	}
@@ -117,7 +117,7 @@ func TestAssetHandlerArchiveNotFoundScenarios(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, test.requestURL, nil)
 			recorder := httptest.NewRecorder()
-			app.AssetHandler().ServeHTTP(recorder, request)
+			app.assetHandler().ServeHTTP(recorder, request)
 
 			if recorder.Code != test.wantStatus {
 				t.Fatalf("unexpected status: got %d want %d", recorder.Code, test.wantStatus)
