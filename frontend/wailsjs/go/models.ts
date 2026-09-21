@@ -12,6 +12,7 @@ export namespace contracts {
 	    readerCoverSolo: boolean;
 	    readerFitMode: string;
 	    readerFilter: string;
+	    readerSideClickMode: string;
 	    readerClickCenterZoom: boolean;
 	    readerDoubleClickZoom: boolean;
 	    shortcuts: Record<string, string>;
@@ -33,6 +34,7 @@ export namespace contracts {
 	        this.readerCoverSolo = source["readerCoverSolo"];
 	        this.readerFitMode = source["readerFitMode"];
 	        this.readerFilter = source["readerFilter"];
+	        this.readerSideClickMode = source["readerSideClickMode"];
 	        this.readerClickCenterZoom = source["readerClickCenterZoom"];
 	        this.readerDoubleClickZoom = source["readerDoubleClickZoom"];
 	        this.shortcuts = source["shortcuts"];

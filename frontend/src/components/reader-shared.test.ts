@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReaderSpreads, type FlatReaderPage } from "@/components/reader-shared";
+import { buildReaderSpreads, isNextSpreadOnLeft, type FlatReaderPage } from "@/components/reader-shared";
 
 function createMockPage(globalIndex: number, chapterID = "c1"): FlatReaderPage {
   return {
@@ -106,5 +106,24 @@ describe("buildReaderSpreads", () => {
     expect(spreads[1].pages).toHaveLength(1);
     expect(spreads[1].isWide).toBe(true);
     expect(spreads[2].pages).toHaveLength(1);
+  });
+});
+
+describe("isNextSpreadOnLeft", () => {
+  it("defaults to right_next mode where next is on right (false) regardless of reading direction", () => {
+    expect(isNextSpreadOnLeft("rtl", "right_next")).toBe(false);
+    expect(isNextSpreadOnLeft("ltr", "right_next")).toBe(false);
+    expect(isNextSpreadOnLeft("rtl")).toBe(false);
+    expect(isNextSpreadOnLeft("ltr")).toBe(false);
+  });
+
+  it("handles left_next mode where next is on left (true) regardless of reading direction", () => {
+    expect(isNextSpreadOnLeft("rtl", "left_next")).toBe(true);
+    expect(isNextSpreadOnLeft("ltr", "left_next")).toBe(true);
+  });
+
+  it("handles follow mode where next is on left for rtl and on right for ltr", () => {
+    expect(isNextSpreadOnLeft("rtl", "follow")).toBe(true);
+    expect(isNextSpreadOnLeft("ltr", "follow")).toBe(false);
   });
 });

@@ -32,6 +32,9 @@ func TestNewServicePersistsDefaults(t *testing.T) {
 	if filepath.Base(current.LibraryRoot) != "MangaLibrary" {
 		t.Fatalf("unexpected library root: %s", current.LibraryRoot)
 	}
+	if current.ReaderSideClickMode != "right_next" {
+		t.Fatalf("unexpected default reader side click mode: %s", current.ReaderSideClickMode)
+	}
 }
 
 func TestNormalizeRejectsUnsupportedLocale(t *testing.T) {
@@ -89,11 +92,24 @@ func TestNormalizeAppliesReaderDefaults(t *testing.T) {
 
 	input.ReaderClickCenterZoom = true
 	input.ReaderDoubleClickZoom = true
+	input.ReaderSideClickMode = "follow"
 	updated, err := service.Normalize(input)
 	if err != nil {
 		t.Fatalf("normalize zoom settings: %v", err)
 	}
 	if !updated.ReaderClickCenterZoom || !updated.ReaderDoubleClickZoom {
 		t.Fatal("expected zoom settings to be true")
+	}
+	if updated.ReaderSideClickMode != "follow" {
+		t.Fatalf("expected reader side click mode to be follow, got %s", updated.ReaderSideClickMode)
+	}
+
+	input.ReaderSideClickMode = "invalid_mode"
+	fallback, err := service.Normalize(input)
+	if err != nil {
+		t.Fatalf("normalize invalid side click mode: %v", err)
+	}
+	if fallback.ReaderSideClickMode != "right_next" {
+		t.Fatalf("expected invalid side click mode to fallback to right_next, got %s", fallback.ReaderSideClickMode)
 	}
 }

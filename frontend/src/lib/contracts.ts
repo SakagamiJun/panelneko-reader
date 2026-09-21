@@ -5,6 +5,7 @@ export type ReaderDirection = "rtl" | "ltr";
 export type ReaderSpreadMode = "auto" | "single" | "double";
 export type ReaderFitMode = "contain" | "width" | "height" | "original";
 export type ReaderFilter = "none" | "invert" | "sepia" | "high-contrast";
+export type ReaderSideClickMode = "right_next" | "follow" | "left_next";
 
 export interface AppSettings {
   libraryRoot: string;
@@ -18,6 +19,7 @@ export interface AppSettings {
   readerCoverSolo: boolean;
   readerFitMode: ReaderFitMode;
   readerFilter: ReaderFilter;
+  readerSideClickMode?: ReaderSideClickMode;
   readerClickCenterZoom?: boolean;
   readerDoubleClickZoom?: boolean;
   shortcuts: Record<string, string>;

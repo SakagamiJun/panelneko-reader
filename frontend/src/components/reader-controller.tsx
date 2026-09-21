@@ -502,6 +502,7 @@ export function ReaderController({
           rotation={rotation}
           shortcuts={settings.shortcuts}
           spreadMode={spreadMode}
+          sideClickMode={settings.readerSideClickMode || "right_next"}
           clickCenterZoom={settings.readerClickCenterZoom === true}
           doubleClickZoom={settings.readerDoubleClickZoom === true}
         />

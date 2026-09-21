@@ -23,6 +23,7 @@ const defaultSettings: AppSettings = {
   readerCoverSolo: true,
   readerFitMode: "contain",
   readerFilter: "none",
+  readerSideClickMode: "right_next",
   readerClickCenterZoom: false,
   readerDoubleClickZoom: false,
   shortcuts: {

@@ -13,12 +13,14 @@ import {
   DEFAULT_ASPECT_RATIO,
   PAGE_PADDING,
   buildReaderSpreads,
+  isNextSpreadOnLeft,
 } from "@/components/reader-shared";
 import type {
   ReaderDirection,
   ReaderFitMode,
   ReaderFilter,
   ReaderSpreadMode,
+  ReaderSideClickMode,
 } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +38,7 @@ interface PagedReaderProps {
   coverSolo?: boolean;
   fitMode?: ReaderFitMode;
   filter?: ReaderFilter;
+  sideClickMode?: ReaderSideClickMode;
   rotation?: number;
   onToggleHUD?: () => void;
   clickCenterZoom?: boolean;
@@ -69,6 +72,7 @@ export function PagedReader({
   coverSolo = true,
   fitMode = "contain",
   filter = "none",
+  sideClickMode = "right_next",
   rotation = 0,
   onToggleHUD,
   clickCenterZoom = false,
@@ -358,16 +362,18 @@ export function PagedReader({
       return;
     }
 
+    const isNextOnLeft = isNextSpreadOnLeft(direction, sideClickMode);
+
     if (ratio < 0.3) {
       // Left zone
-      if (direction === "rtl") {
+      if (isNextOnLeft) {
         goToNextSpread();
       } else {
         goToPrevSpread();
       }
     } else if (ratio > 0.7) {
       // Right zone
-      if (direction === "rtl") {
+      if (isNextOnLeft) {
         goToPrevSpread();
       } else {
         goToNextSpread();

@@ -1,4 +1,4 @@
-import type { ReaderPage } from "@/lib/contracts";
+import type { ReaderDirection, ReaderPage, ReaderSideClickMode } from "@/lib/contracts";
 
 export interface PageMetric {
   width: number;
@@ -140,4 +140,17 @@ export function buildReaderSpreads(
   }
 
   return { spreads, pageToSpreadIndex };
+}
+
+export function isNextSpreadOnLeft(
+  direction: ReaderDirection = "rtl",
+  sideClickMode: ReaderSideClickMode = "right_next"
+): boolean {
+  if (sideClickMode === "left_next") {
+    return true;
+  }
+  if (sideClickMode === "right_next") {
+    return false;
+  }
+  return direction === "rtl";
 }

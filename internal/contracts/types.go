@@ -48,21 +48,30 @@ const (
 	ReaderFilterHighContrast ReaderFilter = "high-contrast"
 )
 
+type ReaderSideClickMode string
+
+const (
+	ReaderSideClickModeRightNext ReaderSideClickMode = "right_next"
+	ReaderSideClickModeFollow    ReaderSideClickMode = "follow"
+	ReaderSideClickModeLeftNext  ReaderSideClickMode = "left_next"
+)
+
 type AppSettings struct {
-	LibraryRoot               string            `json:"libraryRoot"`
-	LocaleMode                LocaleMode        `json:"localeMode"`
-	Locale                    string            `json:"locale"`
-	ThemeMode                 ThemeMode         `json:"themeMode"`
-	ReaderScrollCachePages    int               `json:"readerScrollCachePages"`
-	AutoRestoreReaderProgress bool              `json:"autoRestoreReaderProgress"`
-	ReaderDirection           ReaderDirection   `json:"readerDirection"`
-	ReaderSpreadMode          ReaderSpreadMode  `json:"readerSpreadMode"`
-	ReaderCoverSolo           bool              `json:"readerCoverSolo"`
-	ReaderFitMode             ReaderFitMode     `json:"readerFitMode"`
-	ReaderFilter              ReaderFilter      `json:"readerFilter"`
-	ReaderClickCenterZoom     bool              `json:"readerClickCenterZoom"`
-	ReaderDoubleClickZoom     bool              `json:"readerDoubleClickZoom"`
-	Shortcuts                 map[string]string `json:"shortcuts"`
+	LibraryRoot               string              `json:"libraryRoot"`
+	LocaleMode                LocaleMode          `json:"localeMode"`
+	Locale                    string              `json:"locale"`
+	ThemeMode                 ThemeMode           `json:"themeMode"`
+	ReaderScrollCachePages    int                 `json:"readerScrollCachePages"`
+	AutoRestoreReaderProgress bool                `json:"autoRestoreReaderProgress"`
+	ReaderDirection           ReaderDirection     `json:"readerDirection"`
+	ReaderSpreadMode          ReaderSpreadMode    `json:"readerSpreadMode"`
+	ReaderCoverSolo           bool                `json:"readerCoverSolo"`
+	ReaderFitMode             ReaderFitMode       `json:"readerFitMode"`
+	ReaderFilter              ReaderFilter        `json:"readerFilter"`
+	ReaderSideClickMode       ReaderSideClickMode `json:"readerSideClickMode"`
+	ReaderClickCenterZoom     bool                `json:"readerClickCenterZoom"`
+	ReaderDoubleClickZoom     bool                `json:"readerDoubleClickZoom"`
+	Shortcuts                 map[string]string   `json:"shortcuts"`
 }
 
 type LibraryManga struct {

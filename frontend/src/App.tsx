@@ -35,6 +35,7 @@ import {
   type ReaderSpreadMode,
   type ReaderFitMode,
   type ReaderFilter,
+  type ReaderSideClickMode,
 } from "@/lib/contracts";
 import { i18n } from "@/lib/i18n";
 import { emitRuntimeEvent } from "@/lib/runtime";
@@ -910,6 +911,31 @@ function SettingsForm({
               >
                 <option value="rtl">{t("reader.directionRTL")}</option>
                 <option value="ltr">{t("reader.directionLTR")}</option>
+              </Select>
+            </Field>
+
+            <Field
+              label={t("reader.sideClickMode")}
+              hint={
+                (form.readerSideClickMode || "right_next") === "follow"
+                  ? t("settings.sideClickFollowHint")
+                  : (form.readerSideClickMode || "right_next") === "left_next"
+                  ? t("settings.sideClickLeftNextHint")
+                  : t("settings.sideClickRightNextHint")
+              }
+            >
+              <Select
+                value={form.readerSideClickMode || "right_next"}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    readerSideClickMode: event.target.value as ReaderSideClickMode,
+                  }))
+                }
+              >
+                <option value="right_next">{t("reader.sideClickRightNext")}</option>
+                <option value="follow">{t("reader.sideClickFollow")}</option>
+                <option value="left_next">{t("reader.sideClickLeftNext")}</option>
               </Select>
             </Field>
 

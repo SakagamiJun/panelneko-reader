@@ -64,6 +64,7 @@ func DefaultSettings() contracts.AppSettings {
 		ReaderCoverSolo:           true,
 		ReaderFitMode:             contracts.ReaderFitModeContain,
 		ReaderFilter:              contracts.ReaderFilterNone,
+		ReaderSideClickMode:       contracts.ReaderSideClickModeRightNext,
 		ReaderClickCenterZoom:     false,
 		ReaderDoubleClickZoom:     false,
 		Shortcuts: map[string]string{
@@ -147,6 +148,15 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 		settings.ReaderFilter = contracts.ReaderFilterHighContrast
 	default:
 		settings.ReaderFilter = contracts.ReaderFilterNone
+	}
+
+	switch input.ReaderSideClickMode {
+	case contracts.ReaderSideClickModeFollow:
+		settings.ReaderSideClickMode = contracts.ReaderSideClickModeFollow
+	case contracts.ReaderSideClickModeLeftNext:
+		settings.ReaderSideClickMode = contracts.ReaderSideClickModeLeftNext
+	default:
+		settings.ReaderSideClickMode = contracts.ReaderSideClickModeRightNext
 	}
 
 	settings.ReaderClickCenterZoom = input.ReaderClickCenterZoom
