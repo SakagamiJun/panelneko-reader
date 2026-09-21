@@ -519,12 +519,8 @@ export function SettingsDialog({
                         </span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-border/20">
-                        <span>技术栈</span>
-                        <span className="text-foreground">Wails v2 + React 19 + Go</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-border/20">
-                        <span>设计体系</span>
-                        <span className="text-foreground">Linear & DevToys Minimalist</span>
+                        <span>开源协议</span>
+                        <span className="text-foreground font-mono">MIT License</span>
                       </div>
                       <div className="flex justify-between py-1">
                         <span>快捷键说明</span>
@@ -532,6 +528,47 @@ export function SettingsDialog({
                       </div>
                     </div>
                   </div>
+                </SettingGroup>
+
+                <SettingGroup
+                  title="致谢"
+                  description="致谢为 PanelNeko 提供坚实基础的开源项目与生态："
+                >
+                  <SettingRow
+                    title="Wails"
+                    description="现代化轻量桌面应用框架，驱动 Go 后端与 Web 前端协同"
+                    control={<span className="text-[11px] font-mono text-muted-foreground">v2</span>}
+                  />
+                  <SettingRow
+                    title="Go"
+                    description="高效可靠的系统级并发语言运行时与流式 IO 基础"
+                    control={<span className="text-[11px] font-mono text-muted-foreground">Backend</span>}
+                  />
+                  <SettingRow
+                    title="React 19"
+                    description="声明式 UI 渲染引擎与并发组件模型"
+                    control={<span className="text-[11px] font-mono text-muted-foreground">Frontend</span>}
+                  />
+                  <SettingRow
+                    title="Tailwind CSS"
+                    description="高性能现代原子化样式系统"
+                    control={<span className="text-[11px] font-mono text-muted-foreground">Styling</span>}
+                  />
+                  <SettingRow
+                    title="TanStack Query & Virtual"
+                    description="虚拟化长列表与高效客户端数据状态缓存"
+                    control={<span className="text-[11px] font-mono text-muted-foreground">State</span>}
+                  />
+                  <SettingRow
+                    title="SQLite"
+                    description="轻量级嵌入式本地结构化存储引擎"
+                    control={<span className="text-[11px] font-mono text-muted-foreground">Storage</span>}
+                  />
+                  <SettingRow
+                    title="Lucide Icons"
+                    description="简洁一致的现代开源矢量图标库"
+                    control={<span className="text-[11px] font-mono text-muted-foreground">Icons</span>}
+                  />
                 </SettingGroup>
               </div>
             )}
