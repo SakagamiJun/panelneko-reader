@@ -15,8 +15,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select } from "@/components/ui/select";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Switch } from "@/components/ui/switch";
 import type { FlatReaderPage } from "@/components/reader-shared";
 import type {
   ReaderDirection,
@@ -202,32 +202,15 @@ export function ReaderTopBar({
       {/* Right section: Mode toggle, Chapter drawer, Jump popover, Settings popover, Hide UI */}
       <div className="app-window-no-drag flex items-center gap-1.5 shrink-0">
         {/* Mode Toggle: Paged vs Scroll */}
-        <div className="flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5">
-          <button
-            type="button"
-            onClick={() => onModeChange("paged")}
-            className={cn(
-              "px-2 py-1 text-xs rounded-md transition-colors font-medium",
-              mode === "paged"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {t("reader.pagedMode")}
-          </button>
-          <button
-            type="button"
-            onClick={() => onModeChange("scroll")}
-            className={cn(
-              "px-2 py-1 text-xs rounded-md transition-colors font-medium",
-              mode === "scroll"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {t("reader.scrollMode")}
-          </button>
-        </div>
+        <SegmentedControl<"paged" | "scroll">
+          size="sm"
+          value={mode}
+          onChange={onModeChange}
+          options={[
+            { value: "paged", label: t("reader.pagedMode") },
+            { value: "scroll", label: t("reader.scrollMode") },
+          ]}
+        />
 
         {/* Chapters list button */}
         <Button
@@ -344,8 +327,8 @@ export function ReaderTopBar({
           </Button>
 
           {settingsOpen && (
-            <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-border/80 bg-background/95 p-3.5 shadow-xl backdrop-blur-2xl z-40 space-y-3">
-              <div className="text-xs font-semibold text-foreground border-b border-border/60 pb-2">
+            <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-border/80 bg-card/95 p-3.5 shadow-2xl backdrop-blur-2xl z-40 space-y-3.5">
+              <div className="text-xs font-bold text-foreground border-b border-border/60 pb-2">
                 {t("settings.readerPreferences")}
               </div>
 
@@ -354,15 +337,17 @@ export function ReaderTopBar({
                 <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("reader.spreadMode")}
                 </label>
-                <Select
+                <SegmentedControl<ReaderSpreadMode>
+                  size="sm"
+                  className="w-full flex"
                   value={spreadMode}
-                  onChange={(e) => onSpreadModeChange(e.target.value as ReaderSpreadMode)}
-                  className="h-8 text-xs"
-                >
-                  <option value="auto">{t("reader.spreadAuto")}</option>
-                  <option value="single">{t("reader.spreadSingle")}</option>
-                  <option value="double">{t("reader.spreadDouble")}</option>
-                </Select>
+                  onChange={onSpreadModeChange}
+                  options={[
+                    { value: "auto", label: t("reader.spreadAuto") },
+                    { value: "single", label: t("reader.spreadSingle") },
+                    { value: "double", label: t("reader.spreadDouble") },
+                  ]}
+                />
               </div>
 
               {/* Reading Direction */}
@@ -370,40 +355,45 @@ export function ReaderTopBar({
                 <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("reader.direction")}
                 </label>
-                <Select
+                <SegmentedControl<ReaderDirection>
+                  size="sm"
+                  className="w-full flex"
                   value={direction}
-                  onChange={(e) => onDirectionChange(e.target.value as ReaderDirection)}
-                  className="h-8 text-xs"
-                >
-                  <option value="rtl">{t("reader.directionRTL")}</option>
-                  <option value="ltr">{t("reader.directionLTR")}</option>
-                </Select>
+                  onChange={onDirectionChange}
+                  options={[
+                    { value: "rtl", label: t("reader.directionRTL") },
+                    { value: "ltr", label: t("reader.directionLTR") },
+                  ]}
+                />
               </div>
 
               {/* Cover Solo */}
-              <label className="flex items-center gap-2 cursor-pointer py-1">
-                <Checkbox
-                  checked={coverSolo}
-                  onChange={(e) => onCoverSoloChange(e.target.checked)}
-                />
+              <div className="flex items-center justify-between py-1">
                 <span className="text-xs font-medium text-foreground">{t("reader.coverSolo")}</span>
-              </label>
+                <Switch
+                  size="sm"
+                  checked={coverSolo}
+                  onChange={onCoverSoloChange}
+                />
+              </div>
 
               {/* Fit Mode */}
               <div className="space-y-1">
                 <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("reader.fitMode")}
                 </label>
-                <Select
+                <SegmentedControl<ReaderFitMode>
+                  size="sm"
+                  className="w-full flex"
                   value={fitMode}
-                  onChange={(e) => onFitModeChange(e.target.value as ReaderFitMode)}
-                  className="h-8 text-xs"
-                >
-                  <option value="contain">{t("reader.fitContain")}</option>
-                  <option value="width">{t("reader.fitWidth")}</option>
-                  <option value="height">{t("reader.fitHeight")}</option>
-                  <option value="original">{t("reader.fitOriginal")}</option>
-                </Select>
+                  onChange={onFitModeChange}
+                  options={[
+                    { value: "contain", label: t("reader.fitContain") },
+                    { value: "width", label: t("reader.fitWidth") },
+                    { value: "height", label: t("reader.fitHeight") },
+                    { value: "original", label: t("reader.fitOriginal") },
+                  ]}
+                />
               </div>
 
               {/* Visual Filter */}
@@ -411,26 +401,28 @@ export function ReaderTopBar({
                 <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("reader.filter")}
                 </label>
-                <Select
+                <SegmentedControl<ReaderFilter>
+                  size="sm"
+                  className="w-full flex"
                   value={filter}
-                  onChange={(e) => onFilterChange(e.target.value as ReaderFilter)}
-                  className="h-8 text-xs"
-                >
-                  <option value="none">{t("reader.filterNone")}</option>
-                  <option value="invert">{t("reader.filterInvert")}</option>
-                  <option value="sepia">{t("reader.filterSepia")}</option>
-                  <option value="high-contrast">{t("reader.filterHighContrast")}</option>
-                </Select>
+                  onChange={onFilterChange}
+                  options={[
+                    { value: "none", label: t("reader.filterNone") },
+                    { value: "invert", label: t("reader.filterInvert") },
+                    { value: "sepia", label: t("reader.filterSepia") },
+                    { value: "high-contrast", label: t("reader.filterHighContrast") },
+                  ]}
+                />
               </div>
 
               {/* Rotate and Fullscreen actions */}
               <div className="flex items-center gap-2 border-t border-border/60 pt-2.5">
                 <Button
                   type="button"
-                  size="sm"
+                  size="xs"
                   variant="outline"
                   onClick={onRotate}
-                  className="h-8 text-xs gap-1.5 flex-1"
+                  className="h-7 text-xs gap-1.5 flex-1"
                   title={t("reader.rotate")}
                 >
                   <RotateCw className="h-3.5 w-3.5" />
@@ -439,10 +431,10 @@ export function ReaderTopBar({
 
                 <Button
                   type="button"
-                  size="sm"
+                  size="xs"
                   variant="outline"
                   onClick={toggleFullscreen}
-                  className="h-8 text-xs gap-1.5 flex-1"
+                  className="h-7 text-xs gap-1.5 flex-1"
                 >
                   {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
                   <span>{isFullscreen ? t("reader.exitFullscreen") : t("reader.fullscreen")}</span>
