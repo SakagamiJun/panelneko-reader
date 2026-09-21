@@ -97,7 +97,7 @@ export function SettingsDialog({
   };
 
   const tabs: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
-    { id: "general", label: t("settings.title"), icon: <Sliders className="h-4 w-4" /> },
+    { id: "general", label: t("settings.generalTab", { defaultValue: "常规设置" }), icon: <Sliders className="h-4 w-4" /> },
     { id: "reader", label: t("settings.readerPreferences"), icon: <BookOpen className="h-4 w-4" /> },
     { id: "shortcuts", label: t("settings.shortcuts"), icon: <Keyboard className="h-4 w-4" /> },
     { id: "about", label: "关于", icon: <Info className="h-4 w-4" /> },
@@ -202,10 +202,10 @@ export function SettingsDialog({
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-all duration-150 text-left",
+                      "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors duration-150 text-left border outline-none select-none",
                       isActive
-                        ? "bg-card text-foreground shadow-xs border border-border/70 font-bold"
-                        : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                        ? "bg-card text-foreground shadow-xs border-border/70 font-bold"
+                        : "border-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                     )}
                   >
                     <span className={cn(isActive ? "text-primary" : "text-muted-foreground")}>

@@ -11,6 +11,7 @@ export const en = {
   },
   settings: {
     title: "Settings",
+    generalTab: "General",
     subtitle: "System-level defaults for reader behavior.",
     loading: "Loading settings…",
     outputRoot: "Library Directory",

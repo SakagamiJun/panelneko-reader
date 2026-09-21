@@ -11,6 +11,7 @@ export const ja = {
   },
   settings: {
     title: "設定",
+    generalTab: "一般設定",
     subtitle: "リーダーのシステム設定です。",
     loading: "設定を読み込み中…",
     outputRoot: "ライブラリフォルダー",

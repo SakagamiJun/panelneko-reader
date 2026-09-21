@@ -11,6 +11,7 @@ export const zhCN = {
   },
   settings: {
     title: "设置",
+    generalTab: "常规设置",
     subtitle: "阅读器的系统级默认参数。",
     loading: "正在加载设置…",
     outputRoot: "本地漫画库目录",

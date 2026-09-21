@@ -221,13 +221,13 @@ export function AppHeader({
         <Button
           type="button"
           size="xs"
-          variant={settingsOpen ? "subtle" : "ghost"}
+          variant="ghost"
           onClick={onToggleSettings}
           className={cn(
-            "h-7 px-2.5 text-xs gap-1.5 transition-colors",
+            "h-7 px-2.5 text-xs gap-1.5 transition-colors border outline-none focus:outline-none focus-visible:ring-0",
             settingsOpen
-              ? "bg-primary/10 text-primary border-primary/30"
-              : "text-muted-foreground hover:text-foreground"
+              ? "bg-primary/10 text-primary border-primary/30 font-semibold shadow-xs"
+              : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60"
           )}
           title={`${t("shell.settings")} (${isMac ? "⌘," : "Ctrl+,"})`}
         >
