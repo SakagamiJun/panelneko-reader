@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
+import { ChapterPopover } from "@/components/chapter-popover";
 import type { FlatReaderPage } from "@/components/reader-shared";
 import type {
   ReaderDirection,
@@ -51,7 +52,7 @@ interface ReaderTopBarProps {
   onSeekPage: (pageNumber: number) => void;
   onPrevChapter: () => void;
   onNextChapter: () => void;
-  onToggleChapterDrawer: () => void;
+  onSelectChapter: (chapterID: string) => void;
   onExitReader: () => void;
   visible: boolean;
   menuLocked?: boolean;
@@ -82,7 +83,7 @@ export function ReaderTopBar({
   onSeekPage,
   onPrevChapter,
   onNextChapter,
-  onToggleChapterDrawer,
+  onSelectChapter,
   onExitReader,
   visible,
   menuLocked,
@@ -92,10 +93,12 @@ export function ReaderTopBar({
 }: ReaderTopBarProps) {
   const { t } = useTranslation();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [chaptersOpen, setChaptersOpen] = useState(false);
   const [jumpOpen, setJumpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pageInput, setPageInput] = useState("");
 
+  const chaptersRef = useRef<HTMLDivElement>(null);
   const jumpRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
 
@@ -126,6 +129,9 @@ export function ReaderTopBar({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      if (chaptersRef.current && !chaptersRef.current.contains(e.target as Node)) {
+        setChaptersOpen(false);
+      }
       if (jumpRef.current && !jumpRef.current.contains(e.target as Node)) {
         setJumpOpen(false);
       }
@@ -136,6 +142,22 @@ export function ReaderTopBar({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (chaptersOpen) {
+          setChaptersOpen(false);
+        } else if (jumpOpen) {
+          setJumpOpen(false);
+        } else if (settingsOpen) {
+          setSettingsOpen(false);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [chaptersOpen, jumpOpen, settingsOpen]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -215,18 +237,33 @@ export function ReaderTopBar({
           ]}
         />
 
-        {/* Chapters list button */}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={onToggleChapterDrawer}
-          className="h-8 gap-1.5 px-2.5 text-xs text-foreground"
-          title={t("reader.chapterList")}
-        >
-          <List className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">{t("reader.chapters")}</span>
-        </Button>
+        {/* Chapters list button and popover */}
+        <div className="relative" ref={chaptersRef}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setChaptersOpen(!chaptersOpen);
+              setJumpOpen(false);
+              setSettingsOpen(false);
+            }}
+            className={cn("h-8 gap-1.5 px-2.5 text-xs text-foreground", chaptersOpen && "bg-muted")}
+            title={t("reader.chapterList")}
+          >
+            <List className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{t("reader.chapters")}</span>
+          </Button>
+
+          {chaptersOpen && (
+            <ChapterPopover
+              chapters={manifest.chapters}
+              activeChapterID={activePage?.chapterID}
+              onSelectChapter={onSelectChapter}
+              onClose={() => setChaptersOpen(false)}
+            />
+          )}
+        </div>
 
         {/* Quick jump & Scrubber popover */}
         <div className="relative" ref={jumpRef}>
@@ -236,6 +273,7 @@ export function ReaderTopBar({
             variant="outline"
             onClick={() => {
               setJumpOpen(!jumpOpen);
+              setChaptersOpen(false);
               setSettingsOpen(false);
             }}
             className={cn("h-8 gap-1.5 px-2.5 text-xs text-foreground", jumpOpen && "bg-muted")}
@@ -321,6 +359,7 @@ export function ReaderTopBar({
             variant="outline"
             onClick={() => {
               setSettingsOpen(!settingsOpen);
+              setChaptersOpen(false);
               setJumpOpen(false);
             }}
             className={cn("h-8 gap-1.5 px-2.5 text-xs text-foreground", settingsOpen && "bg-muted")}

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { PagedReader } from "@/components/paged-reader";
 import { ScrollReader } from "@/components/scroll-reader";
 import { ReaderTopBar } from "@/components/reader-top-bar";
-import { ChapterDrawer } from "@/components/chapter-drawer";
 import {
   type FlatReaderPage,
   type PageMetric,
@@ -86,10 +85,9 @@ export function ReaderController({
   const [filter, setFilter] = useState<ReaderFilter>(settings.readerFilter || "none");
   const [rotation, setRotation] = useState<number>(0);
 
-  // HUD and Drawer state
+  // HUD state
   const [hudVisible, setHudVisible] = useState(true);
   const [menuLocked, setMenuLocked] = useState(false);
-  const [chapterDrawerOpen, setChapterDrawerOpen] = useState(false);
   const hudTimerRef = useRef<number | null>(null);
 
   const resetHudTimer = useCallback(() => {
@@ -547,22 +545,13 @@ export function ReaderController({
         onRotate={handleRotate}
         onSeekPage={handleSeekPage}
         onSpreadModeChange={handleSpreadModeChange}
-        onToggleChapterDrawer={() => setChapterDrawerOpen(true)}
+        onSelectChapter={handleSelectChapter}
         onToggleLock={handleToggleLock}
         onOpenFullSettings={onOpenFullSettings}
         rotation={rotation}
         spreadMode={spreadMode}
         totalPages={pages.length}
         visible={hudVisible}
-      />
-
-      {/* Slide-over Chapter Drawer */}
-      <ChapterDrawer
-        activeChapterID={activePage?.chapterID}
-        chapters={manifest.chapters}
-        onClose={() => setChapterDrawerOpen(false)}
-        onSelectChapter={handleSelectChapter}
-        open={chapterDrawerOpen}
       />
     </div>
   );
