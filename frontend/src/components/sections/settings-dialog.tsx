@@ -33,6 +33,7 @@ export interface SettingsDialogProps {
   settings: AppSettings;
   onSave: (settings: AppSettings) => void;
   version?: string;
+  commit?: string;
   defaultTab?: "general" | "reader" | "shortcuts" | "about";
 }
 
@@ -44,6 +45,7 @@ export function SettingsDialog({
   settings,
   onSave,
   version,
+  commit,
   defaultTab = "general",
 }: SettingsDialogProps) {
   const { t } = useTranslation();
@@ -518,6 +520,14 @@ export function SettingsDialog({
                           v{version || "0.1.0"}
                         </span>
                       </div>
+                      {commit && (
+                        <div className="flex justify-between py-1 border-b border-border/20">
+                          <span>构建提交</span>
+                          <span className="font-mono text-foreground font-medium px-1.5 py-0.5 rounded bg-muted/50 border border-border/40 text-[11px]">
+                            {commit}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between py-1 border-b border-border/20">
                         <span>开源协议</span>
                         <span className="text-foreground font-mono">MIT License</span>

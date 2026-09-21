@@ -124,3 +124,8 @@ type ReaderProgress struct {
 	Page      int    `json:"page"`
 	UpdatedAt string `json:"updatedAt"`
 }
+
+type AppVersionInfo struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit,omitempty"`
+}

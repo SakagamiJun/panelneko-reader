@@ -386,7 +386,8 @@ export default function App() {
           onClose={() => setSettingsOpen(false)}
           settings={settings}
           onSave={(nextSettings) => settingsMutation.mutate(nextSettings)}
-          version={versionQuery.data}
+          version={versionQuery.data?.version}
+          commit={versionQuery.data?.commit}
           defaultTab={settingsDefaultTab}
         />
       )}

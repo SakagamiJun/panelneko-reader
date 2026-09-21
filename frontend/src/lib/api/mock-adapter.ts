@@ -262,7 +262,10 @@ export class MockAdapter implements AppAdapter {
   }
 
   async getAppVersion() {
-    return "0.1.0";
+    return {
+      version: "0.1.0",
+      commit: "d40a9d2",
+    };
   }
 
   async selectDirectory() {

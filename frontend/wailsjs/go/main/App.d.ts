@@ -5,7 +5,7 @@ import {contracts} from '../models';
 
 export function AssetHandler():Promise<http.Handler>;
 
-export function GetAppVersion():Promise<string>;
+export function GetAppVersion():Promise<contracts.AppVersionInfo>;
 
 export function GetReaderManifest(arg1:string):Promise<contracts.ReaderManifest>;
 

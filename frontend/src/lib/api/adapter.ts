@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  AppVersionInfo,
   LibraryManga,
   ReaderManifest,
   ReaderProgress,
@@ -13,7 +14,7 @@ export interface AppAdapter {
   getReaderManifest(mangaID: string): Promise<ReaderManifest>;
   getReaderProgress(mangaID: string): Promise<ReaderProgress>;
   updateReaderProgress(input: ReaderProgress): Promise<ReaderProgress>;
-  getAppVersion(): Promise<string>;
+  getAppVersion(): Promise<AppVersionInfo>;
   selectDirectory(): Promise<string>;
   togglePin(mangaID: string): Promise<boolean>;
   openDirectory(mangaID: string): Promise<void>;

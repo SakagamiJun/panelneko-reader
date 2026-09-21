@@ -40,6 +40,20 @@ export namespace contracts {
 	        this.shortcuts = source["shortcuts"];
 	    }
 	}
+	export class AppVersionInfo {
+	    version: string;
+	    commit?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppVersionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.commit = source["commit"];
+	    }
+	}
 	export class LibraryManga {
 	    id: string;
 	    title: string;

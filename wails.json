@@ -6,7 +6,8 @@
     "version": "0.1.0",
     "productName": "PanelNeko Reader",
     "copyright": "Copyright © 2026 (MIT License)",
-    "comments": "Built using Wails"
+    "comments": "Built using Wails",
+    "commit": "d40a9d2"
   },
   "frontend:dir": "frontend",
   "frontend:install": "bun install",

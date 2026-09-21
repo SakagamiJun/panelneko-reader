@@ -76,6 +76,11 @@ export interface ReaderProgress {
   updatedAt: string;
 }
 
+export interface AppVersionInfo {
+  version: string;
+  commit?: string;
+}
+
 export const EVENTS = {
   SETTINGS_UPDATED: "settings:updated",
   THEME_RESOLVED: "theme:resolved",

@@ -353,3 +353,14 @@ func writeZipArchiveForAppTest(t *testing.T, archivePath string, files map[strin
 		t.Fatalf("close archive writer: %v", err)
 	}
 }
+
+func TestAppGetAppVersion(t *testing.T) {
+	app := &App{}
+	info := app.GetAppVersion()
+	if info.Version == "" {
+		t.Fatal("expected non-empty version")
+	}
+	if info.Commit == "" {
+		t.Fatal("expected non-empty commit hash")
+	}
+}

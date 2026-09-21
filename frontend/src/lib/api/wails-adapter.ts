@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  AppVersionInfo,
   LibraryManga,
   ReaderManifest,
   ReaderProgress,
@@ -34,8 +35,16 @@ export class WailsAdapter implements AppAdapter {
     return (await getWailsApp()?.UpdateReaderProgress?.(input)) as ReaderProgress;
   }
 
-  async getAppVersion() {
-    return ((await getWailsApp()?.GetAppVersion?.()) ?? "0.0.0") as string;
+  async getAppVersion(): Promise<AppVersionInfo> {
+    const raw = (await getWailsApp()?.GetAppVersion?.()) as unknown;
+    if (typeof raw === "string") {
+      return { version: raw, commit: "" };
+    }
+    const obj = raw as Partial<AppVersionInfo> | undefined;
+    return {
+      version: obj?.version ?? "0.1.0",
+      commit: obj?.commit ?? "",
+    };
   }
 
   async selectDirectory() {

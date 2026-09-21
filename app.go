@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -25,19 +26,49 @@ var wailsConfig embed.FS
 type wailsProjectConfig struct {
 	Info struct {
 		Version string `json:"version"`
+		Commit  string `json:"commit"`
 	} `json:"info"`
 }
 
-func (a *App) GetAppVersion() string {
+var buildCommit string
+
+func (a *App) GetAppVersion() contracts.AppVersionInfo {
+	version := "0.1.0"
+	commit := buildCommit
+
 	data, err := wailsConfig.ReadFile("wails.json")
-	if err != nil {
-		return "0.0.0"
+	if err == nil {
+		var cfg wailsProjectConfig
+		if json.Unmarshal(data, &cfg) == nil {
+			if cfg.Info.Version != "" {
+				version = cfg.Info.Version
+			}
+			if commit == "" && cfg.Info.Commit != "" {
+				commit = cfg.Info.Commit
+			}
+		}
 	}
-	var cfg wailsProjectConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return "0.0.0"
+
+	if commit == "" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			for _, setting := range info.Settings {
+				if setting.Key == "vcs.revision" {
+					commit = setting.Value
+					break
+				}
+			}
+		}
 	}
-	return cfg.Info.Version
+
+	commit = strings.TrimSpace(commit)
+	if len(commit) > 7 {
+		commit = commit[:7]
+	}
+
+	return contracts.AppVersionInfo{
+		Version: version,
+		Commit:  commit,
+	}
 }
 
 type App struct {

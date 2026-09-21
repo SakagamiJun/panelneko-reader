@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 // Get tag name from command line argument or environment variable (GitHub Actions)
 let tag = process.argv[2] || process.env.GITHUB_REF_NAME;
@@ -30,8 +31,19 @@ if (fs.existsSync(wailsPath)) {
     const wailsConfig = JSON.parse(fs.readFileSync(wailsPath, 'utf8'));
     if (wailsConfig.info) {
       wailsConfig.info.version = version;
+      let commit = process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : '';
+      if (!commit) {
+        try {
+          commit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+        } catch {
+          commit = '';
+        }
+      }
+      if (commit) {
+        wailsConfig.info.commit = commit;
+      }
       fs.writeFileSync(wailsPath, JSON.stringify(wailsConfig, null, 2) + '\n');
-      console.log(`Successfully updated wails.json to version ${version}`);
+      console.log(`Successfully updated wails.json to version ${version}${commit ? ` (${commit})` : ''}`);
     }
   } catch (err) {
     console.error(`Error updating wails.json: ${err.message}`);
