@@ -248,7 +248,7 @@ export function ScrollReader({
   return (
     <div
       ref={containerRef}
-      className="h-full min-h-0 overflow-hidden border-l border-border/40 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.02))] backdrop-blur-xl"
+      className="h-full min-h-0 overflow-hidden border-l border-border/40 bg-background"
     >
       <div
         ref={scrollRef}
@@ -274,7 +274,7 @@ export function ScrollReader({
               >
                 <div className="relative">
                   {chapterChanged ? (
-                    <div className="pointer-events-none absolute left-3 top-3 z-10 inline-flex rounded-full border border-white/70 bg-black/38 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/90 backdrop-blur-md">
+                    <div className="pointer-events-none absolute left-3 top-3 z-10 inline-flex items-center rounded-md border border-white/15 bg-black/75 px-2.5 py-1 text-xs font-medium text-white/90 shadow-sm backdrop-blur-md">
                       {page.chapterTitle}
                     </div>
                   ) : null}

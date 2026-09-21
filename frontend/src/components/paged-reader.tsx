@@ -508,7 +508,7 @@ export function PagedReader({
     <div
       ref={containerRef}
       className={cn(
-        "relative flex h-full min-h-0 w-full overflow-hidden border-l border-border/40 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.02))] outline-none backdrop-blur-xl select-none",
+        "relative flex h-full min-h-0 w-full overflow-hidden bg-background outline-none select-none",
         zoom > 1 ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-pointer"
       )}
       onClick={handleClickZone}
