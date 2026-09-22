@@ -46,6 +46,15 @@ export const ja = {
     shortcutAction_backToLibrary: "ライブラリに戻る",
     shortcutAction_toggleMenu: "メニューの表示/非表示",
     pressAnyKey: "キーを押してください...",
+    autoCheckUpdates: "起動時に更新を自動確認",
+    autoCheckUpdatesHint: "アプリ起動時にバックグラウンドで新しいバージョンを確認します",
+    checkUpdates: "アップデートを確認",
+    checkingUpdates: "更新を確認中…",
+    upToDate: "最新のバージョンです",
+    updateAvailable: "新しいバージョンが見つかりました",
+    updateAvailableHint: "新しいバージョン {{version}} が利用可能です（現在: {{current}}）",
+    viewRelease: "詳細を見る",
+    checkUpdateFailed: "更新の確認に失敗しました",
   },
   library: {
     title: "本棚",
@@ -135,5 +144,11 @@ export const ja = {
     pageIndicator: "{{current}} / {{total}} ページ",
     prevChapter: "前の話",
     nextChapter: "次の話",
+  },
+  updates: {
+    newVersionTitle: "新しいバージョンが見つかりました",
+    newVersionDesc: "PanelNeko Reader {{latest}} がリリースされました（現在: {{current}}）。",
+    viewDetails: "詳細を見る",
+    dismiss: "あとで",
   },
 };

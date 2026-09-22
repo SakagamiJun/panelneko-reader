@@ -46,6 +46,15 @@ export const zhCN = {
     shortcutAction_backToLibrary: "返回书架",
     shortcutAction_toggleMenu: "收起/展开菜单",
     pressAnyKey: "请按下新快捷键...",
+    autoCheckUpdates: "启动时自动检查更新",
+    autoCheckUpdatesHint: "每次启动应用时在后台检查新版本",
+    checkUpdates: "检查新版本",
+    checkingUpdates: "正在检查更新…",
+    upToDate: "当前已是最新版本",
+    updateAvailable: "发现新版本",
+    updateAvailableHint: "发现新版本 {{version}}，当前版本为 {{current}}",
+    viewRelease: "查看新版本",
+    checkUpdateFailed: "检查更新失败，请重试",
   },
   library: {
     title: "本地漫画库",
@@ -135,5 +144,11 @@ export const zhCN = {
     pageIndicator: "第 {{current}} / {{total}} 页",
     prevChapter: "上一章",
     nextChapter: "下一章",
+  },
+  updates: {
+    newVersionTitle: "发现新版本",
+    newVersionDesc: "PanelNeko Reader {{latest}} 现已发布，当前版本为 {{current}}。",
+    viewDetails: "查看更新",
+    dismiss: "稍后",
   },
 };

@@ -46,6 +46,15 @@ export const en = {
     shortcutAction_backToLibrary: "Back to Library",
     shortcutAction_toggleMenu: "Toggle Menu",
     pressAnyKey: "Press any key...",
+    autoCheckUpdates: "Check for Updates on Startup",
+    autoCheckUpdatesHint: "Silently check for new versions on startup in the background",
+    checkUpdates: "Check for Updates",
+    checkingUpdates: "Checking for updates…",
+    upToDate: "PanelNeko is up to date",
+    updateAvailable: "New Version Available",
+    updateAvailableHint: "New version {{version}} available (current: {{current}})",
+    viewRelease: "View Release",
+    checkUpdateFailed: "Failed to check for updates",
   },
   library: {
     title: "Local Library",
@@ -135,5 +144,11 @@ export const en = {
     pageIndicator: "Page {{current}} / {{total}}",
     prevChapter: "Previous Chapter",
     nextChapter: "Next Chapter",
+  },
+  updates: {
+    newVersionTitle: "New Version Available",
+    newVersionDesc: "PanelNeko Reader {{latest}} is now available (current: {{current}}).",
+    viewDetails: "View Update",
+    dismiss: "Later",
   },
 };
