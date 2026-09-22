@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
@@ -18,11 +18,13 @@ import { SettingsDialog, type SettingsTab } from "@/components/sections/settings
 import { ReaderController, type ReaderJumpRequest } from "@/components/reader-controller";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { UpdateToast } from "@/components/ui/update-toast";
 import { appAdapter } from "@/lib/api";
 import {
   type AppSettings,
   EVENTS,
   type LibraryManga,
+  type UpdateCheckResult,
 } from "@/lib/contracts";
 import { i18n } from "@/lib/i18n";
 import { emitRuntimeEvent } from "@/lib/runtime";
@@ -42,6 +44,8 @@ export default function App() {
   const [, setReaderChapterTitle] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [collectionToToggle, setCollectionToToggle] = useState<LibraryManga | null>(null);
+  const [updateNotification, setUpdateNotification] = useState<UpdateCheckResult | null>(null);
+  const hasCheckedStartupRef = useRef(false);
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -81,6 +85,26 @@ export default function App() {
       offLibrary();
     };
   }, [queryClient]);
+
+  useEffect(() => {
+    const settings = settingsQuery.data;
+    if (!settings || hasCheckedStartupRef.current) return;
+    if (settings.autoCheckUpdates === false) return;
+
+    hasCheckedStartupRef.current = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await appAdapter.checkForUpdates();
+        if (result && result.hasUpdate) {
+          setUpdateNotification(result);
+        }
+      } catch {
+        // Silently ignore failures on startup auto-check
+      }
+    }, 1500);
+
+    return () => window.clearTimeout(timer);
+  }, [settingsQuery.data]);
 
   useEffect(() => {
     const settings = settingsQuery.data;
@@ -435,6 +459,18 @@ export default function App() {
           }
         }}
       />
+
+      {/* Startup Update Notification Toast */}
+      {updateNotification && (
+        <UpdateToast
+          update={updateNotification}
+          onClose={() => setUpdateNotification(null)}
+          onViewUpdate={(url) => {
+            void appAdapter.openURL(url);
+            setUpdateNotification(null);
+          }}
+        />
+      )}
     </main>
   );
 }

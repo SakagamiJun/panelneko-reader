@@ -3,13 +3,17 @@ import { useTranslation } from "react-i18next";
 import {
   BookOpen,
   Check,
+  ExternalLink,
   Folder,
   Info,
   Keyboard,
+  Loader2,
+  RefreshCw,
   Settings2,
   Sliders,
   X,
 } from "lucide-react";
+import appIcon from "@/assets/appicon.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
@@ -24,6 +28,7 @@ import type {
   ReaderFilter,
   ReaderSpreadMode,
   ReaderSideClickMode,
+  UpdateCheckResult,
 } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +57,24 @@ export function SettingsDialog({
   const [form, setForm] = useState<AppSettings>(settings);
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
   const [isSavedRecently, setIsSavedRecently] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
+
+  const handleCheckUpdate = async () => {
+    setIsCheckingUpdate(true);
+    setUpdateError(null);
+    try {
+      const result = await appAdapter.checkForUpdates();
+      setUpdateResult(result);
+    } catch (err) {
+      console.error("Failed to check for updates:", err);
+      setUpdateError(t("settings.checkUpdateFailed"));
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
 
   useEffect(() => {
     setForm(settings);
@@ -500,9 +522,11 @@ export function SettingsDialog({
                 <SettingGroup title="关于 PanelNeko">
                   <div className="p-5 space-y-4">
                     <div className="flex items-center gap-3.5">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-lg">
-                        PN
-                      </div>
+                      <img
+                        src={appIcon}
+                        alt="PanelNeko Reader"
+                        className="h-11 w-11 rounded-xl shadow-xs object-cover border border-border/40 shrink-0 select-none pointer-events-none"
+                      />
                       <div>
                         <h4 className="text-base font-bold text-foreground">
                           PanelNeko Reader
@@ -538,6 +562,75 @@ export function SettingsDialog({
                       </div>
                     </div>
                   </div>
+                </SettingGroup>
+
+                <SettingGroup
+                  title="版本与更新"
+                  description="配置更新偏好并检查最新版本"
+                >
+                  <SettingRow
+                    title={t("settings.autoCheckUpdates")}
+                    description={t("settings.autoCheckUpdatesHint")}
+                    control={
+                      <Switch
+                        checked={form.autoCheckUpdates !== false}
+                        onChange={(checked) => updateField("autoCheckUpdates", checked)}
+                      />
+                    }
+                  />
+
+                  <SettingRow
+                    title={t("settings.checkUpdates")}
+                    description={
+                      isCheckingUpdate
+                        ? t("settings.checkingUpdates")
+                        : updateError
+                        ? updateError
+                        : updateResult?.hasUpdate
+                        ? t("settings.updateAvailableHint", {
+                            version: `v${updateResult.latestVersion}`,
+                            current: `v${updateResult.currentVersion}`,
+                          })
+                        : updateResult && !updateResult.hasUpdate
+                        ? t("settings.upToDate")
+                        : `当前版本: v${version || "0.1.0"}`
+                    }
+                    control={
+                      <div className="flex items-center gap-2">
+                        {updateResult?.hasUpdate && (
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            onClick={() => appAdapter.openURL(updateResult.releaseURL)}
+                            className="gap-1 text-xs text-primary border-primary/40 hover:bg-primary/10"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            <span>{t("settings.viewRelease")}</span>
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          disabled={isCheckingUpdate}
+                          onClick={handleCheckUpdate}
+                          className="gap-1 text-xs"
+                        >
+                          {isCheckingUpdate ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3 w-3" />
+                          )}
+                          <span>
+                            {isCheckingUpdate
+                              ? t("settings.checkingUpdates")
+                              : t("settings.checkUpdates")}
+                          </span>
+                        </Button>
+                      </div>
+                    }
+                  />
                 </SettingGroup>
 
                 <SettingGroup

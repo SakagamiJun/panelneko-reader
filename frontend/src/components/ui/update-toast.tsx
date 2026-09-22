@@ -116,7 +116,7 @@ export function UpdateToast({
           <Button
             type="button"
             size="xs"
-            variant="default"
+            variant="primary"
             onClick={() => onViewUpdate(update.releaseURL)}
             className="gap-1.5 text-xs font-semibold"
           >
