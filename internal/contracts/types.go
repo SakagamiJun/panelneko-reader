@@ -72,6 +72,7 @@ type AppSettings struct {
 	ReaderClickCenterZoom     bool                `json:"readerClickCenterZoom"`
 	ReaderDoubleClickZoom     bool                `json:"readerDoubleClickZoom"`
 	Shortcuts                 map[string]string   `json:"shortcuts"`
+	AutoCheckUpdates          *bool               `json:"autoCheckUpdates,omitempty"`
 }
 
 type LibraryManga struct {
@@ -128,4 +129,13 @@ type ReaderProgress struct {
 type AppVersionInfo struct {
 	Version string `json:"version"`
 	Commit  string `json:"commit,omitempty"`
+}
+
+type UpdateCheckResult struct {
+	HasUpdate      bool   `json:"hasUpdate"`
+	CurrentVersion string `json:"currentVersion"`
+	LatestVersion  string `json:"latestVersion"`
+	ReleaseURL     string `json:"releaseURL"`
+	ReleaseNotes   string `json:"releaseNotes,omitempty"`
+	PublishedAt    string `json:"publishedAt,omitempty"`
 }

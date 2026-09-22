@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,6 +70,101 @@ func (a *App) GetAppVersion() contracts.AppVersionInfo {
 		Version: version,
 		Commit:  commit,
 	}
+}
+
+type githubReleaseResponse struct {
+	TagName     string `json:"tag_name"`
+	Name        string `json:"name"`
+	HTMLURL     string `json:"html_url"`
+	Body        string `json:"body"`
+	PublishedAt string `json:"published_at"`
+	Draft       bool   `json:"draft"`
+	Prerelease  bool   `json:"prerelease"`
+}
+
+func compareVersions(v1, v2 string) int {
+	clean1 := strings.TrimPrefix(strings.TrimSpace(v1), "v")
+	clean2 := strings.TrimPrefix(strings.TrimSpace(v2), "v")
+
+	parts1 := strings.Split(clean1, ".")
+	parts2 := strings.Split(clean2, ".")
+
+	maxLen := len(parts1)
+	if len(parts2) > maxLen {
+		maxLen = len(parts2)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var n1, n2 int
+		if i < len(parts1) {
+			sub := strings.SplitN(parts1[i], "-", 2)[0]
+			n1, _ = strconv.Atoi(sub)
+		}
+		if i < len(parts2) {
+			sub := strings.SplitN(parts2[i], "-", 2)[0]
+			n2, _ = strconv.Atoi(sub)
+		}
+		if n1 < n2 {
+			return -1
+		}
+		if n1 > n2 {
+			return 1
+		}
+	}
+	return 0
+}
+
+func (a *App) CheckForUpdates() (contracts.UpdateCheckResult, error) {
+	currentInfo := a.GetAppVersion()
+	currentVer := currentInfo.Version
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/SakagamiJun/panelneko-reader/releases/latest", nil)
+	if err != nil {
+		return contracts.UpdateCheckResult{}, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "PanelNeko-Reader/"+currentVer)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return contracts.UpdateCheckResult{}, fmt.Errorf("check update: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return contracts.UpdateCheckResult{}, fmt.Errorf("github api returned status %d", resp.StatusCode)
+	}
+
+	var rel githubReleaseResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&rel); err != nil {
+		return contracts.UpdateCheckResult{}, fmt.Errorf("decode release: %w", err)
+	}
+
+	latestVer := strings.TrimPrefix(rel.TagName, "v")
+	hasUpdate := compareVersions(currentVer, latestVer) < 0
+
+	return contracts.UpdateCheckResult{
+		HasUpdate:      hasUpdate,
+		CurrentVersion: currentVer,
+		LatestVersion:  latestVer,
+		ReleaseURL:     rel.HTMLURL,
+		ReleaseNotes:   rel.Body,
+		PublishedAt:    rel.PublishedAt,
+	}, nil
+}
+
+func (a *App) OpenURL(targetURL string) error {
+	if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
+		return fmt.Errorf("invalid url scheme: %s", targetURL)
+	}
+	if a.ctx != nil {
+		runtime.BrowserOpenURL(a.ctx, targetURL)
+	}
+	return nil
 }
 
 type App struct {

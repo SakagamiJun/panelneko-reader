@@ -76,7 +76,12 @@ func DefaultSettings() contracts.AppSettings {
 			"backToLibrary": "Escape",
 			"toggleMenu":    "h",
 		},
+		AutoCheckUpdates: boolPtr(true),
 	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }
 
 func (s *Service) Get() contracts.AppSettings {
@@ -166,6 +171,12 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 		for k, v := range input.Shortcuts {
 			settings.Shortcuts[k] = v
 		}
+	}
+
+	if input.AutoCheckUpdates == nil {
+		settings.AutoCheckUpdates = boolPtr(true)
+	} else {
+		settings.AutoCheckUpdates = boolPtr(*input.AutoCheckUpdates)
 	}
 
 	switch input.LocaleMode {

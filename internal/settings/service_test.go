@@ -35,6 +35,9 @@ func TestNewServicePersistsDefaults(t *testing.T) {
 	if current.ReaderSideClickMode != "right_next" {
 		t.Fatalf("unexpected default reader side click mode: %s", current.ReaderSideClickMode)
 	}
+	if current.AutoCheckUpdates == nil || !*current.AutoCheckUpdates {
+		t.Fatal("expected auto check updates to be enabled by default")
+	}
 }
 
 func TestNormalizeRejectsUnsupportedLocale(t *testing.T) {
@@ -111,5 +114,38 @@ func TestNormalizeAppliesReaderDefaults(t *testing.T) {
 	}
 	if fallback.ReaderSideClickMode != "right_next" {
 		t.Fatalf("expected invalid side click mode to fallback to right_next, got %s", fallback.ReaderSideClickMode)
+	}
+}
+
+func TestNormalizeAutoCheckUpdates(t *testing.T) {
+	sqliteStore, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	input := DefaultSettings()
+	f := false
+	input.AutoCheckUpdates = &f
+	normalized, err := service.Normalize(input)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if normalized.AutoCheckUpdates == nil || *normalized.AutoCheckUpdates {
+		t.Fatal("expected AutoCheckUpdates to be false")
+	}
+
+	input.AutoCheckUpdates = nil
+	normalized, err = service.Normalize(input)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if normalized.AutoCheckUpdates == nil || !*normalized.AutoCheckUpdates {
+		t.Fatal("expected AutoCheckUpdates to default to true when nil")
 	}
 }

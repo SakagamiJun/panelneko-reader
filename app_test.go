@@ -398,3 +398,41 @@ func TestAppGetAppVersion(t *testing.T) {
 		t.Fatal("expected non-empty commit hash")
 	}
 }
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		v1   string
+		v2   string
+		want int
+	}{
+		{"0.1.0", "0.9.0", -1},
+		{"0.9.0", "0.1.0", 1},
+		{"0.1.0", "0.1.0", 0},
+		{"v0.1.0", "0.9.0", -1},
+		{"v1.0.0", "v0.9.0", 1},
+		{"0.1.0", "0.1.1", -1},
+		{"0.1", "0.1.0", 0},
+		{"0.2", "0.1.5", 1},
+		{"v1.0.0-rc1", "v1.0.0", 0},
+	}
+
+	for _, tc := range tests {
+		got := compareVersions(tc.v1, tc.v2)
+		if got != tc.want {
+			t.Errorf("compareVersions(%q, %q) = %d; want %d", tc.v1, tc.v2, got, tc.want)
+		}
+	}
+}
+
+func TestAppOpenURLValidation(t *testing.T) {
+	app := &App{}
+	if err := app.OpenURL("javascript:alert(1)"); err == nil {
+		t.Fatal("expected error for non-http url")
+	}
+	if err := app.OpenURL("file:///etc/passwd"); err == nil {
+		t.Fatal("expected error for file url")
+	}
+	if err := app.OpenURL("https://github.com/SakagamiJun/panelneko-reader"); err != nil {
+		t.Fatalf("unexpected error for https url: %v", err)
+	}
+}
