@@ -4,6 +4,7 @@ import type {
   LibraryManga,
   ReaderManifest,
   ReaderProgress,
+  UpdateCheckResult,
 } from "@/lib/contracts";
 
 export interface AppAdapter {
@@ -20,4 +21,6 @@ export interface AppAdapter {
   toggleCollection(mangaID: string): Promise<boolean>;
   openDirectory(mangaID: string): Promise<void>;
   subscribe(eventName: string, callback: (payload: unknown) => void): () => void;
+  checkForUpdates(): Promise<UpdateCheckResult>;
+  openURL(url: string): Promise<void>;
 }

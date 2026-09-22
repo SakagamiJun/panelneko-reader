@@ -4,6 +4,7 @@ import type {
   LibraryManga,
   ReaderManifest,
   ReaderProgress,
+  UpdateCheckResult,
 } from "@/lib/contracts";
 import type { AppAdapter } from "@/lib/api/adapter";
 import { getWailsApp, getWailsRuntime } from "@/lib/runtime";
@@ -61,6 +62,19 @@ export class WailsAdapter implements AppAdapter {
 
   async openDirectory(mangaID: string) {
     await getWailsApp()?.OpenDirectory?.(mangaID);
+  }
+
+  async checkForUpdates(): Promise<UpdateCheckResult> {
+    const raw = (await getWailsApp()?.CheckForUpdates?.()) as unknown;
+    return raw as UpdateCheckResult;
+  }
+
+  async openURL(url: string): Promise<void> {
+    if (getWailsApp()?.OpenURL) {
+      await getWailsApp()?.OpenURL?.(url);
+    } else {
+      window.open(url, "_blank");
+    }
   }
 
   subscribe(eventName: string, callback: (payload: unknown) => void) {

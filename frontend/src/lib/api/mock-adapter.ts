@@ -4,6 +4,7 @@ import {
   type LibraryManga,
   type ReaderManifest,
   type ReaderProgress,
+  type UpdateCheckResult,
 } from "@/lib/contracts";
 import type { AppAdapter } from "@/lib/api/adapter";
 
@@ -35,6 +36,7 @@ const defaultSettings: AppSettings = {
     backToLibrary: "Escape",
     toggleMenu: "h",
   },
+  autoCheckUpdates: true,
 };
 
 function createMockReaderManifest(index: number, title: string): ReaderManifest {
@@ -288,6 +290,23 @@ export class MockAdapter implements AppAdapter {
 
   async openDirectory(_mangaID: string) {
     // no-op in mock environment
+  }
+
+  async checkForUpdates(): Promise<UpdateCheckResult> {
+    return {
+      hasUpdate: true,
+      currentVersion: "0.1.0",
+      latestVersion: "0.9.0",
+      releaseURL: "https://github.com/SakagamiJun/panelneko-reader/releases/tag/v0.9.0",
+      releaseNotes: "New features and bug fixes",
+      publishedAt: new Date().toISOString(),
+    };
+  }
+
+  async openURL(url: string): Promise<void> {
+    if (typeof window !== "undefined" && window.open) {
+      window.open(url, "_blank");
+    }
   }
 
   subscribe(eventName: string, callback: Listener) {

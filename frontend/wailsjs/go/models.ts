@@ -16,6 +16,7 @@ export namespace contracts {
 	    readerClickCenterZoom: boolean;
 	    readerDoubleClickZoom: boolean;
 	    shortcuts: Record<string, string>;
+	    autoCheckUpdates?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -38,6 +39,7 @@ export namespace contracts {
 	        this.readerClickCenterZoom = source["readerClickCenterZoom"];
 	        this.readerDoubleClickZoom = source["readerDoubleClickZoom"];
 	        this.shortcuts = source["shortcuts"];
+	        this.autoCheckUpdates = source["autoCheckUpdates"];
 	    }
 	}
 	export class AppVersionInfo {
@@ -52,6 +54,28 @@ export namespace contracts {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.version = source["version"];
 	        this.commit = source["commit"];
+	    }
+	}
+	export class UpdateCheckResult {
+	    hasUpdate: boolean;
+	    currentVersion: string;
+	    latestVersion: string;
+	    releaseURL: string;
+	    releaseNotes?: string;
+	    publishedAt?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateCheckResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hasUpdate = source["hasUpdate"];
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.releaseURL = source["releaseURL"];
+	        this.releaseNotes = source["releaseNotes"];
+	        this.publishedAt = source["publishedAt"];
 	    }
 	}
 	export class LibraryManga {

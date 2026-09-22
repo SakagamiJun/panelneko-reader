@@ -23,6 +23,7 @@ export interface AppSettings {
   readerClickCenterZoom?: boolean;
   readerDoubleClickZoom?: boolean;
   shortcuts: Record<string, string>;
+  autoCheckUpdates?: boolean;
 }
 
 export interface LibraryManga {
@@ -79,6 +80,15 @@ export interface ReaderProgress {
 export interface AppVersionInfo {
   version: string;
   commit?: string;
+}
+
+export interface UpdateCheckResult {
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseURL: string;
+  releaseNotes?: string;
+  publishedAt?: string;
 }
 
 export const EVENTS = {

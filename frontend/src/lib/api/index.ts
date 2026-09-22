@@ -50,4 +50,10 @@ export const appAdapter: AppAdapter = {
   subscribe(eventName, callback) {
     return currentAdapter().subscribe(eventName, callback);
   },
+  checkForUpdates() {
+    return currentAdapter().checkForUpdates();
+  },
+  openURL(url) {
+    return currentAdapter().openURL(url);
+  },
 };

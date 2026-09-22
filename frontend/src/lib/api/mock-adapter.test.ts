@@ -90,4 +90,21 @@ describe("MockAdapter Pin Functionality", () => {
     found = updated.find((i) => i.id === regular!.id);
     expect(found?.isCollection).toBe(false);
   });
+
+  it("checks for updates and returns update result", async () => {
+    const result = await adapter.checkForUpdates();
+    expect(result.hasUpdate).toBe(true);
+    expect(result.currentVersion).toBe("0.1.0");
+    expect(result.latestVersion).toBeDefined();
+    expect(result.releaseURL).toContain("github.com");
+  });
+
+  it("includes autoCheckUpdates in default settings", async () => {
+    const settings = await adapter.getSettings();
+    expect(settings.autoCheckUpdates).toBe(true);
+  });
+
+  it("opens external url without throwing", async () => {
+    await expect(adapter.openURL("https://github.com")).resolves.toBeUndefined();
+  });
 });
