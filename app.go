@@ -212,6 +212,9 @@ func (a *App) bootstrap() error {
 	a.store = storeValue
 	a.settings = settingsService
 
+	cacheDir := filepath.Join(appDataDir, "cache", "thumbnails")
+	_ = os.MkdirAll(cacheDir, 0o755)
+
 	a.emit(contracts.EventSettingsUpdated, settingsService.Get())
 
 	return nil
@@ -287,6 +290,19 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 	}
 
 	items = library.ApplyPinsAndSort(items, pins)
+
+	enabled := true
+	if a.settings.Get().EnableThumbnailCache != nil {
+		enabled = *a.settings.Get().EnableThumbnailCache
+	}
+
+	for i := range items {
+		if enabled {
+			items[i].CoverImageURL = library.BuildThumbnailURL(items[i].CoverImageURL)
+		} else {
+			items[i].CoverImageURL = library.StripThumbnailURL(items[i].CoverImageURL)
+		}
+	}
 
 	return items, nil
 }
@@ -375,6 +391,22 @@ func (a *App) UpdateReaderProgress(input contracts.ReaderProgress) (contracts.Re
 	return input, nil
 }
 
+func (a *App) GetThumbnailCacheSize() (int64, error) {
+	if err := a.ensureReady(); err != nil {
+		return 0, err
+	}
+	cacheDir := filepath.Join(a.store.DataDir(), "cache", "thumbnails")
+	return library.GetThumbnailCacheSize(cacheDir)
+}
+
+func (a *App) ClearThumbnailCache() error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	cacheDir := filepath.Join(a.store.DataDir(), "cache", "thumbnails")
+	return library.ClearThumbnailCache(cacheDir)
+}
+
 func (a *App) assetHandler() http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if !library.IsLibraryAssetRequest(request.URL.Path) {
@@ -388,6 +420,23 @@ func (a *App) assetHandler() http.Handler {
 		}
 
 		libraryRoot := a.settings.Get().LibraryRoot
+
+		if strings.HasPrefix(request.URL.Path, library.LibraryThumbnailPrefix) {
+			enabled := true
+			if a.settings.Get().EnableThumbnailCache != nil {
+				enabled = *a.settings.Get().EnableThumbnailCache
+			}
+			cacheDir := filepath.Join(a.store.DataDir(), "cache", "thumbnails")
+			if err := library.ServeThumbnail(libraryRoot, cacheDir, request.URL.Path, writer, request, enabled); err != nil {
+				if os.IsNotExist(err) {
+					http.NotFound(writer, request)
+					return
+				}
+				http.Error(writer, err.Error(), http.StatusForbidden)
+			}
+			return
+		}
+
 		if strings.HasPrefix(request.URL.Path, library.LibraryArchiveAssetPrefix) {
 			reader, contentType, contentLength, err := library.OpenArchiveAsset(libraryRoot, request.URL.Path)
 			if err != nil {
@@ -414,7 +463,7 @@ func (a *App) assetHandler() http.Handler {
 				}
 			}
 
-			_, _ = io.Copy(writer, reader)
+			_, _ = library.CopyStream(writer, reader)
 			return
 		}
 

@@ -436,3 +436,45 @@ func TestAppOpenURLValidation(t *testing.T) {
 		t.Fatalf("unexpected error for https url: %v", err)
 	}
 }
+
+func TestAppThumbnailCacheManagement(t *testing.T) {
+	libraryRoot := t.TempDir()
+	app, cleanup := newAssetTestApp(t, libraryRoot)
+	defer cleanup()
+
+	// Initially cache size should be 0
+	size, err := app.GetThumbnailCacheSize()
+	if err != nil {
+		t.Fatalf("GetThumbnailCacheSize failed: %v", err)
+	}
+	if size != 0 {
+		t.Errorf("expected initial cache size 0, got %d", size)
+	}
+
+	// Write a mock cache file into cache directory
+	cacheDir := filepath.Join(app.store.DataDir(), "cache", "thumbnails")
+	_ = os.MkdirAll(cacheDir, 0o755)
+	dummyData := []byte("dummy-thumbnail-content")
+	_ = os.WriteFile(filepath.Join(cacheDir, "test.jpg"), dummyData, 0o644)
+
+	size, err = app.GetThumbnailCacheSize()
+	if err != nil {
+		t.Fatalf("GetThumbnailCacheSize failed: %v", err)
+	}
+	if size != int64(len(dummyData)) {
+		t.Errorf("expected cache size %d, got %d", len(dummyData), size)
+	}
+
+	// Clear thumbnail cache
+	if err := app.ClearThumbnailCache(); err != nil {
+		t.Fatalf("ClearThumbnailCache failed: %v", err)
+	}
+
+	size, err = app.GetThumbnailCacheSize()
+	if err != nil {
+		t.Fatalf("GetThumbnailCacheSize failed: %v", err)
+	}
+	if size != 0 {
+		t.Errorf("expected cache size 0 after clear, got %d", size)
+	}
+}

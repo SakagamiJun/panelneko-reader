@@ -31,7 +31,9 @@ const (
 )
 
 func IsLibraryAssetRequest(requestPath string) bool {
-	return strings.HasPrefix(requestPath, LibraryAssetPrefix) || strings.HasPrefix(requestPath, LibraryArchiveAssetPrefix)
+	return strings.HasPrefix(requestPath, LibraryAssetPrefix) ||
+		strings.HasPrefix(requestPath, LibraryArchiveAssetPrefix) ||
+		strings.HasPrefix(requestPath, LibraryThumbnailPrefix)
 }
 
 type chapterSourceKind string
@@ -252,7 +254,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 						ParentPath:    filepath.ToSlash(entry.Name()),
 						IsCollection:  false,
 						MangaCount:    0,
-						CoverImageURL: manifest.reader.CoverImageURL,
+						CoverImageURL: BuildThumbnailURL(manifest.reader.CoverImageURL),
 						ChapterCount:  len(manifest.reader.Chapters),
 						PageCount:     manifest.reader.TotalPages,
 						LastUpdated:   manifest.updatedAt.UTC().Format(time.RFC3339),
@@ -336,7 +338,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 				ParentPath:    "",
 				IsCollection:  false,
 				MangaCount:    0,
-				CoverImageURL: manifest.reader.CoverImageURL,
+				CoverImageURL: BuildThumbnailURL(manifest.reader.CoverImageURL),
 				ChapterCount:  len(manifest.reader.Chapters),
 				PageCount:     manifest.reader.TotalPages,
 				LastUpdated:   manifest.updatedAt.UTC().Format(time.RFC3339),

@@ -83,8 +83,11 @@ func TestListLibraryMangaAndReaderManifestSupportsDirectoryAndArchiveChapters(t 
 	if item.ChapterCount != 2 {
 		t.Fatalf("unexpected chapter count: %d", item.ChapterCount)
 	}
-	if !strings.HasPrefix(item.CoverImageURL, LibraryAssetPrefix) {
-		t.Fatalf("expected filesystem cover image url, got %q", item.CoverImageURL)
+	if !strings.HasPrefix(item.CoverImageURL, LibraryThumbnailPrefix) && !strings.HasPrefix(item.CoverImageURL, LibraryAssetPrefix) {
+		t.Fatalf("expected thumbnail or filesystem cover image url, got %q", item.CoverImageURL)
+	}
+	if !strings.HasPrefix(StripThumbnailURL(item.CoverImageURL), LibraryAssetPrefix) {
+		t.Fatalf("expected stripped cover image url to have asset prefix, got %q", item.CoverImageURL)
 	}
 
 	manifest, err := GetReaderManifest(root, item.ID)
