@@ -104,6 +104,20 @@ describe("MockAdapter Pin Functionality", () => {
     expect(settings.autoCheckUpdates).toBe(true);
   });
 
+  it("includes enableThumbnailCache in default settings", async () => {
+    const settings = await adapter.getSettings();
+    expect(settings.enableThumbnailCache).toBe(true);
+  });
+
+  it("handles thumbnail cache size querying and clearing", async () => {
+    const size = await adapter.getThumbnailCacheSize();
+    expect(size).toBeGreaterThan(0);
+
+    await adapter.clearThumbnailCache();
+    const newSize = await adapter.getThumbnailCacheSize();
+    expect(newSize).toBe(0);
+  });
+
   it("opens external url without throwing", async () => {
     await expect(adapter.openURL("https://github.com")).resolves.toBeUndefined();
   });

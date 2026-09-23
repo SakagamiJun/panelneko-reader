@@ -37,6 +37,7 @@ const defaultSettings: AppSettings = {
     toggleMenu: "h",
   },
   autoCheckUpdates: true,
+  enableThumbnailCache: true,
 };
 
 function createMockReaderManifest(index: number, title: string): ReaderManifest {
@@ -307,6 +308,16 @@ export class MockAdapter implements AppAdapter {
     if (typeof window !== "undefined" && window.open) {
       window.open(url, "_blank");
     }
+  }
+
+  private mockCacheSize = 25165824; // 24 MB
+
+  async getThumbnailCacheSize(): Promise<number> {
+    return this.mockCacheSize;
+  }
+
+  async clearThumbnailCache(): Promise<void> {
+    this.mockCacheSize = 0;
   }
 
   subscribe(eventName: string, callback: Listener) {

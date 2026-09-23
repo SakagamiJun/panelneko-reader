@@ -23,4 +23,6 @@ export interface AppAdapter {
   subscribe(eventName: string, callback: (payload: unknown) => void): () => void;
   checkForUpdates(): Promise<UpdateCheckResult>;
   openURL(url: string): Promise<void>;
+  getThumbnailCacheSize(): Promise<number>;
+  clearThumbnailCache(): Promise<void>;
 }

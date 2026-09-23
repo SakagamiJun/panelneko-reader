@@ -77,6 +77,14 @@ export class WailsAdapter implements AppAdapter {
     }
   }
 
+  async getThumbnailCacheSize(): Promise<number> {
+    return ((await (getWailsApp() as any)?.GetThumbnailCacheSize?.()) ?? 0) as number;
+  }
+
+  async clearThumbnailCache(): Promise<void> {
+    await (getWailsApp() as any)?.ClearThumbnailCache?.();
+  }
+
   subscribe(eventName: string, callback: (payload: unknown) => void) {
     const runtime = getWailsRuntime();
     const unsubscribe = runtime?.EventsOn?.(eventName, callback);

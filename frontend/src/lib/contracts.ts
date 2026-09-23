@@ -24,6 +24,7 @@ export interface AppSettings {
   readerDoubleClickZoom?: boolean;
   shortcuts: Record<string, string>;
   autoCheckUpdates?: boolean;
+  enableThumbnailCache?: boolean;
 }
 
 export interface LibraryManga {
