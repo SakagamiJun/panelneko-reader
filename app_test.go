@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -476,5 +477,66 @@ func TestAppThumbnailCacheManagement(t *testing.T) {
 	}
 	if size != 0 {
 		t.Errorf("expected cache size 0 after clear, got %d", size)
+	}
+}
+
+func TestAppExportedMethodsWailsCompliance(t *testing.T) {
+	appType := reflect.TypeOf(&App{})
+	errType := reflect.TypeOf((*error)(nil)).Elem()
+
+	prohibitedExported := map[string]bool{
+		"AssetHandler": true,
+		"Bootstrap":    true,
+		"EnsureReady":  true,
+		"Emit":         true,
+		"Startup":      true,
+	}
+
+	for i := 0; i < appType.NumMethod(); i++ {
+		method := appType.Method(i)
+
+		if prohibitedExported[method.Name] {
+			t.Errorf("internal method %s is exported; must remain unexported to protect Wails bindings", method.Name)
+		}
+
+		// Skip unexported methods (PkgPath is non-empty for unexported methods)
+		if method.PkgPath != "" {
+			continue
+		}
+
+		// 1. Wails requires at most 2 return values
+		if method.Type.NumOut() > 2 {
+			t.Errorf("exported method %s has %d return values; Wails allows at most 2", method.Name, method.Type.NumOut())
+		}
+
+		// 2. If 2 return values, the 2nd MUST be error
+		if method.Type.NumOut() == 2 {
+			secondOut := method.Type.Out(1)
+			if !secondOut.Implements(errType) {
+				t.Errorf("exported method %s 2nd return value is %s, but must implement error", method.Name, secondOut.String())
+			}
+		}
+
+		// 3. Inspect return types for disallowed un-serializable types
+		for outIdx := 0; outIdx < method.Type.NumOut(); outIdx++ {
+			outType := method.Type.Out(outIdx)
+			if outType.Kind() == reflect.Chan || outType.Kind() == reflect.Func {
+				t.Errorf("exported method %s returns unsupported Wails type: %s", method.Name, outType.String())
+			}
+			if outType.String() == "http.Handler" || outType.String() == "net/http.Handler" {
+				t.Errorf("exported method %s returns http.Handler which breaks Wails bindings", method.Name)
+			}
+		}
+
+		// 4. Inspect parameter types for disallowed types
+		for inIdx := 1; inIdx < method.Type.NumIn(); inIdx++ {
+			inType := method.Type.In(inIdx)
+			if inType.Kind() == reflect.Chan || inType.Kind() == reflect.Func {
+				t.Errorf("exported method %s takes unsupported parameter type: %s", method.Name, inType.String())
+			}
+			if inType.String() == "http.ResponseWriter" || inType.String() == "*http.Request" {
+				t.Errorf("exported method %s takes http request/response parameter which breaks Wails bindings", method.Name)
+			}
+		}
 	}
 }
