@@ -56,4 +56,10 @@ export const appAdapter: AppAdapter = {
   openURL(url) {
     return currentAdapter().openURL(url);
   },
+  getThumbnailCacheSize() {
+    return currentAdapter().getThumbnailCacheSize();
+  },
+  clearThumbnailCache() {
+    return currentAdapter().clearThumbnailCache();
+  },
 };

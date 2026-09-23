@@ -647,6 +647,7 @@ function LibraryGrid({
                         <img
                           alt={item.title}
                           className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                          decoding="async"
                           loading="lazy"
                           src={item.coverImageURL}
                         />

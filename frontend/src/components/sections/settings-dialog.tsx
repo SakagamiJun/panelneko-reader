@@ -31,7 +31,7 @@ import type {
   ReaderSideClickMode,
   UpdateCheckResult,
 } from "@/lib/contracts";
-import { cn } from "@/lib/utils";
+import { cn, formatBytes } from "@/lib/utils";
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -61,6 +61,32 @@ export function SettingsDialog({
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [cacheSizeBytes, setCacheSizeBytes] = useState<number>(0);
+  const [isClearingCache, setIsClearingCache] = useState(false);
+  const [isCacheClearedRecently, setIsCacheClearedRecently] = useState(false);
+
+  useEffect(() => {
+    if (open && activeTab === "general") {
+      void appAdapter.getThumbnailCacheSize().then(setCacheSizeBytes);
+    }
+  }, [open, activeTab]);
+
+  const handleClearCache = async () => {
+    setIsClearingCache(true);
+    try {
+      await appAdapter.clearThumbnailCache();
+      setCacheSizeBytes(0);
+      setIsCacheClearedRecently(true);
+      window.setTimeout(() => {
+        setIsCacheClearedRecently(false);
+      }, 2000);
+    } catch (err) {
+      console.error("Failed to clear thumbnail cache:", err);
+    } finally {
+      setIsClearingCache(false);
+    }
+  };
+
   const saveTimeoutRef = useRef<number | null>(null);
 
   const handleCheckUpdate = async () => {
@@ -312,6 +338,47 @@ export function SettingsDialog({
                           }
                         }}
                       />
+                    }
+                  />
+
+                  <SettingRow
+                    title={t("settings.enableThumbnailCache")}
+                    description={t("settings.enableThumbnailCacheDesc")}
+                    control={
+                      <Switch
+                        checked={form.enableThumbnailCache !== false}
+                        onChange={(checked) =>
+                          updateField("enableThumbnailCache", checked)
+                        }
+                      />
+                    }
+                  />
+
+                  <SettingRow
+                    title={t("settings.thumbnailCacheSize")}
+                    description={t("settings.thumbnailCacheSizeDesc")}
+                    control={
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-mono text-muted-foreground min-w-[50px] text-right">
+                          {formatBytes(cacheSizeBytes)}
+                        </span>
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          disabled={isClearingCache || cacheSizeBytes === 0}
+                          onClick={handleClearCache}
+                          className="h-7 text-xs px-2.5"
+                        >
+                          {isClearingCache ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : isCacheClearedRecently ? (
+                            t("settings.cacheCleared")
+                          ) : (
+                            t("settings.clearCache")
+                          )}
+                        </Button>
+                      </div>
                     }
                   />
                 </SettingGroup>

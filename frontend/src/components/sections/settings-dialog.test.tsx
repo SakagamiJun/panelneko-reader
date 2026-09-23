@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import "@/lib/i18n";
 import { SettingsDialog } from "@/components/sections/settings-dialog";
 import { appAdapter } from "@/lib/api";
@@ -115,5 +115,77 @@ describe("SettingsDialog Component - About Tab", () => {
 
     expect(openURLSpy).toHaveBeenCalledTimes(1);
     expect(openURLSpy).toHaveBeenCalledWith(APP_LINKS.FEATURE_REQUEST);
+  });
+});
+
+describe("SettingsDialog Component - Performance & Cache Settings", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders thumbnail cache switch and clear button in general tab", async () => {
+    vi.spyOn(appAdapter, "getThumbnailCacheSize").mockResolvedValue(1048576); // 1.0 MB
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={mockSettings}
+        onSave={vi.fn()}
+        defaultTab="general"
+      />
+    );
+
+    expect(screen.getByText(/生成封面缩略图缓存|Generate Cover Thumbnails|表紙サムネイルキャッシュの生成/i)).toBeInTheDocument();
+    expect(screen.getByText(/缩略图缓存占用|Thumbnail Cache Size|サムネイルキャッシュ容量/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /清空缓存|Clear Cache|キャッシュを削除/i })).toBeInTheDocument();
+  });
+
+  it("calls onSave when toggling enableThumbnailCache switch", async () => {
+    const onSave = vi.fn();
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={mockSettings}
+        onSave={onSave}
+        defaultTab="general"
+      />
+    );
+
+    const switches = screen.getAllByRole("switch");
+    // Find the switch for enableThumbnailCache (should be the third switch on general tab)
+    const thumbSwitch = switches[switches.length - 1];
+    fireEvent.click(thumbSwitch);
+
+    expect(onSave).toHaveBeenCalled();
+    const lastCall = onSave.mock.calls[onSave.mock.calls.length - 1][0];
+    expect(lastCall.enableThumbnailCache).toBe(false);
+  });
+
+  it("calls clearThumbnailCache when clear button is clicked", async () => {
+    const clearSpy = vi.spyOn(appAdapter, "clearThumbnailCache").mockResolvedValue(undefined);
+    vi.spyOn(appAdapter, "getThumbnailCacheSize").mockResolvedValue(5242880); // 5.0 MB
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={mockSettings}
+        onSave={vi.fn()}
+        defaultTab="general"
+      />
+    );
+
+    const clearBtn = screen.getByRole("button", { name: /清空缓存|Clear Cache|キャッシュを削除/i });
+    await waitFor(() => expect(clearBtn).not.toBeDisabled());
+    fireEvent.click(clearBtn);
+
+    expect(clearSpy).toHaveBeenCalledTimes(1);
   });
 });
