@@ -38,6 +38,9 @@ func TestNewServicePersistsDefaults(t *testing.T) {
 	if current.AutoCheckUpdates == nil || !*current.AutoCheckUpdates {
 		t.Fatal("expected auto check updates to be enabled by default")
 	}
+	if current.EnableThumbnailCache == nil || !*current.EnableThumbnailCache {
+		t.Fatal("expected enable thumbnail cache to be enabled by default")
+	}
 }
 
 func TestNormalizeRejectsUnsupportedLocale(t *testing.T) {
@@ -147,5 +150,38 @@ func TestNormalizeAutoCheckUpdates(t *testing.T) {
 	}
 	if normalized.AutoCheckUpdates == nil || !*normalized.AutoCheckUpdates {
 		t.Fatal("expected AutoCheckUpdates to default to true when nil")
+	}
+}
+
+func TestNormalizeEnableThumbnailCache(t *testing.T) {
+	sqliteStore, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	input := DefaultSettings()
+	f := false
+	input.EnableThumbnailCache = &f
+	normalized, err := service.Normalize(input)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if normalized.EnableThumbnailCache == nil || *normalized.EnableThumbnailCache {
+		t.Fatal("expected EnableThumbnailCache to be false")
+	}
+
+	input.EnableThumbnailCache = nil
+	normalized, err = service.Normalize(input)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if normalized.EnableThumbnailCache == nil || !*normalized.EnableThumbnailCache {
+		t.Fatal("expected EnableThumbnailCache to default to true when nil")
 	}
 }

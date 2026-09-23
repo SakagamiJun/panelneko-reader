@@ -73,6 +73,7 @@ type AppSettings struct {
 	ReaderDoubleClickZoom     bool                `json:"readerDoubleClickZoom"`
 	Shortcuts                 map[string]string   `json:"shortcuts"`
 	AutoCheckUpdates          *bool               `json:"autoCheckUpdates,omitempty"`
+	EnableThumbnailCache      *bool               `json:"enableThumbnailCache,omitempty"`
 }
 
 type LibraryManga struct {

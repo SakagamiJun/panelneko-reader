@@ -76,7 +76,8 @@ func DefaultSettings() contracts.AppSettings {
 			"backToLibrary": "Escape",
 			"toggleMenu":    "h",
 		},
-		AutoCheckUpdates: boolPtr(true),
+		AutoCheckUpdates:     boolPtr(true),
+		EnableThumbnailCache: boolPtr(true),
 	}
 }
 
@@ -177,6 +178,12 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 		settings.AutoCheckUpdates = boolPtr(true)
 	} else {
 		settings.AutoCheckUpdates = boolPtr(*input.AutoCheckUpdates)
+	}
+
+	if input.EnableThumbnailCache == nil {
+		settings.EnableThumbnailCache = boolPtr(true)
+	} else {
+		settings.EnableThumbnailCache = boolPtr(*input.EnableThumbnailCache)
 	}
 
 	switch input.LocaleMode {
