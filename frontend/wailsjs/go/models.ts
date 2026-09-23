@@ -56,28 +56,6 @@ export namespace contracts {
 	        this.commit = source["commit"];
 	    }
 	}
-	export class UpdateCheckResult {
-	    hasUpdate: boolean;
-	    currentVersion: string;
-	    latestVersion: string;
-	    releaseURL: string;
-	    releaseNotes?: string;
-	    publishedAt?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new UpdateCheckResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.hasUpdate = source["hasUpdate"];
-	        this.currentVersion = source["currentVersion"];
-	        this.latestVersion = source["latestVersion"];
-	        this.releaseURL = source["releaseURL"];
-	        this.releaseNotes = source["releaseNotes"];
-	        this.publishedAt = source["publishedAt"];
-	    }
-	}
 	export class LibraryManga {
 	    id: string;
 	    title: string;
@@ -235,6 +213,28 @@ export namespace contracts {
 	        this.chapterID = source["chapterID"];
 	        this.page = source["page"];
 	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class UpdateCheckResult {
+	    hasUpdate: boolean;
+	    currentVersion: string;
+	    latestVersion: string;
+	    releaseURL: string;
+	    releaseNotes?: string;
+	    publishedAt?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateCheckResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hasUpdate = source["hasUpdate"];
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.releaseURL = source["releaseURL"];
+	        this.releaseNotes = source["releaseNotes"];
+	        this.publishedAt = source["publishedAt"];
 	    }
 	}
 
