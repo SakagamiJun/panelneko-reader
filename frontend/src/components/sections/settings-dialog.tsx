@@ -121,10 +121,10 @@ export function SettingsDialog({
   };
 
   const tabs: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
-    { id: "general", label: t("settings.generalTab", { defaultValue: "常规设置" }), icon: <Sliders className="h-4 w-4" /> },
+    { id: "general", label: t("settings.generalTab"), icon: <Sliders className="h-4 w-4" /> },
     { id: "reader", label: t("settings.readerPreferences"), icon: <BookOpen className="h-4 w-4" /> },
     { id: "shortcuts", label: t("settings.shortcuts"), icon: <Keyboard className="h-4 w-4" /> },
-    { id: "about", label: "关于", icon: <Info className="h-4 w-4" /> },
+    { id: "about", label: t("settings.aboutTab"), icon: <Info className="h-4 w-4" /> },
   ];
 
   const spreadOptions: SegmentedOption<ReaderSpreadMode>[] = [
@@ -153,9 +153,9 @@ export function SettingsDialog({
   ];
 
   const sideClickOptions: SegmentedOption<ReaderSideClickMode>[] = [
-    { value: "right_next", label: "右侧下页" },
-    { value: "follow", label: "跟随方向" },
-    { value: "left_next", label: "左侧下页" },
+    { value: "right_next", label: t("settings.sideClickRightNextShort") },
+    { value: "follow", label: t("settings.sideClickFollowShort") },
+    { value: "left_next", label: t("settings.sideClickLeftNextShort") },
   ];
 
   return (
@@ -178,7 +178,7 @@ export function SettingsDialog({
                 {t("settings.title")}
               </h2>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                PanelNeko 系统参数与个性化偏好
+                {t("settings.headerDesc")}
               </p>
             </div>
           </div>
@@ -192,7 +192,7 @@ export function SettingsDialog({
               )}
             >
               <Check className="h-3.5 w-3.5" />
-              <span className="font-medium text-[11px]">已自动保存</span>
+              <span className="font-medium text-[11px]">{t("settings.autoSaved")}</span>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -205,7 +205,7 @@ export function SettingsDialog({
                 variant="ghost"
                 onClick={onClose}
                 className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                title="关闭"
+                title={t("settings.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -251,12 +251,12 @@ export function SettingsDialog({
             {activeTab === "general" && (
               <div className="space-y-5">
                 <SettingGroup
-                  title={t("settings.title")}
+                  title={t("settings.generalTab")}
                   description={t("settings.subtitle")}
                 >
                   <SettingRow
                     title={t("settings.outputRoot")}
-                    description="存放本地漫画（包含图片子目录或 ZIP/CBZ 压缩包）的本地文件夹"
+                    description={t("settings.outputRootDesc")}
                     control={
                       <Button
                         type="button"
@@ -291,8 +291,8 @@ export function SettingsDialog({
                 </SettingGroup>
 
                 <SettingGroup
-                  title="性能与缓存"
-                  description="调节滚动与翻页时的内存与性能平衡"
+                  title={t("settings.groupPerformance")}
+                  description={t("settings.groupPerformanceDesc")}
                 >
                   <SettingRow
                     title={t("settings.readerScrollCachePages")}
@@ -320,12 +320,12 @@ export function SettingsDialog({
             {activeTab === "reader" && (
               <div className="space-y-5">
                 <SettingGroup
-                  title="排版与翻页"
-                  description="配置打开漫画时的默认阅读方向与跨页拼合模式"
+                  title={t("settings.groupLayout")}
+                  description={t("settings.groupLayoutDesc")}
                 >
                   <SettingRow
                     title={t("reader.spreadMode")}
-                    description="单页展示或自动将两页双开对齐拼合"
+                    description={t("settings.spreadModeHint")}
                     control={
                       <SegmentedControl
                         size="sm"
@@ -338,7 +338,7 @@ export function SettingsDialog({
 
                   <SettingRow
                     title={t("reader.direction")}
-                    description="日漫习惯右向左翻页，传统/美漫左向右"
+                    description={t("settings.directionHint")}
                     control={
                       <SegmentedControl
                         size="sm"
@@ -381,12 +381,12 @@ export function SettingsDialog({
                 </SettingGroup>
 
                 <SettingGroup
-                  title="画面显示与滤镜"
-                  description="调节画面在窗口中的对齐与显示风格"
+                  title={t("settings.groupDisplay")}
+                  description={t("settings.groupDisplayDesc")}
                 >
                   <SettingRow
                     title={t("reader.fitMode")}
-                    description="画面如何自适应窗口视口大小"
+                    description={t("settings.fitModeHint")}
                     control={
                       <SegmentedControl
                         size="sm"
@@ -399,7 +399,7 @@ export function SettingsDialog({
 
                   <SettingRow
                     title={t("reader.filter")}
-                    description="画面滤镜与反色渲染模式"
+                    description={t("settings.filterHint")}
                     control={
                       <SegmentedControl
                         size="sm"
@@ -412,8 +412,8 @@ export function SettingsDialog({
                 </SettingGroup>
 
                 <SettingGroup
-                  title="缩放交互"
-                  description="配置在画面上点击或双击时的缩放行为"
+                  title={t("settings.groupZoom")}
+                  description={t("settings.groupZoomDesc")}
                 >
                   <SettingRow
                     title={t("reader.clickCenterZoom")}
@@ -448,7 +448,7 @@ export function SettingsDialog({
               <div className="space-y-5">
                 <SettingGroup
                   title={t("settings.shortcuts")}
-                  description="点击右侧按键徽标录制新按键，按 Esc 取消"
+                  description={t("settings.shortcutsDesc")}
                 >
                   <ShortcutItem
                     label={t("settings.shortcutAction_nextPage")}
@@ -519,7 +519,7 @@ export function SettingsDialog({
 
             {activeTab === "about" && (
               <div className="space-y-5">
-                <SettingGroup title="关于 PanelNeko">
+                <SettingGroup title={t("settings.aboutPanelNeko")}>
                   <div className="p-5 space-y-4">
                     <div className="flex items-center gap-3.5">
                       <img
@@ -532,41 +532,41 @@ export function SettingsDialog({
                           PanelNeko Reader
                         </h4>
                         <p className="text-xs text-muted-foreground">
-                          极简、专注、现代的高性能本地漫画阅读器
+                          {t("settings.appSlogan")}
                         </p>
                       </div>
                     </div>
 
                     <div className="pt-3 border-t border-border/40 text-xs space-y-2 text-muted-foreground">
                       <div className="flex justify-between py-1 border-b border-border/20">
-                        <span>应用版本</span>
+                        <span>{t("settings.appVersion")}</span>
                         <span className="font-mono text-foreground font-semibold">
                           v{version || "0.1.0"}
                         </span>
                       </div>
                       {commit && (
                         <div className="flex justify-between py-1 border-b border-border/20">
-                          <span>构建提交</span>
+                          <span>{t("settings.buildCommit")}</span>
                           <span className="font-mono text-foreground font-medium px-1.5 py-0.5 rounded bg-muted/50 border border-border/40 text-[11px]">
                             {commit}
                           </span>
                         </div>
                       )}
                       <div className="flex justify-between py-1 border-b border-border/20">
-                        <span>开源协议</span>
+                        <span>{t("settings.license")}</span>
                         <span className="text-foreground font-mono">MIT License</span>
                       </div>
                       <div className="flex justify-between py-1">
-                        <span>快捷键说明</span>
-                        <span className="text-foreground font-mono">⌘, / Ctrl+, 唤出设置</span>
+                        <span>{t("settings.shortcutHelp")}</span>
+                        <span className="text-foreground font-mono">{t("settings.openSettingsShortcut")}</span>
                       </div>
                     </div>
                   </div>
                 </SettingGroup>
 
                 <SettingGroup
-                  title="版本与更新"
-                  description="配置更新偏好并检查最新版本"
+                  title={t("settings.groupUpdates")}
+                  description={t("settings.groupUpdatesDesc")}
                 >
                   <SettingRow
                     title={t("settings.autoCheckUpdates")}
@@ -593,7 +593,7 @@ export function SettingsDialog({
                           })
                         : updateResult && !updateResult.hasUpdate
                         ? t("settings.upToDate")
-                        : `当前版本: v${version || "0.1.0"}`
+                        : t("settings.currentVersionPrefix", { version: version || "0.1.0" })
                     }
                     control={
                       <div className="flex items-center gap-2">
@@ -634,42 +634,42 @@ export function SettingsDialog({
                 </SettingGroup>
 
                 <SettingGroup
-                  title="致谢"
-                  description="致谢为 PanelNeko 提供坚实基础的开源项目与生态："
+                  title={t("settings.acknowledgments")}
+                  description={t("settings.acknowledgmentsDesc")}
                 >
                   <SettingRow
                     title="Wails"
-                    description="现代化轻量桌面应用框架，驱动 Go 后端与 Web 前端协同"
+                    description={t("settings.ackWailsDesc")}
                     control={<span className="text-[11px] font-mono text-muted-foreground">v2</span>}
                   />
                   <SettingRow
                     title="Go"
-                    description="高效可靠的系统级并发语言运行时与流式 IO 基础"
+                    description={t("settings.ackGoDesc")}
                     control={<span className="text-[11px] font-mono text-muted-foreground">Backend</span>}
                   />
                   <SettingRow
                     title="React 19"
-                    description="声明式 UI 渲染引擎与并发组件模型"
+                    description={t("settings.ackReactDesc")}
                     control={<span className="text-[11px] font-mono text-muted-foreground">Frontend</span>}
                   />
                   <SettingRow
                     title="Tailwind CSS"
-                    description="高性能现代原子化样式系统"
+                    description={t("settings.ackTailwindDesc")}
                     control={<span className="text-[11px] font-mono text-muted-foreground">Styling</span>}
                   />
                   <SettingRow
                     title="TanStack Query & Virtual"
-                    description="虚拟化长列表与高效客户端数据状态缓存"
+                    description={t("settings.ackTanstackDesc")}
                     control={<span className="text-[11px] font-mono text-muted-foreground">State</span>}
                   />
                   <SettingRow
                     title="SQLite"
-                    description="轻量级嵌入式本地结构化存储引擎"
+                    description={t("settings.ackSqliteDesc")}
                     control={<span className="text-[11px] font-mono text-muted-foreground">Storage</span>}
                   />
                   <SettingRow
                     title="Lucide Icons"
-                    description="简洁一致的现代开源矢量图标库"
+                    description={t("settings.ackLucideDesc")}
                     control={<span className="text-[11px] font-mono text-muted-foreground">Icons</span>}
                   />
                 </SettingGroup>
@@ -730,7 +730,7 @@ function ShortcutItem({
           ) : value ? (
             <Kbd size="sm">{value}</Kbd>
           ) : (
-            <span className="text-muted-foreground text-[11px]">未设置</span>
+            <span className="text-muted-foreground text-[11px]">{t("settings.shortcutNotSet")}</span>
           )}
         </button>
       }
