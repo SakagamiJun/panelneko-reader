@@ -495,7 +495,7 @@ export function ReaderTopBar({
                     }}
                     className="w-full h-7 text-[11px] text-muted-foreground hover:text-foreground justify-between px-2"
                   >
-                    <span>全部设置...</span>
+                    <span>{t("reader.allSettings")}</span>
                     <span className="font-mono text-[9px] opacity-60">⌘,</span>
                   </Button>
                 </div>

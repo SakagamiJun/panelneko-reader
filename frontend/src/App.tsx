@@ -371,11 +371,11 @@ export default function App() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card border border-border/80 shadow-xs">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
-            <span className="text-xs text-muted-foreground">正在加载阅读器…</span>
+            <span className="text-xs text-muted-foreground">{t("reader.loading")}</span>
           </div>
         ) : selectedLibraryID && readerQuery.isError ? (
           <div className="flex h-full items-center justify-center bg-background text-xs text-danger font-medium">
-            无法打开当前漫画阅读器。
+            {t("reader.loadFailed")}
           </div>
         ) : selectedLibraryID && readerQuery.data && settings ? (
           <ReaderController
@@ -559,10 +559,10 @@ function LibraryGrid({
           {t("library.noMatches")}
         </h3>
         <p className="text-xs text-muted-foreground mb-4">
-          未找到包含 "{searchQuery}" 的漫画
+          {t("library.noMatchesForQuery", { query: searchQuery })}
         </p>
         <Button onClick={onClearSearch} size="xs" variant="outline">
-          清空搜索
+          {t("library.clearSearch")}
         </Button>
       </div>
     );
@@ -579,7 +579,7 @@ function LibraryGrid({
           {emptyLabel}
         </p>
         <Button onClick={onOpenSettings} size="sm" variant="outline">
-          配置漫画库目录
+          {t("library.configureLibrary")}
         </Button>
       </div>
     );

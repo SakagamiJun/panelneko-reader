@@ -80,7 +80,8 @@ export function formatSmartDate(value: string, locale?: string, now: Date = new 
     try {
       return getRelativeTimeFormat(locale).format(-1, "day");
     } catch {
-      return "昨天";
+      const loc = locale ?? "zh-CN";
+      return loc.startsWith("en") ? "Yesterday" : loc.startsWith("ja") ? "昨日" : "昨天";
     }
   }
 
