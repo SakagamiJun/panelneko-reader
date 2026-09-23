@@ -53,8 +53,13 @@ jobs:
           # If triggered by a manual tag push (e.g., v1.0.0), use it directly
           if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" == v* ]]; then
             echo "Triggered by manual tag: ${GITHUB_REF_NAME}"
+            version="${GITHUB_REF_NAME#v}"
+            if ! grep -Eq "^##[[:space:]]+v?${version}" CHANGELOG.md; then
+              echo "错误: CHANGELOG.md 中未找到版本 ${version} 的更新记录，取消发版流程。" >&2
+              exit 1
+            fi
             echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "version=${version}" >> "$GITHUB_OUTPUT"
             echo "skip=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -95,6 +100,12 @@ jobs:
           esac
           tag="v${major}.${minor}.${patch}"
           version="${major}.${minor}.${patch}"
+
+          # 校验 CHANGELOG.md 中是否存在该版本
+          if ! grep -Eq "^##[[:space:]]+v?${version}" CHANGELOG.md; then
+            echo "错误: CHANGELOG.md 中未找到版本 ${version} 的更新记录，取消打标签与发版流程。" >&2
+            exit 1
+          fi
           
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q .; then
             echo "Tag ${tag} already exists."
@@ -233,6 +244,15 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Generate release notes
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          bun build/generate-release-notes.ts "${{ needs.prepare-version.outputs.tag }}" release-notes.md
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -240,9 +260,14 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           if gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --repo "$REPO" --notes-file release-notes.md
             gh release upload "$TAG_NAME" release-assets/* --repo "$REPO" --clobber
           else
-            gh release create "$TAG_NAME" release-assets/* --repo "$REPO" --title "$TAG_NAME" --generate-notes
+            gh release create "$TAG_NAME" release-assets/* \
+              --repo "$REPO" \
+              --title "$TAG_NAME" \
+              --notes-file release-notes.md \
+              --generate-notes
           fi
 
   sync-homebrew:
