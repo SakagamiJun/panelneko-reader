@@ -21,6 +21,7 @@ import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmente
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import { Switch } from "@/components/ui/switch";
 import { appAdapter } from "@/lib/api";
+import { APP_LINKS } from "@/lib/constants";
 import type {
   AppSettings,
   ReaderDirection,
@@ -562,6 +563,52 @@ export function SettingsDialog({
                       </div>
                     </div>
                   </div>
+
+                  <SettingRow
+                    title={t("settings.projectRepo")}
+                    description={t("settings.projectRepoDesc")}
+                    control={
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        onClick={() => appAdapter.openURL(APP_LINKS.REPO)}
+                        className="gap-1 text-xs"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        <span>{t("settings.visitRepo")}</span>
+                      </Button>
+                    }
+                  />
+
+                  <SettingRow
+                    title={t("settings.feedbackAndSuggestions")}
+                    description={t("settings.feedbackAndSuggestionsDesc")}
+                    control={
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          onClick={() => appAdapter.openURL(APP_LINKS.BUG_REPORT)}
+                          className="gap-1 text-xs"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          <span>{t("settings.reportBug")}</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          onClick={() => appAdapter.openURL(APP_LINKS.FEATURE_REQUEST)}
+                          className="gap-1 text-xs"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          <span>{t("settings.suggestFeature")}</span>
+                        </Button>
+                      </div>
+                    }
+                  />
                 </SettingGroup>
 
                 <SettingGroup
