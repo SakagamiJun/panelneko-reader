@@ -1,6 +1,7 @@
 package library
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 	"golang.org/x/image/draw"
 	"golang.org/x/image/webp"
 	"golang.org/x/sync/singleflight"
@@ -28,35 +30,71 @@ const (
 	// LibraryThumbnailPrefix identifies incoming requests for downscaled cover thumbnails.
 	LibraryThumbnailPrefix = "/library-thumbnail/"
 
-	// DefaultThumbnailWidth defines the downscaled width for library cover cards.
-	DefaultThumbnailWidth = 400
+	// Thumbnail resolution and JPEG compression tiers:
+	// Low: Width 400, Quality 78 (Fastest, minimal memory and disk footprint)
+	ThumbnailWidthLow   = 400
+	ThumbnailQualityLow = 78
 
-	// ThumbnailQuality defines the JPEG compression quality (82 offers optimal quality/size tradeoff).
-	ThumbnailQuality = 82
+	// Medium (Default): Width 640, Quality 84 (Balanced for 1080p/2K and 4K 6-column grid)
+	ThumbnailWidthMed   = 640
+	ThumbnailQualityMed = 84
+
+	// High: Width 960, Quality 90 (Optimized for 4K 2x retina display and 4-column layout)
+	ThumbnailWidthHigh   = 960
+	ThumbnailQualityHigh = 90
+
+	// Legacy backward compatibility constants
+	DefaultThumbnailWidth = ThumbnailWidthLow
+	ThumbnailQuality      = 82
 )
+
+// ResolveThumbnailParams returns the target width and JPEG quality for a given ThumbnailQuality tier.
+func ResolveThumbnailParams(quality contracts.ThumbnailQuality) (targetWidth int, jpegQuality int) {
+	switch quality {
+	case contracts.ThumbnailQualityLow:
+		return ThumbnailWidthLow, ThumbnailQualityLow
+	case contracts.ThumbnailQualityHigh:
+		return ThumbnailWidthHigh, ThumbnailQualityHigh
+	case contracts.ThumbnailQualityMedium:
+		fallthrough
+	default:
+		return ThumbnailWidthMed, ThumbnailQualityMed
+	}
+}
 
 var (
 	thumbSingleFlight singleflight.Group
 	thumbSemaphore    = make(chan struct{}, 4)
 )
 
-// BuildThumbnailURL wraps an original library asset URL with the thumbnail prefix.
+// BuildThumbnailURL wraps an original library asset URL with the thumbnail prefix using default medium quality.
 func BuildThumbnailURL(rawURL string) string {
+	return BuildThumbnailURLWithQuality(rawURL, contracts.ThumbnailQualityMedium)
+}
+
+// BuildThumbnailURLWithQuality wraps an original library asset URL with the thumbnail prefix and quality query parameter.
+func BuildThumbnailURLWithQuality(rawURL string, quality contracts.ThumbnailQuality) string {
 	if rawURL == "" {
 		return ""
 	}
-	if strings.HasPrefix(rawURL, LibraryThumbnailPrefix) {
-		return rawURL
+	clean := StripThumbnailURL(rawURL)
+	prefix := LibraryThumbnailPrefix + strings.TrimPrefix(clean, "/")
+	if quality == "" || quality == contracts.ThumbnailQualityOff {
+		return prefix
 	}
-	return LibraryThumbnailPrefix + strings.TrimPrefix(rawURL, "/")
+	return fmt.Sprintf("%s?q=%s", prefix, quality)
 }
 
-// StripThumbnailURL removes the thumbnail prefix and restores the original asset path.
+// StripThumbnailURL removes the thumbnail prefix and any query parameters, restoring the original asset path.
 func StripThumbnailURL(thumbnailURL string) string {
-	if !strings.HasPrefix(thumbnailURL, LibraryThumbnailPrefix) {
-		return thumbnailURL
+	cleanURL := thumbnailURL
+	if idx := strings.Index(cleanURL, "?"); idx != -1 {
+		cleanURL = cleanURL[:idx]
 	}
-	return "/" + strings.TrimPrefix(thumbnailURL, LibraryThumbnailPrefix)
+	if !strings.HasPrefix(cleanURL, LibraryThumbnailPrefix) {
+		return cleanURL
+	}
+	return "/" + strings.TrimPrefix(cleanURL, LibraryThumbnailPrefix)
 }
 
 // GetThumbnailCacheSize calculates the total disk space in bytes consumed by thumbnail cache files.
@@ -96,22 +134,40 @@ func ClearThumbnailCache(cacheDir string) error {
 	return nil
 }
 
-func computeThumbnailCacheKey(sourcePath string, modTime time.Time, entryPath string, targetWidth int) string {
+func computeThumbnailCacheKey(sourcePath string, modTime time.Time, entryPath string, targetWidth int, quality int) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s:%d:%s:%d", sourcePath, modTime.UnixNano(), entryPath, targetWidth)
+	fmt.Fprintf(h, "%s:%d:%s:%d:%d", sourcePath, modTime.UnixNano(), entryPath, targetWidth, quality)
 	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 
 // ServeThumbnail handles thumbnail derivation, disk caching, and HTTP delivery.
 // If enabled is false or generation fails, it transparently falls back to serving the original raw asset.
 func ServeThumbnail(outputRoot string, cacheDir string, requestPath string, w http.ResponseWriter, r *http.Request, enabled bool) error {
-	return ServeMultiSourceThumbnail(map[string]string{"default": outputRoot}, outputRoot, cacheDir, requestPath, w, r, enabled)
+	quality := contracts.ThumbnailQualityMedium
+	if !enabled {
+		quality = contracts.ThumbnailQualityOff
+	}
+	return ServeMultiSourceThumbnailWithQuality(map[string]string{"default": outputRoot}, outputRoot, cacheDir, requestPath, w, r, quality)
 }
 
 func ServeMultiSourceThumbnail(sourcesMap map[string]string, defaultRoot string, cacheDir string, requestPath string, w http.ResponseWriter, r *http.Request, enabled bool) error {
+	quality := contracts.ThumbnailQualityMedium
+	if !enabled {
+		quality = contracts.ThumbnailQualityOff
+	}
+	return ServeMultiSourceThumbnailWithQuality(sourcesMap, defaultRoot, cacheDir, requestPath, w, r, quality)
+}
+
+func ServeMultiSourceThumbnailWithQuality(sourcesMap map[string]string, defaultRoot string, cacheDir string, requestPath string, w http.ResponseWriter, r *http.Request, quality contracts.ThumbnailQuality) error {
+	if r != nil && r.URL != nil {
+		if qParam := r.URL.Query().Get("q"); qParam != "" {
+			quality = contracts.ThumbnailQuality(qParam)
+		}
+	}
+
 	subPath := StripThumbnailURL(requestPath)
 
-	if !enabled {
+	if quality == contracts.ThumbnailQualityOff {
 		return serveMultiSourceFallbackAsset(sourcesMap, defaultRoot, subPath, w, r)
 	}
 
@@ -149,7 +205,8 @@ func ServeMultiSourceThumbnail(sourcesMap map[string]string, defaultRoot string,
 		modTime = info.ModTime()
 	}
 
-	cacheKey := computeThumbnailCacheKey(sourcePath, modTime, entryPath, DefaultThumbnailWidth)
+	targetWidth, jpegQuality := ResolveThumbnailParams(quality)
+	cacheKey := computeThumbnailCacheKey(sourcePath, modTime, entryPath, targetWidth, jpegQuality)
 	cachedFilePath := filepath.Join(cacheDir, cacheKey+".jpg")
 
 	// 1. Fast path: cache file already exists on disk
@@ -214,8 +271,8 @@ func ServeMultiSourceThumbnail(sourcesMap map[string]string, defaultRoot string,
 		}
 
 		var finalImg image.Image = srcImg
-		if srcW > DefaultThumbnailWidth {
-			targetW := DefaultThumbnailWidth
+		if srcW > targetWidth {
+			targetW := targetWidth
 			targetH := int(float64(srcH) * (float64(targetW) / float64(srcW)))
 			if targetH <= 0 {
 				targetH = 1
@@ -232,11 +289,17 @@ func ServeMultiSourceThumbnail(sourcesMap map[string]string, defaultRoot string,
 		}
 		tmpPath := tmpFile.Name()
 
-		jpegOpts := &jpeg.Options{Quality: ThumbnailQuality}
-		if err := jpeg.Encode(tmpFile, finalImg, jpegOpts); err != nil {
+		bufWriter := bufio.NewWriter(tmpFile)
+		jpegOpts := &jpeg.Options{Quality: jpegQuality}
+		if err := jpeg.Encode(bufWriter, finalImg, jpegOpts); err != nil {
 			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
 			return nil, fmt.Errorf("encode jpeg: %w", err)
+		}
+		if err := bufWriter.Flush(); err != nil {
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
+			return nil, fmt.Errorf("flush temp thumbnail: %w", err)
 		}
 		if err := tmpFile.Close(); err != nil {
 			_ = os.Remove(tmpPath)

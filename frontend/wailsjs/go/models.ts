@@ -49,6 +49,7 @@ export namespace contracts {
 	    shortcuts: Record<string, string>;
 	    autoCheckUpdates?: boolean;
 	    enableThumbnailCache?: boolean;
+	    thumbnailQuality?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -74,6 +75,7 @@ export namespace contracts {
 	        this.shortcuts = source["shortcuts"];
 	        this.autoCheckUpdates = source["autoCheckUpdates"];
 	        this.enableThumbnailCache = source["enableThumbnailCache"];
+	        this.thumbnailQuality = source["thumbnailQuality"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 )
 
 func createTestImageFile(t *testing.T, dir, filename string, width, height int, isPNG bool) string {
@@ -80,19 +82,39 @@ func TestThumbnailURLHelpers(t *testing.T) {
 
 	raw := "/library-files/comic/01.jpg"
 	wrapped := BuildThumbnailURL(raw)
-	expected := "/library-thumbnail/library-files/comic/01.jpg"
+	expected := "/library-thumbnail/library-files/comic/01.jpg?q=medium"
 	if wrapped != expected {
 		t.Errorf("expected %s, got %s", expected, wrapped)
 	}
 
-	// Idempotent
+	// Idempotent with quality
 	if BuildThumbnailURL(wrapped) != expected {
-		t.Errorf("BuildThumbnailURL should be idempotent")
+		t.Errorf("BuildThumbnailURL should be idempotent with existing thumbnail URL")
+	}
+
+	highURL := BuildThumbnailURLWithQuality(raw, "high")
+	if highURL != "/library-thumbnail/library-files/comic/01.jpg?q=high" {
+		t.Errorf("expected ?q=high, got %s", highURL)
+	}
+
+	lowURL := BuildThumbnailURLWithQuality(highURL, "low")
+	if lowURL != "/library-thumbnail/library-files/comic/01.jpg?q=low" {
+		t.Errorf("expected ?q=low, got %s", lowURL)
+	}
+
+	offURL := BuildThumbnailURLWithQuality(raw, "off")
+	if offURL != "/library-thumbnail/library-files/comic/01.jpg" {
+		t.Errorf("expected prefix only for off, got %s", offURL)
 	}
 
 	stripped := StripThumbnailURL(wrapped)
 	if stripped != raw {
 		t.Errorf("expected %s, got %s", raw, stripped)
+	}
+
+	strippedHigh := StripThumbnailURL(highURL)
+	if strippedHigh != raw {
+		t.Errorf("expected %s, got %s", raw, strippedHigh)
 	}
 
 	// Strip non-thumbnail URL should be no-op
@@ -145,11 +167,11 @@ func TestServeThumbnailDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode cached thumbnail config: %v", err)
 	}
-	if cfg.Width != DefaultThumbnailWidth {
-		t.Errorf("expected thumbnail width %d, got %d", DefaultThumbnailWidth, cfg.Width)
+	if cfg.Width != ThumbnailWidthMed {
+		t.Errorf("expected thumbnail width %d, got %d", ThumbnailWidthMed, cfg.Width)
 	}
-	if cfg.Height != 600 {
-		t.Errorf("expected thumbnail height 600, got %d", cfg.Height)
+	if cfg.Height != 960 {
+		t.Errorf("expected thumbnail height 960, got %d", cfg.Height)
 	}
 
 	// Test 304 Not Modified
@@ -267,5 +289,73 @@ func TestServeThumbnailConcurrentSingleFlight(t *testing.T) {
 		if err != nil {
 			t.Errorf("concurrent worker %d failed: %v", i, err)
 		}
+	}
+}
+
+func TestServeThumbnailQualityTiers(t *testing.T) {
+	libraryRoot := t.TempDir()
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+
+	comicDir := filepath.Join(libraryRoot, "TestComic")
+	_ = os.MkdirAll(comicDir, 0o755)
+	createTestImageFile(t, comicDir, "cover.jpg", 1200, 1800, false)
+
+	tiers := []struct {
+		quality       contracts.ThumbnailQuality
+		expectedWidth int
+	}{
+		{contracts.ThumbnailQualityLow, ThumbnailWidthLow},
+		{contracts.ThumbnailQualityMedium, ThumbnailWidthMed},
+		{contracts.ThumbnailQualityHigh, ThumbnailWidthHigh},
+	}
+
+	for _, tier := range tiers {
+		reqPath := fmt.Sprintf("/library-thumbnail/library-files/TestComic/cover.jpg?q=%s", tier.quality)
+		req := httptest.NewRequest(http.MethodGet, reqPath, nil)
+		rec := httptest.NewRecorder()
+
+		err := ServeMultiSourceThumbnailWithQuality(map[string]string{"default": libraryRoot}, libraryRoot, cacheDir, reqPath, rec, req, tier.quality)
+		if err != nil {
+			t.Fatalf("ServeMultiSourceThumbnailWithQuality (%s) failed: %v", tier.quality, err)
+		}
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 OK for %s, got %d", tier.quality, rec.Code)
+		}
+
+		cfg, _, err := image.DecodeConfig(bytes.NewReader(rec.Body.Bytes()))
+		if err != nil {
+			t.Fatalf("decode %s output config: %v", tier.quality, err)
+		}
+		if cfg.Width != tier.expectedWidth {
+			t.Errorf("tier %s: expected width %d, got %d", tier.quality, tier.expectedWidth, cfg.Width)
+		}
+	}
+
+	// Verify all 3 tiers created 3 distinct cached files in cacheDir
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil || len(entries) != 3 {
+		t.Fatalf("expected 3 distinct cached files for 3 tiers, got %d", len(entries))
+	}
+
+	// Test Off tier
+	offReqPath := "/library-thumbnail/library-files/TestComic/cover.jpg?q=off"
+	offReq := httptest.NewRequest(http.MethodGet, offReqPath, nil)
+	offRec := httptest.NewRecorder()
+	err = ServeMultiSourceThumbnailWithQuality(map[string]string{"default": libraryRoot}, libraryRoot, cacheDir, offReqPath, offRec, offReq, contracts.ThumbnailQualityOff)
+	if err != nil {
+		t.Fatalf("ServeMultiSourceThumbnailWithQuality off failed: %v", err)
+	}
+	cfgOff, _, err := image.DecodeConfig(bytes.NewReader(offRec.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("decode off output config: %v", err)
+	}
+	// Off should serve original 1200px image
+	if cfgOff.Width != 1200 {
+		t.Errorf("tier off: expected original width 1200, got %d", cfgOff.Width)
+	}
+	// Verify no 4th file created
+	entriesAfterOff, _ := os.ReadDir(cacheDir)
+	if len(entriesAfterOff) != 3 {
+		t.Errorf("expected still 3 cached files after off request, got %d", len(entriesAfterOff))
 	}
 }

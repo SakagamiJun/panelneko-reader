@@ -13,6 +13,7 @@ import {
   type AppSettings,
   EVENTS,
   type LibraryManga,
+  type LibrarySource,
   type UpdateCheckResult,
 } from "@/lib/contracts";
 import { i18n } from "@/lib/i18n";
@@ -201,10 +202,7 @@ export default function App() {
     mutationFn: (input: AppSettings) => appAdapter.updateSettings(input),
     onSuccess: async (updated) => {
       queryClient.setQueryData(["settings"], updated);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["settings"] }),
-        queryClient.invalidateQueries({ queryKey: ["library"] }),
-      ]);
+      await queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
   });
 
@@ -267,29 +265,73 @@ export default function App() {
     );
   });
 
+  const settingsBeforeOpenRef = useRef<{
+    thumbnailQuality?: string;
+    enableThumbnailCache?: boolean;
+    sourcesSignature?: string;
+  } | null>(null);
+
+  const computeSourcesSignature = (sources?: LibrarySource[]) => {
+    if (!sources) return "";
+    return sources.map((s) => `${s.id}:${s.path}:${s.enabled}:${s.mangaCount || 0}`).join("|");
+  };
+
+  const handleOpenSettings = (tab: SettingsTab = "general") => {
+    const current = settingsQuery.data;
+    if (current) {
+      settingsBeforeOpenRef.current = {
+        thumbnailQuality: current.thumbnailQuality,
+        enableThumbnailCache: current.enableThumbnailCache,
+        sourcesSignature: computeSourcesSignature(current.librarySources),
+      };
+    }
+    setSettingsDefaultTab(tab);
+    setSettingsOpen(true);
+  };
+
+  const handleCloseSettings = (finalForm?: AppSettings) => {
+    setSettingsOpen(false);
+    const prev = settingsBeforeOpenRef.current;
+    const current = finalForm ?? settingsQuery.data ?? settings;
+    if (prev && current) {
+      const qualityChanged =
+        prev.thumbnailQuality !== current.thumbnailQuality ||
+        prev.enableThumbnailCache !== current.enableThumbnailCache;
+      const sourcesChanged =
+        prev.sourcesSignature !== computeSourcesSignature(current.librarySources);
+      if (qualityChanged || sourcesChanged) {
+        void queryClient.invalidateQueries({ queryKey: ["library"] });
+      }
+    }
+    settingsBeforeOpenRef.current = null;
+  };
+
+  const openSettingsWithTab = (tab: SettingsTab = "general") => {
+    handleOpenSettings(tab);
+  };
+
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
-        setSettingsOpen((prev) => !prev);
+        if (settingsOpen) {
+          handleCloseSettings();
+        } else {
+          handleOpenSettings("general");
+        }
         return;
       }
 
       if (e.key === "Escape" && settingsOpen) {
         e.preventDefault();
-        setSettingsOpen(false);
+        handleCloseSettings();
         return;
       }
     };
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [settingsOpen]);
-
-  const openSettingsWithTab = (tab: SettingsTab = "general") => {
-    setSettingsDefaultTab(tab);
-    setSettingsOpen(true);
-  };
+  }, [settingsOpen, settings]);
 
   const handleExitReader = () => {
     if (parentCollection) {
@@ -424,7 +466,7 @@ export default function App() {
       {settings && (
         <SettingsDialog
           open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
+          onClose={handleCloseSettings}
           settings={settings}
           onSave={(nextSettings) => settingsMutation.mutate(nextSettings)}
           version={versionQuery.data?.version}

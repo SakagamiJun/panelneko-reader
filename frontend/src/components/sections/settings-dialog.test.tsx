@@ -23,6 +23,8 @@ const mockSettings: AppSettings = {
   readerDoubleClickZoom: false,
   shortcuts: {},
   autoCheckUpdates: true,
+  enableThumbnailCache: true,
+  thumbnailQuality: "medium",
 };
 
 describe("SettingsDialog Component - About Tab", () => {
@@ -140,12 +142,12 @@ describe("SettingsDialog Component - Performance & Cache Settings", () => {
       />
     );
 
-    expect(screen.getByText(/生成封面缩略图缓存|Generate Cover Thumbnails|表紙サムネイルキャッシュの生成/i)).toBeInTheDocument();
+    expect(screen.getByText(/封面缩略图画质|Cover Thumbnail Quality|表紙サムネイル画質/i)).toBeInTheDocument();
     expect(screen.getByText(/缩略图缓存占用|Thumbnail Cache Size|サムネイルキャッシュ容量/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /清空缓存|Clear Cache|キャッシュを削除/i })).toBeInTheDocument();
   });
 
-  it("calls onSave when toggling enableThumbnailCache switch", async () => {
+  it("calls onSave when selecting thumbnail quality in segmented control", async () => {
     const onSave = vi.fn();
 
     render(
@@ -158,14 +160,19 @@ describe("SettingsDialog Component - Performance & Cache Settings", () => {
       />
     );
 
-    const switches = screen.getAllByRole("switch");
-    // Find the switch for enableThumbnailCache (should be the third switch on general tab)
-    const thumbSwitch = switches[switches.length - 1];
-    fireEvent.click(thumbSwitch);
+    const offRadio = screen.getByRole("radio", { name: /关闭|Off|無効/i });
+    fireEvent.click(offRadio);
 
     expect(onSave).toHaveBeenCalled();
     const lastCall = onSave.mock.calls[onSave.mock.calls.length - 1][0];
+    expect(lastCall.thumbnailQuality).toBe("off");
     expect(lastCall.enableThumbnailCache).toBe(false);
+
+    const highRadio = screen.getByRole("radio", { name: /高|High/i });
+    fireEvent.click(highRadio);
+    const lastCallHigh = onSave.mock.calls[onSave.mock.calls.length - 1][0];
+    expect(lastCallHigh.thumbnailQuality).toBe("high");
+    expect(lastCallHigh.enableThumbnailCache).toBe(true);
   });
 
   it("calls clearThumbnailCache when clear button is clicked", async () => {

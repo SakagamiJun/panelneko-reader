@@ -104,9 +104,21 @@ describe("MockAdapter Pin Functionality", () => {
     expect(settings.autoCheckUpdates).toBe(true);
   });
 
-  it("includes enableThumbnailCache in default settings", async () => {
+  it("includes enableThumbnailCache and thumbnailQuality in default settings", async () => {
     const settings = await adapter.getSettings();
     expect(settings.enableThumbnailCache).toBe(true);
+    expect(settings.thumbnailQuality).toBe("medium");
+  });
+
+  it("updates thumbnailQuality and syncs enableThumbnailCache", async () => {
+    const current = await adapter.getSettings();
+    const updated = await adapter.updateSettings({ ...current, thumbnailQuality: "high" });
+    expect(updated.thumbnailQuality).toBe("high");
+    expect(updated.enableThumbnailCache).toBe(true);
+
+    const updatedOff = await adapter.updateSettings({ ...updated, thumbnailQuality: "off" });
+    expect(updatedOff.thumbnailQuality).toBe("off");
+    expect(updatedOff.enableThumbnailCache).toBe(false);
   });
 
   it("handles thumbnail cache size querying and clearing", async () => {

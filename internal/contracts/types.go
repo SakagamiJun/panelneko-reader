@@ -56,6 +56,15 @@ const (
 	ReaderSideClickModeLeftNext  ReaderSideClickMode = "left_next"
 )
 
+type ThumbnailQuality string
+
+const (
+	ThumbnailQualityOff    ThumbnailQuality = "off"
+	ThumbnailQualityLow    ThumbnailQuality = "low"
+	ThumbnailQualityMedium ThumbnailQuality = "medium"
+	ThumbnailQualityHigh   ThumbnailQuality = "high"
+)
+
 type SourceType string
 
 const (
@@ -106,6 +115,7 @@ type AppSettings struct {
 	Shortcuts                 map[string]string   `json:"shortcuts"`
 	AutoCheckUpdates          *bool               `json:"autoCheckUpdates,omitempty"`
 	EnableThumbnailCache      *bool               `json:"enableThumbnailCache,omitempty"`
+	ThumbnailQuality          ThumbnailQuality    `json:"thumbnailQuality,omitempty"`
 }
 
 type LibraryManga struct {

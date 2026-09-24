@@ -370,16 +370,20 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 
 	items = library.ApplyPinsAndSort(items, pins)
 
-	enabled := true
-	if currentSettings.EnableThumbnailCache != nil {
-		enabled = *currentSettings.EnableThumbnailCache
+	quality := currentSettings.ThumbnailQuality
+	if quality == "" {
+		if currentSettings.EnableThumbnailCache != nil && !*currentSettings.EnableThumbnailCache {
+			quality = contracts.ThumbnailQualityOff
+		} else {
+			quality = contracts.ThumbnailQualityMedium
+		}
 	}
 
 	for i := range items {
-		if enabled {
-			items[i].CoverImageURL = library.BuildThumbnailURL(items[i].CoverImageURL)
-		} else {
+		if quality == contracts.ThumbnailQualityOff {
 			items[i].CoverImageURL = library.StripThumbnailURL(items[i].CoverImageURL)
+		} else {
+			items[i].CoverImageURL = library.BuildThumbnailURLWithQuality(items[i].CoverImageURL, quality)
 		}
 	}
 
@@ -754,12 +758,16 @@ func (a *App) assetHandler() http.Handler {
 		}
 
 		if strings.HasPrefix(request.URL.Path, library.LibraryThumbnailPrefix) {
-			enabled := true
-			if a.settings.Get().EnableThumbnailCache != nil {
-				enabled = *a.settings.Get().EnableThumbnailCache
+			quality := a.settings.Get().ThumbnailQuality
+			if quality == "" {
+				if a.settings.Get().EnableThumbnailCache != nil && !*a.settings.Get().EnableThumbnailCache {
+					quality = contracts.ThumbnailQualityOff
+				} else {
+					quality = contracts.ThumbnailQualityMedium
+				}
 			}
 			cacheDir := filepath.Join(a.store.DataDir(), "cache", "thumbnails")
-			if err := library.ServeMultiSourceThumbnail(sourcesMap, defaultRoot, cacheDir, request.URL.Path, writer, request, enabled); err != nil {
+			if err := library.ServeMultiSourceThumbnailWithQuality(sourcesMap, defaultRoot, cacheDir, request.URL.Path, writer, request, quality); err != nil {
 				if os.IsNotExist(err) {
 					http.NotFound(writer, request)
 					return

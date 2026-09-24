@@ -50,6 +50,7 @@ const defaultSettings: AppSettings = {
   },
   autoCheckUpdates: true,
   enableThumbnailCache: true,
+  thumbnailQuality: "medium",
 };
 
 function createMockReaderManifest(index: number, title: string): ReaderManifest {
@@ -171,9 +172,22 @@ export class MockAdapter implements AppAdapter {
   }
 
   async updateSettings(input: AppSettings) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(input));
-    this.emit(EVENTS.SETTINGS_UPDATED, input);
-    return input;
+    const current = this.readSettings();
+    const updated: AppSettings = { ...current, ...input };
+    if (input.thumbnailQuality !== undefined) {
+      updated.thumbnailQuality = input.thumbnailQuality;
+      updated.enableThumbnailCache = input.thumbnailQuality !== "off";
+    } else if (input.enableThumbnailCache !== undefined) {
+      updated.enableThumbnailCache = input.enableThumbnailCache;
+      if (!input.enableThumbnailCache) {
+        updated.thumbnailQuality = "off";
+      } else if (updated.thumbnailQuality === "off" || !updated.thumbnailQuality) {
+        updated.thumbnailQuality = "medium";
+      }
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    this.emit(EVENTS.SETTINGS_UPDATED, updated);
+    return updated;
   }
 
   async listLibraryManga() {

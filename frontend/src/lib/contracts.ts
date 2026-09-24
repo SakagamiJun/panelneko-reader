@@ -23,6 +23,8 @@ export interface LibrarySource {
   lastScanned?: string;
 }
 
+export type ThumbnailQuality = "off" | "low" | "medium" | "high";
+
 export interface AppSettings {
   libraryRoot: string;
   librarySources?: LibrarySource[];
@@ -42,6 +44,7 @@ export interface AppSettings {
   shortcuts: Record<string, string>;
   autoCheckUpdates?: boolean;
   enableThumbnailCache?: boolean;
+  thumbnailQuality?: ThumbnailQuality;
 }
 
 export interface LibraryManga {

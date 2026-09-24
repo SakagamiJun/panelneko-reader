@@ -42,6 +42,9 @@ func TestNewServicePersistsDefaults(t *testing.T) {
 	if current.EnableThumbnailCache == nil || !*current.EnableThumbnailCache {
 		t.Fatal("expected enable thumbnail cache to be enabled by default")
 	}
+	if current.ThumbnailQuality != contracts.ThumbnailQualityMedium {
+		t.Fatalf("expected thumbnail quality to default to medium, got %s", current.ThumbnailQuality)
+	}
 }
 
 func TestNormalizeRejectsUnsupportedLocale(t *testing.T) {
@@ -169,12 +172,16 @@ func TestNormalizeEnableThumbnailCache(t *testing.T) {
 	input := DefaultSettings()
 	f := false
 	input.EnableThumbnailCache = &f
+	input.ThumbnailQuality = ""
 	normalized, err := service.Normalize(input)
 	if err != nil {
 		t.Fatalf("normalize: %v", err)
 	}
 	if normalized.EnableThumbnailCache == nil || *normalized.EnableThumbnailCache {
 		t.Fatal("expected EnableThumbnailCache to be false")
+	}
+	if normalized.ThumbnailQuality != contracts.ThumbnailQualityOff {
+		t.Fatalf("expected ThumbnailQuality to be off, got %s", normalized.ThumbnailQuality)
 	}
 
 	input.EnableThumbnailCache = nil
@@ -184,6 +191,56 @@ func TestNormalizeEnableThumbnailCache(t *testing.T) {
 	}
 	if normalized.EnableThumbnailCache == nil || !*normalized.EnableThumbnailCache {
 		t.Fatal("expected EnableThumbnailCache to default to true when nil")
+	}
+	if normalized.ThumbnailQuality != contracts.ThumbnailQualityMedium {
+		t.Fatalf("expected ThumbnailQuality to default to medium, got %s", normalized.ThumbnailQuality)
+	}
+}
+
+func TestNormalizeThumbnailQuality(t *testing.T) {
+	sqliteStore, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	tests := []struct {
+		inputQuality contracts.ThumbnailQuality
+		expectedQual contracts.ThumbnailQuality
+		expectedBool bool
+		expectErr    bool
+	}{
+		{contracts.ThumbnailQualityOff, contracts.ThumbnailQualityOff, false, false},
+		{contracts.ThumbnailQualityLow, contracts.ThumbnailQualityLow, true, false},
+		{contracts.ThumbnailQualityMedium, contracts.ThumbnailQualityMedium, true, false},
+		{contracts.ThumbnailQualityHigh, contracts.ThumbnailQualityHigh, true, false},
+		{contracts.ThumbnailQuality("invalid"), "", false, true},
+	}
+
+	for _, tc := range tests {
+		input := DefaultSettings()
+		input.ThumbnailQuality = tc.inputQuality
+		normalized, err := service.Normalize(input)
+		if tc.expectErr {
+			if err == nil {
+				t.Fatalf("expected error for quality %s, got nil", tc.inputQuality)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("unexpected error for quality %s: %v", tc.inputQuality, err)
+		}
+		if normalized.ThumbnailQuality != tc.expectedQual {
+			t.Fatalf("expected quality %s, got %s", tc.expectedQual, normalized.ThumbnailQuality)
+		}
+		if normalized.EnableThumbnailCache == nil || *normalized.EnableThumbnailCache != tc.expectedBool {
+			t.Fatalf("expected enableThumbnailCache %v for quality %s, got %v", tc.expectedBool, tc.inputQuality, *normalized.EnableThumbnailCache)
+		}
 	}
 }
 

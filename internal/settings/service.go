@@ -93,6 +93,7 @@ func DefaultSettings() contracts.AppSettings {
 		},
 		AutoCheckUpdates:     boolPtr(true),
 		EnableThumbnailCache: boolPtr(true),
+		ThumbnailQuality:     contracts.ThumbnailQualityMedium,
 	}
 }
 
@@ -269,10 +270,32 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 		settings.AutoCheckUpdates = boolPtr(*input.AutoCheckUpdates)
 	}
 
-	if input.EnableThumbnailCache == nil {
+	switch input.ThumbnailQuality {
+	case contracts.ThumbnailQualityOff:
+		settings.ThumbnailQuality = contracts.ThumbnailQualityOff
+		settings.EnableThumbnailCache = boolPtr(false)
+	case contracts.ThumbnailQualityLow:
+		settings.ThumbnailQuality = contracts.ThumbnailQualityLow
 		settings.EnableThumbnailCache = boolPtr(true)
-	} else {
-		settings.EnableThumbnailCache = boolPtr(*input.EnableThumbnailCache)
+	case contracts.ThumbnailQualityMedium:
+		settings.ThumbnailQuality = contracts.ThumbnailQualityMedium
+		settings.EnableThumbnailCache = boolPtr(true)
+	case contracts.ThumbnailQualityHigh:
+		settings.ThumbnailQuality = contracts.ThumbnailQualityHigh
+		settings.EnableThumbnailCache = boolPtr(true)
+	case "":
+		if input.EnableThumbnailCache != nil && !*input.EnableThumbnailCache {
+			settings.ThumbnailQuality = contracts.ThumbnailQualityOff
+			settings.EnableThumbnailCache = boolPtr(false)
+		} else {
+			settings.ThumbnailQuality = contracts.ThumbnailQualityMedium
+			settings.EnableThumbnailCache = boolPtr(true)
+		}
+	default:
+		return contracts.AppSettings{}, contracts.ContractError{
+			Code:    contracts.ErrCodeSettingsInvalid,
+			Message: fmt.Sprintf("unsupported thumbnail quality: %s", input.ThumbnailQuality),
+		}
 	}
 
 	switch input.LocaleMode {

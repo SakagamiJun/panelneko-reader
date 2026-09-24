@@ -36,6 +36,7 @@ import type {
   ReaderSpreadMode,
   ReaderSideClickMode,
   SourceType,
+  ThumbnailQuality,
   UpdateCheckResult,
 } from "@/lib/contracts";
 import { cn, formatBytes } from "@/lib/utils";
@@ -44,7 +45,7 @@ export type SettingsTab = "general" | "sources" | "reader" | "shortcuts" | "abou
 
 export interface SettingsDialogProps {
   open: boolean;
-  onClose: () => void;
+  onClose: (finalSettings?: AppSettings) => void;
   settings: AppSettings;
   onSave: (settings: AppSettings) => void;
   version?: string;
@@ -144,10 +145,12 @@ export function SettingsDialog({
 
   if (!open) return null;
 
-  const updateField = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    const next = { ...form, [key]: value };
-    setForm(next);
-    onSave(next);
+  const updateFields = (patch: Partial<AppSettings>) => {
+    setForm((prev) => {
+      const next = { ...prev, ...patch };
+      onSave(next);
+      return next;
+    });
     setIsSavedRecently(true);
     if (saveTimeoutRef.current) {
       window.clearTimeout(saveTimeoutRef.current);
@@ -155,6 +158,10 @@ export function SettingsDialog({
     saveTimeoutRef.current = window.setTimeout(() => {
       setIsSavedRecently(false);
     }, 1500);
+  };
+
+  const updateField = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    updateFields({ [key]: value } as Partial<AppSettings>);
   };
 
   const handleBrowseNewSource = async () => {
@@ -287,10 +294,14 @@ export function SettingsDialog({
     { value: "left_next", label: t("settings.sideClickLeftNextShort") },
   ];
 
+  const handleClose = () => {
+    onClose(form);
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-md animate-in fade-in duration-150 p-4"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="relative flex flex-col w-[780px] max-w-[94vw] h-[560px] max-h-[88vh] rounded-2xl border border-border/80 bg-card/95 backdrop-blur-2xl shadow-2xl overflow-hidden select-none animate-in zoom-in-95 duration-150"
@@ -332,7 +343,7 @@ export function SettingsDialog({
                 type="button"
                 size="xs"
                 variant="ghost"
-                onClick={onClose}
+                onClick={handleClose}
                 className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
                 title={t("settings.close")}
               >
@@ -422,14 +433,26 @@ export function SettingsDialog({
                   />
 
                   <SettingRow
-                    title={t("settings.enableThumbnailCache")}
-                    description={t("settings.enableThumbnailCacheDesc")}
+                    title={t("settings.thumbnailQuality")}
+                    description={t("settings.thumbnailQualityDesc")}
                     control={
-                      <Switch
-                        checked={form.enableThumbnailCache !== false}
-                        onChange={(checked) =>
-                          updateField("enableThumbnailCache", checked)
+                      <SegmentedControl<ThumbnailQuality>
+                        value={
+                          form.thumbnailQuality ??
+                          (form.enableThumbnailCache === false ? "off" : "medium")
                         }
+                        onChange={(val) => {
+                          updateFields({
+                            thumbnailQuality: val,
+                            enableThumbnailCache: val !== "off",
+                          });
+                        }}
+                        options={[
+                          { value: "off", label: t("settings.thumbnailQualityOff") },
+                          { value: "low", label: t("settings.thumbnailQualityLow") },
+                          { value: "medium", label: t("settings.thumbnailQualityMedium") },
+                          { value: "high", label: t("settings.thumbnailQualityHigh") },
+                        ]}
                       />
                     }
                   />
