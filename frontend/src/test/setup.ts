@@ -17,3 +17,34 @@ Object.defineProperty(globalThis, "localStorage", {
   writable: true,
   configurable: true,
 });
+
+class ResizeObserverMock {
+  callback: ResizeObserverCallback;
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+  observe(target: Element) {
+    this.callback(
+      [
+        {
+          target,
+          contentRect: { width: 1200, height: 800 } as DOMRectReadOnly,
+        } as ResizeObserverEntry,
+      ],
+      this as unknown as ResizeObserver
+    );
+  }
+  unobserve() {}
+  disconnect() {}
+}
+
+globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+
+Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+  configurable: true,
+  value: 1000,
+});
+Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+  configurable: true,
+  value: 1000,
+});

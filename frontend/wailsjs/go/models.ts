@@ -50,6 +50,7 @@ export namespace contracts {
 	    autoCheckUpdates?: boolean;
 	    enableThumbnailCache?: boolean;
 	    thumbnailQuality?: string;
+	    duplicateMergeMode?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -76,6 +77,7 @@ export namespace contracts {
 	        this.autoCheckUpdates = source["autoCheckUpdates"];
 	        this.enableThumbnailCache = source["enableThumbnailCache"];
 	        this.thumbnailQuality = source["thumbnailQuality"];
+	        this.duplicateMergeMode = source["duplicateMergeMode"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

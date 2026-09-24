@@ -464,7 +464,7 @@ func GetReaderManifest(outputRoot string, mangaID string) (contracts.ReaderManif
 	return GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: outputRoot, Enabled: true}}, mangaID)
 }
 
-func GetReaderManifestWithSources(sources []contracts.LibrarySource, mangaID string) (contracts.ReaderManifest, error) {
+func GetReaderManifestWithSources(sources []contracts.LibrarySource, mangaID string, mergeMode ...contracts.DuplicateMergeMode) (contracts.ReaderManifest, error) {
 	sourceID, relativePath, err := DecodeMangaIDWithSource(mangaID)
 	if err != nil {
 		return contracts.ReaderManifest{}, err
@@ -489,17 +489,113 @@ func GetReaderManifestWithSources(sources []contracts.LibrarySource, mangaID str
 		return contracts.ReaderManifest{}, fmt.Errorf("library source %q is disabled", matchedSource.Name)
 	}
 
-	mangaDir, err := resolveWithinRoot(matchedSource.Path, relativePath)
+	isMerge := len(mergeMode) > 0 && mergeMode[0] == contracts.DuplicateMergeModeMerge
+	if !isMerge {
+		mangaDir, err := resolveWithinRoot(matchedSource.Path, relativePath)
+		if err != nil {
+			return contracts.ReaderManifest{}, err
+		}
+
+		manifest, err := loadMangaManifestWithSource(matchedSource.Path, matchedSource.ID, mangaDir, relativePath)
+		if err != nil {
+			return contracts.ReaderManifest{}, err
+		}
+
+		return manifest.reader, nil
+	}
+
+	// In merge mode: find all enabled sources where relativePath exists
+	var matchingSources []contracts.LibrarySource
+	for _, src := range sources {
+		if !src.Enabled {
+			continue
+		}
+		targetPath, err := resolveWithinRoot(src.Path, relativePath)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(targetPath); err == nil {
+			matchingSources = append(matchingSources, src)
+		}
+	}
+
+	if len(matchingSources) == 0 {
+		matchingSources = append(matchingSources, *matchedSource)
+	}
+
+	// Sort matching sources so local sources come first, then original order in sources
+	sort.SliceStable(matchingSources, func(i, j int) bool {
+		iLocal := matchingSources[i].Type == contracts.SourceTypeLocal || matchingSources[i].Type == "local" || matchingSources[i].Type == ""
+		jLocal := matchingSources[j].Type == contracts.SourceTypeLocal || matchingSources[j].Type == "local" || matchingSources[j].Type == ""
+		if iLocal && !jLocal {
+			return true
+		}
+		if !iLocal && jLocal {
+			return false
+		}
+		return false
+	})
+
+	primarySource := matchingSources[0]
+	primaryDir, err := resolveWithinRoot(primarySource.Path, relativePath)
+	if err != nil {
+		return contracts.ReaderManifest{}, err
+	}
+	primaryManifest, err := loadMangaManifestWithSource(primarySource.Path, primarySource.ID, primaryDir, relativePath)
 	if err != nil {
 		return contracts.ReaderManifest{}, err
 	}
 
-	manifest, err := loadMangaManifestWithSource(matchedSource.Path, matchedSource.ID, mangaDir, relativePath)
-	if err != nil {
-		return contracts.ReaderManifest{}, err
+	if len(matchingSources) == 1 {
+		return primaryManifest.reader, nil
 	}
 
-	return manifest.reader, nil
+	// Collect chapters from all matching sources
+	var allChapters []contracts.ReaderChapter
+	seenTitles := make(map[string]bool)
+
+	for _, ch := range primaryManifest.reader.Chapters {
+		normTitle := strings.ToLower(strings.TrimSpace(ch.Title))
+		seenTitles[normTitle] = true
+		allChapters = append(allChapters, ch)
+	}
+
+	for _, otherSrc := range matchingSources[1:] {
+		otherDir, err := resolveWithinRoot(otherSrc.Path, relativePath)
+		if err != nil {
+			continue
+		}
+		otherManifest, err := loadMangaManifestWithSource(otherSrc.Path, otherSrc.ID, otherDir, relativePath)
+		if err != nil {
+			continue
+		}
+		for _, ch := range otherManifest.reader.Chapters {
+			normTitle := strings.ToLower(strings.TrimSpace(ch.Title))
+			if seenTitles[normTitle] {
+				continue
+			}
+			seenTitles[normTitle] = true
+			allChapters = append(allChapters, ch)
+		}
+	}
+
+	// Sort chapters naturally
+	sort.SliceStable(allChapters, func(i, j int) bool {
+		return readerChapterLess(allChapters[i], allChapters[j])
+	})
+
+	// Recompute numbers and startPage
+	startPage := 0
+	for i := range allChapters {
+		allChapters[i].Number = float64(i + 1)
+		allChapters[i].StartPage = startPage
+		startPage += allChapters[i].PageCount
+	}
+
+	primaryManifest.reader.Chapters = allChapters
+	primaryManifest.reader.TotalPages = startPage
+
+	return primaryManifest.reader, nil
 }
 
 func ResolveDirectoryPath(outputRoot string, mangaID string) (string, error) {
@@ -1619,6 +1715,19 @@ func chapterLess(left chapterSource, right chapterSource) bool {
 	return naturalLess(left.localPath, right.localPath)
 }
 
+func readerChapterLess(left, right contracts.ReaderChapter) bool {
+	if left.Number != right.Number {
+		return left.Number < right.Number
+	}
+	if left.Title != right.Title {
+		return naturalLess(left.Title, right.Title)
+	}
+	if left.ID != right.ID {
+		return naturalLess(left.ID, right.ID)
+	}
+	return naturalLess(left.LocalPath, right.LocalPath)
+}
+
 func naturalLess(left string, right string) bool {
 	leftIndex := 0
 	rightIndex := 0
@@ -1828,11 +1937,282 @@ func robustRel(base, targ string) (string, error) {
 	return rel, err
 }
 
-// ApplyPinsAndSort applies pin statuses, updates collection covers if child mangas are pinned,
-// and sorts items (pinned items first, followed by default sorting).
-func ApplyPinsAndSort(items []contracts.LibraryManga, pins map[string]string) []contracts.LibraryManga {
+// MergeLibraryManga merges manga and collections across multiple sources according to duplicate merge rules.
+// Local sources (SourceTypeLocal) take priority for CoverImageURL, Title, and base metadata.
+// Chapters, child mangas, and page counts are aggregated.
+func MergeLibraryManga(items []contracts.LibraryManga, sources []contracts.LibrarySource, pins ...map[string]string) []contracts.LibraryManga {
 	if len(items) == 0 {
 		return []contracts.LibraryManga{}
+	}
+
+	sourceIndex := make(map[string]int, len(sources))
+	sourceIsLocal := make(map[string]bool, len(sources))
+	for i, s := range sources {
+		sourceIndex[s.ID] = i
+		if s.Type == contracts.SourceTypeLocal || s.Type == "local" || s.Type == "" {
+			sourceIsLocal[s.ID] = true
+		}
+	}
+
+	isBetterBase := func(a, b contracts.LibraryManga) bool {
+		aLoc := sourceIsLocal[a.SourceID]
+		bLoc := sourceIsLocal[b.SourceID]
+		if aLoc && !bLoc {
+			return true
+		}
+		if !aLoc && bLoc {
+			return false
+		}
+		idxA, okA := sourceIndex[a.SourceID]
+		if !okA {
+			idxA = 999999
+		}
+		idxB, okB := sourceIndex[b.SourceID]
+		if !okB {
+			idxB = 999999
+		}
+		if idxA != idxB {
+			return idxA < idxB
+		}
+		return a.SourceID < b.SourceID
+	}
+
+	var pinMap map[string]string
+	if len(pins) > 0 && pins[0] != nil {
+		pinMap = pins[0]
+	}
+
+	// 1. Separate child items and root items
+	var rawChildren []contracts.LibraryManga
+	var rawRootColls []contracts.LibraryManga
+	var rawRootManga []contracts.LibraryManga
+
+	for _, it := range items {
+		if it.ParentPath != "" {
+			rawChildren = append(rawChildren, it)
+		} else if it.IsCollection {
+			rawRootColls = append(rawRootColls, it)
+		} else {
+			rawRootManga = append(rawRootManga, it)
+		}
+	}
+
+	// 2. Merge child items by RelativePath
+	childrenGroups := make(map[string][]contracts.LibraryManga)
+	childrenOrder := make([]string, 0)
+	for _, ch := range rawChildren {
+		key := ch.RelativePath
+		if len(childrenGroups[key]) == 0 {
+			childrenOrder = append(childrenOrder, key)
+		}
+		childrenGroups[key] = append(childrenGroups[key], ch)
+	}
+
+	childrenByParent := make(map[string][]contracts.LibraryManga)
+	for _, key := range childrenOrder {
+		group := childrenGroups[key]
+		base := group[0]
+		for _, m := range group[1:] {
+			if isBetterBase(m, base) {
+				base = m
+			}
+		}
+
+		mergedChild := base
+		mergedChild.ChapterCount = 0
+		mergedChild.PageCount = 0
+		latestUpdate := base.LastUpdated
+		coverURL := base.CoverImageURL
+		var isAvailable bool
+
+		for _, m := range group {
+			mergedChild.ChapterCount += m.ChapterCount
+			mergedChild.PageCount += m.PageCount
+			if m.IsAvailable {
+				isAvailable = true
+			}
+			if coverURL == "" && m.CoverImageURL != "" {
+				coverURL = m.CoverImageURL
+			}
+			if m.LastUpdated > latestUpdate {
+				latestUpdate = m.LastUpdated
+			}
+			if pinMap != nil {
+				if pTime, ok := pinMap[m.ID]; ok {
+					pinMap[base.ID] = pTime
+				}
+			}
+		}
+
+		mergedChild.CoverImageURL = coverURL
+		mergedChild.LastUpdated = latestUpdate
+		mergedChild.IsAvailable = isAvailable
+		childrenByParent[mergedChild.ParentPath] = append(childrenByParent[mergedChild.ParentPath], mergedChild)
+	}
+
+	// 3. Merge root collections by RelativePath
+	collGroups := make(map[string][]contracts.LibraryManga)
+	collOrder := make([]string, 0)
+	for _, c := range rawRootColls {
+		key := c.RelativePath
+		if len(collGroups[key]) == 0 {
+			collOrder = append(collOrder, key)
+		}
+		collGroups[key] = append(collGroups[key], c)
+	}
+
+	mergedCollections := make([]contracts.LibraryManga, 0, len(collOrder))
+	for _, key := range collOrder {
+		group := collGroups[key]
+		base := group[0]
+		for _, c := range group[1:] {
+			if isBetterBase(c, base) {
+				base = c
+			}
+		}
+
+		mergedColl := base
+		collChildren := childrenByParent[mergedColl.RelativePath]
+		mergedColl.MangaCount = len(collChildren)
+
+		totalChapters := 0
+		totalPages := 0
+		latestUpdate := base.LastUpdated
+		coverURL := base.CoverImageURL
+		var isAvailable bool
+
+		for _, c := range group {
+			if c.IsAvailable {
+				isAvailable = true
+			}
+			if coverURL == "" && c.CoverImageURL != "" {
+				coverURL = c.CoverImageURL
+			}
+			if c.LastUpdated > latestUpdate {
+				latestUpdate = c.LastUpdated
+			}
+			if pinMap != nil {
+				if pTime, ok := pinMap[c.ID]; ok {
+					pinMap[base.ID] = pTime
+				}
+			}
+		}
+
+		for _, ch := range collChildren {
+			totalChapters += ch.ChapterCount
+			totalPages += ch.PageCount
+			if ch.LastUpdated > latestUpdate {
+				latestUpdate = ch.LastUpdated
+			}
+		}
+
+		if coverURL == "" && len(collChildren) > 0 {
+			coverURL = collChildren[0].CoverImageURL
+		}
+
+		mergedColl.CoverImageURL = coverURL
+		mergedColl.ChapterCount = totalChapters
+		mergedColl.PageCount = totalPages
+		mergedColl.LastUpdated = latestUpdate
+		mergedColl.IsAvailable = isAvailable
+
+		mergedCollections = append(mergedCollections, mergedColl)
+	}
+
+	// 4. Merge root manga by RelativePath
+	mangaGroups := make(map[string][]contracts.LibraryManga)
+	mangaOrder := make([]string, 0)
+	for _, m := range rawRootManga {
+		key := m.RelativePath
+		if len(mangaGroups[key]) == 0 {
+			mangaOrder = append(mangaOrder, key)
+		}
+		mangaGroups[key] = append(mangaGroups[key], m)
+	}
+
+	mergedManga := make([]contracts.LibraryManga, 0, len(mangaOrder))
+	for _, key := range mangaOrder {
+		group := mangaGroups[key]
+		base := group[0]
+		for _, m := range group[1:] {
+			if isBetterBase(m, base) {
+				base = m
+			}
+		}
+
+		mergedItem := base
+		mergedItem.ChapterCount = 0
+		mergedItem.PageCount = 0
+		latestUpdate := base.LastUpdated
+		coverURL := base.CoverImageURL
+		var isAvailable bool
+
+		for _, m := range group {
+			mergedItem.ChapterCount += m.ChapterCount
+			mergedItem.PageCount += m.PageCount
+			if m.IsAvailable {
+				isAvailable = true
+			}
+			if coverURL == "" && m.CoverImageURL != "" {
+				coverURL = m.CoverImageURL
+			}
+			if m.LastUpdated > latestUpdate {
+				latestUpdate = m.LastUpdated
+			}
+			if pinMap != nil {
+				if pTime, ok := pinMap[m.ID]; ok {
+					pinMap[base.ID] = pTime
+				}
+			}
+		}
+
+		mergedItem.CoverImageURL = coverURL
+		mergedItem.LastUpdated = latestUpdate
+		mergedItem.IsAvailable = isAvailable
+
+		mergedManga = append(mergedManga, mergedItem)
+	}
+
+	// 5. Combine root items and children
+	result := make([]contracts.LibraryManga, 0, len(mergedCollections)+len(mergedManga)+len(rawChildren))
+	result = append(result, mergedCollections...)
+	result = append(result, mergedManga...)
+
+	for _, parentPath := range collOrder {
+		if children, ok := childrenByParent[parentPath]; ok {
+			result = append(result, children...)
+			delete(childrenByParent, parentPath)
+		}
+	}
+	for _, children := range childrenByParent {
+		result = append(result, children...)
+	}
+
+	return result
+}
+
+func collectionKey(sourceID, path string) string {
+	if sourceID == "" {
+		return path
+	}
+	return sourceID + "::" + path
+}
+
+// ApplyPinsAndSort applies pin statuses, updates collection covers if child mangas are pinned,
+// and sorts items (pinned items first, followed by default sorting).
+// If mergeMode is DuplicateMergeModeMerge, collection children are mapped across sources by relative/parent path.
+// Otherwise, collectionKey(sourceID, path) isolates collections between different sources.
+func ApplyPinsAndSort(items []contracts.LibraryManga, pins map[string]string, mergeMode ...contracts.DuplicateMergeMode) []contracts.LibraryManga {
+	if len(items) == 0 {
+		return []contracts.LibraryManga{}
+	}
+
+	isMerge := len(mergeMode) > 0 && mergeMode[0] == contracts.DuplicateMergeModeMerge
+	getKey := func(sourceID, path string) string {
+		if isMerge {
+			return path
+		}
+		return collectionKey(sourceID, path)
 	}
 
 	result := make([]contracts.LibraryManga, len(items))
@@ -1849,11 +2229,12 @@ func ApplyPinsAndSort(items []contracts.LibraryManga, pins map[string]string) []
 		}
 	}
 
-	// 2. Map collection children by ParentPath
+	// 2. Map collection children by SourceID + ParentPath (or ParentPath in merge mode)
 	collChildren := make(map[string][]contracts.LibraryManga)
 	for _, item := range result {
 		if item.ParentPath != "" {
-			collChildren[item.ParentPath] = append(collChildren[item.ParentPath], item)
+			k := getKey(item.SourceID, item.ParentPath)
+			collChildren[k] = append(collChildren[k], item)
 		}
 	}
 
@@ -1861,7 +2242,8 @@ func ApplyPinsAndSort(items []contracts.LibraryManga, pins map[string]string) []
 	// If so, update the collection's cover to the top pinned child manga's cover.
 	for i := range result {
 		if result[i].IsCollection {
-			children := collChildren[result[i].RelativePath]
+			k := getKey(result[i].SourceID, result[i].RelativePath)
+			children := collChildren[k]
 			var pinnedChildren []contracts.LibraryManga
 			for _, child := range children {
 				if child.IsPinned {
@@ -1889,7 +2271,8 @@ func ApplyPinsAndSort(items []contracts.LibraryManga, pins map[string]string) []
 		if item.ParentPath == "" {
 			rootItems = append(rootItems, item)
 		} else {
-			collChildrenMap[item.ParentPath] = append(collChildrenMap[item.ParentPath], item)
+			k := getKey(item.SourceID, item.ParentPath)
+			collChildrenMap[k] = append(collChildrenMap[k], item)
 		}
 	}
 
@@ -1907,8 +2290,8 @@ func ApplyPinsAndSort(items []contracts.LibraryManga, pins map[string]string) []
 	})
 
 	// Sort each collection's children: pinned first (by PinnedAt DESC), then natural title order
-	for parentPath := range collChildrenMap {
-		children := collChildrenMap[parentPath]
+	for k := range collChildrenMap {
+		children := collChildrenMap[k]
 		sort.SliceStable(children, func(i, j int) bool {
 			if children[i].IsPinned != children[j].IsPinned {
 				return children[i].IsPinned
@@ -1920,7 +2303,7 @@ func ApplyPinsAndSort(items []contracts.LibraryManga, pins map[string]string) []
 			}
 			return naturalLess(children[i].Title, children[j].Title)
 		})
-		collChildrenMap[parentPath] = children
+		collChildrenMap[k] = children
 	}
 
 	// Combine rootItems and all children in order
@@ -1928,9 +2311,10 @@ func ApplyPinsAndSort(items []contracts.LibraryManga, pins map[string]string) []
 	sortedResult = append(sortedResult, rootItems...)
 	for _, item := range rootItems {
 		if item.IsCollection {
-			if children, ok := collChildrenMap[item.RelativePath]; ok {
+			k := getKey(item.SourceID, item.RelativePath)
+			if children, ok := collChildrenMap[k]; ok {
 				sortedResult = append(sortedResult, children...)
-				delete(collChildrenMap, item.RelativePath)
+				delete(collChildrenMap, k)
 			}
 		}
 	}

@@ -222,6 +222,14 @@ describe("SettingsDialog Component - Sources Tab", () => {
     ],
   };
 
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders sources list with status, names, paths, and manga counts", () => {
     render(
       <SettingsDialog
@@ -279,6 +287,71 @@ describe("SettingsDialog Component - Sources Tab", () => {
     fireEvent.click(cancelBtn);
 
     expect(screen.queryByText(/添加漫画库目录|Add Library Directory|ライブラリディレクトリを追加/i)).not.toBeInTheDocument();
+  });
+
+  it("allows editing source alias inline", async () => {
+    const updateSourceSpy = vi.spyOn(appAdapter, "updateLibrarySource").mockResolvedValue({
+      ...multiSourceSettings,
+      librarySources: [
+        {
+          ...multiSourceSettings.librarySources![0],
+          name: "Renamed Manga",
+        },
+        multiSourceSettings.librarySources![1],
+      ],
+    });
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={multiSourceSettings}
+        onSave={vi.fn()}
+        defaultTab="sources"
+      />
+    );
+
+    const editBtns = screen.getAllByTitle(/修改别名|Edit Alias|別名を編集/i);
+    fireEvent.click(editBtns[0]);
+
+    const input = screen.getByPlaceholderText(/输入新的目录别名|Enter new directory alias|新しいディレクトリの別名を入力/i);
+    expect(input).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "Renamed Manga" } });
+
+    const saveBtn = screen.getByRole("button", { name: /保存|Save/i });
+    fireEvent.click(saveBtn);
+
+    expect(updateSourceSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "src-1",
+        name: "Renamed Manga",
+      })
+    );
+  });
+
+  it("renders duplicate merge mode control and updates setting on change", () => {
+    const onSaveSpy = vi.fn();
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={multiSourceSettings}
+        onSave={onSaveSpy}
+        defaultTab="sources"
+      />
+    );
+
+    expect(screen.getAllByText(/同名内容展示策略|Duplicate Content Strategy|同名コンテンツの表示方針/i).length).toBeGreaterThanOrEqual(1);
+
+    const mergeBtn = screen.getByRole("radio", { name: /自动合并|Auto Merge|自動統合/i });
+    fireEvent.click(mergeBtn);
+
+    expect(onSaveSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        duplicateMergeMode: "merge",
+      })
+    );
   });
 });
 

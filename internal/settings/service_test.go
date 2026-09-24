@@ -315,4 +315,115 @@ func TestNormalizeLibrarySources(t *testing.T) {
 	if normMulti.LibraryRoot != "/Volumes/NAS/Comics" {
 		t.Fatalf("expected LibraryRoot to sync with first enabled source, got %s", normMulti.LibraryRoot)
 	}
+
+	// 4. Same-named sources disambiguate with parent directory or index
+	inputSameName := contracts.AppSettings{
+		LibrarySources: []contracts.LibrarySource{
+			{
+				ID:   "src-1",
+				Name: "Manga",
+				Path: "/Volumes/DiskA/Manga",
+			},
+			{
+				ID:   "src-2",
+				Name: "Manga",
+				Path: "/Volumes/DiskB/Manga",
+			},
+			{
+				ID:   "src-3",
+				Name: "Manga",
+				Path: "/Volumes/DiskB_Backup/Manga",
+			},
+		},
+	}
+	normSameName, err := service.Normalize(inputSameName)
+	if err != nil {
+		t.Fatalf("normalize same name sources: %v", err)
+	}
+	if len(normSameName.LibrarySources) != 3 {
+		t.Fatalf("expected 3 sources, got %d", len(normSameName.LibrarySources))
+	}
+	if normSameName.LibrarySources[0].Name != "Manga" {
+		t.Fatalf("expected first source name 'Manga', got %s", normSameName.LibrarySources[0].Name)
+	}
+	if normSameName.LibrarySources[1].Name != "Manga (DiskB)" {
+		t.Fatalf("expected second source name 'Manga (DiskB)', got %s", normSameName.LibrarySources[1].Name)
+	}
+	if normSameName.LibrarySources[2].Name != "Manga (DiskB_Backup)" {
+		t.Fatalf("expected third source name 'Manga (DiskB_Backup)', got %s", normSameName.LibrarySources[2].Name)
+	}
+
+	// 5. Duplicate path deduplication
+	inputDuplicatePath := contracts.AppSettings{
+		LibrarySources: []contracts.LibrarySource{
+			{
+				ID:   "src-a",
+				Name: "Main",
+				Path: "/Volumes/DiskA/Manga",
+			},
+			{
+				ID:   "src-b",
+				Name: "Duplicate Main",
+				Path: "/Volumes/DiskA/Manga/",
+			},
+		},
+	}
+	normDupPath, err := service.Normalize(inputDuplicatePath)
+	if err != nil {
+		t.Fatalf("normalize duplicate path sources: %v", err)
+	}
+	if len(normDupPath.LibrarySources) != 1 {
+		t.Fatalf("expected duplicate path to be skipped, got %d sources", len(normDupPath.LibrarySources))
+	}
+	if normDupPath.LibrarySources[0].ID != "src-a" {
+		t.Fatalf("expected first source to be preserved, got %s", normDupPath.LibrarySources[0].ID)
+	}
+}
+
+func TestNormalizeDuplicateMergeMode(t *testing.T) {
+	sqliteStore, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	// 1. Default should be separate
+	defaults := service.Get()
+	if defaults.DuplicateMergeMode != contracts.DuplicateMergeModeSeparate {
+		t.Fatalf("expected default duplicate merge mode 'separate', got %s", defaults.DuplicateMergeMode)
+	}
+
+	// 2. Explicit merge mode
+	inputMerge := DefaultSettings()
+	inputMerge.DuplicateMergeMode = contracts.DuplicateMergeModeMerge
+	normMerge, err := service.Normalize(inputMerge)
+	if err != nil {
+		t.Fatalf("normalize with merge mode failed: %v", err)
+	}
+	if normMerge.DuplicateMergeMode != contracts.DuplicateMergeModeMerge {
+		t.Fatalf("expected duplicate merge mode 'merge', got %s", normMerge.DuplicateMergeMode)
+	}
+
+	// 3. Empty duplicate merge mode defaults to separate
+	inputEmpty := DefaultSettings()
+	inputEmpty.DuplicateMergeMode = ""
+	normEmpty, err := service.Normalize(inputEmpty)
+	if err != nil {
+		t.Fatalf("normalize with empty merge mode failed: %v", err)
+	}
+	if normEmpty.DuplicateMergeMode != contracts.DuplicateMergeModeSeparate {
+		t.Fatalf("expected empty duplicate merge mode to default to 'separate', got %s", normEmpty.DuplicateMergeMode)
+	}
+
+	// 4. Invalid duplicate merge mode should return error
+	inputInvalid := DefaultSettings()
+	inputInvalid.DuplicateMergeMode = "invalid_mode"
+	if _, err := service.Normalize(inputInvalid); err == nil {
+		t.Fatal("expected normalize to reject invalid duplicate merge mode")
+	}
 }

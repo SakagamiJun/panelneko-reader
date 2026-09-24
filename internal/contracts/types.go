@@ -83,6 +83,13 @@ const (
 	SourceStatusDisabled SourceStatus = "disabled"
 )
 
+type DuplicateMergeMode string
+
+const (
+	DuplicateMergeModeSeparate DuplicateMergeMode = "separate"
+	DuplicateMergeModeMerge    DuplicateMergeMode = "merge"
+)
+
 type LibrarySource struct {
 	ID           string       `json:"id"`
 	Name         string       `json:"name"`
@@ -116,6 +123,7 @@ type AppSettings struct {
 	AutoCheckUpdates          *bool               `json:"autoCheckUpdates,omitempty"`
 	EnableThumbnailCache      *bool               `json:"enableThumbnailCache,omitempty"`
 	ThumbnailQuality          ThumbnailQuality    `json:"thumbnailQuality,omitempty"`
+	DuplicateMergeMode        DuplicateMergeMode  `json:"duplicateMergeMode,omitempty"`
 }
 
 type LibraryManga struct {

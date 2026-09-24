@@ -8,10 +8,11 @@ import { cn, formatDateTime, formatSmartDate } from "@/lib/utils";
 export interface MangaCardProps {
   item: LibraryManga;
   onOpenManga: (mangaID: string) => void;
-  onOpenCollection: (collectionPath: string) => void;
+  onOpenCollection: (collectionPath: string, sourceID?: string) => void;
   onTogglePin: (mangaID: string) => void;
   onToggleCollection?: (item: LibraryManga) => void;
   onOpenDirectory: (mangaID: string) => void;
+  sourceName?: string;
 }
 
 export const MangaCard = memo(function MangaCard({
@@ -21,12 +22,13 @@ export const MangaCard = memo(function MangaCard({
   onTogglePin,
   onToggleCollection,
   onOpenDirectory,
+  sourceName,
 }: MangaCardProps) {
   const { t } = useTranslation();
 
   const handleOpen = () => {
     if (item.isCollection) {
-      onOpenCollection(item.relativePath);
+      onOpenCollection(item.relativePath, item.sourceID);
     } else {
       onOpenManga(item.id);
     }
@@ -102,13 +104,21 @@ export const MangaCard = memo(function MangaCard({
 
       {/* Card bottom info and actions bar */}
       <div className="flex flex-col px-3 py-2.5 bg-card border-t border-border/40 gap-1">
-        <div className="cursor-pointer" onClick={handleOpen}>
+        <div className="cursor-pointer flex items-center justify-between gap-1.5 min-w-0" onClick={handleOpen}>
           <h4
-            className="text-xs sm:text-sm font-semibold tracking-tight text-foreground truncate group-hover:text-primary transition-colors leading-snug"
+            className="text-xs sm:text-sm font-semibold tracking-tight text-foreground truncate group-hover:text-primary transition-colors leading-snug flex-1"
             title={item.title}
           >
             {item.title}
           </h4>
+          {sourceName && (
+            <span
+              className="text-[9.5px] font-mono px-1 py-0.5 rounded bg-muted/70 text-muted-foreground/80 border border-border/50 shrink-0 truncate max-w-[84px] tracking-tight leading-none select-none"
+              title={sourceName}
+            >
+              {sourceName}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-1.5 text-[11px] text-muted-foreground">

@@ -24,6 +24,7 @@ export interface LibrarySource {
 }
 
 export type ThumbnailQuality = "off" | "low" | "medium" | "high";
+export type DuplicateMergeMode = "separate" | "merge";
 
 export interface AppSettings {
   libraryRoot: string;
@@ -45,6 +46,7 @@ export interface AppSettings {
   autoCheckUpdates?: boolean;
   enableThumbnailCache?: boolean;
   thumbnailQuality?: ThumbnailQuality;
+  duplicateMergeMode?: DuplicateMergeMode;
 }
 
 export interface LibraryManga {

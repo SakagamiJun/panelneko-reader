@@ -27,6 +27,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<SettingsTab>("general");
   const [selectedCollectionPath, setSelectedCollectionPath] = useState<string | null>(null);
+  const [selectedCollectionSourceID, setSelectedCollectionSourceID] = useState<string | null>(null);
   const [selectedLibraryID, setSelectedLibraryID] = useState<string | null>(null);
   const [readerMode, setReaderMode] = useState<"scroll" | "paged">("paged");
   const [readerJumpRequest, setReaderJumpRequest] = useState<ReaderJumpRequest | null>(null);
@@ -187,12 +188,24 @@ export default function App() {
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         setSelectedCollectionPath(null);
+        setSelectedCollectionSourceID(null);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedLibraryID, selectedCollectionPath]);
+
+  useEffect(() => {
+    if (
+      selectedCollectionSourceID &&
+      selectedSourceID !== "all" &&
+      selectedCollectionSourceID !== selectedSourceID
+    ) {
+      setSelectedCollectionPath(null);
+      setSelectedCollectionSourceID(null);
+    }
+  }, [selectedSourceID, selectedCollectionSourceID]);
 
   useEffect(() => {
     setReaderJumpRequest(null);
@@ -220,18 +233,31 @@ export default function App() {
       setCollectionToToggle(null);
       if (!isColl && currentCollection?.id === mangaID) {
         setSelectedCollectionPath(null);
+        setSelectedCollectionSourceID(null);
       }
     },
   });
 
   const settings = settingsQuery.data;
+  const isMergeMode = settings?.duplicateMergeMode === "merge";
   const library = libraryQuery.data ?? [];
   const selectedLibrary = library.find((item) => item.id === selectedLibraryID) ?? null;
   const parentCollection = selectedLibrary?.parentPath
-    ? library.find((item) => item.relativePath === selectedLibrary.parentPath && item.isCollection)
+    ? library.find(
+        (item) =>
+          item.isCollection &&
+          item.relativePath === selectedLibrary.parentPath &&
+          (isMergeMode || (item.sourceID || "default") === (selectedLibrary.sourceID || "default"))
+      )
     : null;
   const currentCollection = selectedCollectionPath
-    ? library.find((item) => item.relativePath === selectedCollectionPath && item.isCollection)
+    ? library.find((item) => {
+        if (!item.isCollection || item.relativePath !== selectedCollectionPath) return false;
+        if (!isMergeMode && selectedCollectionSourceID) {
+          return (item.sourceID || "default") === selectedCollectionSourceID;
+        }
+        return true;
+      })
     : null;
 
   const displayedItems = library
@@ -242,7 +268,13 @@ export default function App() {
         }
       }
       if (selectedCollectionPath) {
-        return item.parentPath === selectedCollectionPath;
+        if (item.parentPath !== selectedCollectionPath) {
+          return false;
+        }
+        if (!isMergeMode && selectedCollectionSourceID) {
+          return (item.sourceID || "default") === selectedCollectionSourceID;
+        }
+        return true;
       }
       return !item.parentPath;
     })
@@ -336,6 +368,11 @@ export default function App() {
   const handleExitReader = () => {
     if (parentCollection) {
       setSelectedCollectionPath(parentCollection.relativePath);
+      if (isMergeMode && selectedSourceID === "all") {
+        setSelectedCollectionSourceID(null);
+      } else {
+        setSelectedCollectionSourceID(parentCollection.sourceID || "default");
+      }
     }
     setSelectedLibraryID(null);
   };
@@ -382,7 +419,10 @@ export default function App() {
           selectedCollectionPath={selectedCollectionPath}
           currentCollection={currentCollection}
           totalCount={displayedItems.length}
-          onBackToMain={() => setSelectedCollectionPath(null)}
+          onBackToMain={() => {
+            setSelectedCollectionPath(null);
+            setSelectedCollectionSourceID(null);
+          }}
           onToggleCollection={setCollectionToToggle}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -446,7 +486,14 @@ export default function App() {
               }
               setSelectedLibraryID(id);
             }}
-            onOpenCollection={setSelectedCollectionPath}
+            onOpenCollection={(collectionPath, sourceID) => {
+              setSelectedCollectionPath(collectionPath);
+              if (isMergeMode && selectedSourceID === "all") {
+                setSelectedCollectionSourceID(null);
+              } else {
+                setSelectedCollectionSourceID(sourceID || null);
+              }
+            }}
             onOpenSettings={() => openSettingsWithTab("general")}
             onTogglePin={(id) => togglePinMutation.mutate(id)}
             onToggleCollection={setCollectionToToggle}
@@ -458,6 +505,7 @@ export default function App() {
               }
               void appAdapter.openDirectory(id);
             }}
+            sources={settings?.librarySources}
           />
         )}
       </div>

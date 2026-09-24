@@ -101,7 +101,9 @@ describe("AppHeader Component", () => {
     const menu = screen.getByRole("menu");
     expect(menu).toBeInTheDocument();
     expect(screen.getByText("Comics Primary")).toBeInTheDocument();
+    expect(screen.getByText("/mnt/manga/local")).toBeInTheDocument();
     expect(screen.getByText("NAS Storage")).toBeInTheDocument();
+    expect(screen.getByText("smb://nas/manga")).toBeInTheDocument();
     expect(screen.getByText(i18n.t("library.manageSources"))).toBeInTheDocument();
 
     // Selecting a source calls onSelectSourceId and closes menu

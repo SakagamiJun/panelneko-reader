@@ -601,6 +601,15 @@ func TestMultiSourceLibraryManagement(t *testing.T) {
 	}
 
 	// 5. Relocate Library Source
+	dir3 := filepath.Join(tempRoot, "Dir3")
+	_ = os.MkdirAll(dir3, 0o755)
+
+	// Attempting to relocate src-1 to the default library path should fail
+	defaultPath := app.settings.Get().LibrarySources[0].Path
+	if _, err := app.RelocateLibrarySource("src-1", defaultPath); err == nil {
+		t.Fatal("expected error relocating to existing library path, got nil")
+	}
+
 	updated, err = app.RelocateLibrarySource("src-1", dir2)
 	if err != nil {
 		t.Fatalf("RelocateLibrarySource failed: %v", err)
@@ -611,6 +620,25 @@ func TestMultiSourceLibraryManagement(t *testing.T) {
 				t.Fatalf("expected relocated path %s, got %s", dir2, s.Path)
 			}
 		}
+	}
+
+	// 5b. Add another source with same name "Renamed Source 1", verify auto-disambiguation
+	updated, err = app.AddLibrarySource(contracts.LibrarySource{
+		ID:   "src-2",
+		Name: "Renamed Source 1",
+		Path: dir3,
+	})
+	if err != nil {
+		t.Fatalf("AddLibrarySource with duplicate name failed: %v", err)
+	}
+	var src2Name string
+	for _, s := range updated.LibrarySources {
+		if s.ID == "src-2" {
+			src2Name = s.Name
+		}
+	}
+	if src2Name == "Renamed Source 1" {
+		t.Fatalf("expected duplicate source name to be disambiguated, got %q", src2Name)
 	}
 
 	// 6. Rescan Source
@@ -754,5 +782,157 @@ func TestMultiSourceScanningAndOfflineFallback(t *testing.T) {
 		if it.Title == "Manga B" && !it.IsAvailable {
 			t.Fatalf("expected Manga B to be available again after restore, got %+v", it)
 		}
+	}
+}
+
+func TestAppDuplicateMergeMode(t *testing.T) {
+	dataDir := t.TempDir()
+	appDataDir := filepath.Join(dataDir, "panelneko-reader")
+	sqliteStore, err := store.Open(appDataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	settingsService, err := settings.NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	dirA := filepath.Join(t.TempDir(), "DirA")
+	dirB := filepath.Join(t.TempDir(), "DirB")
+
+	// DirA (Local): Naruto (Vol 01), Collection Action (Bleach)
+	_ = os.MkdirAll(filepath.Join(dirA, "Naruto", "Vol 01"), 0o755)
+	_ = os.WriteFile(filepath.Join(dirA, "Naruto", "Vol 01", "001.jpg"), []byte("naruto-page1"), 0o644)
+	_ = os.MkdirAll(filepath.Join(dirA, "Action", "Bleach", "Vol 01"), 0o755)
+	_ = os.WriteFile(filepath.Join(dirA, "Action", ".collection"), []byte(""), 0o644)
+	_ = os.WriteFile(filepath.Join(dirA, "Action", "Bleach", "Vol 01", "001.jpg"), []byte("bleach-page1"), 0o644)
+
+	// DirB (Network): Naruto (Vol 02), Collection Action (One Piece)
+	_ = os.MkdirAll(filepath.Join(dirB, "Naruto", "Vol 02"), 0o755)
+	_ = os.WriteFile(filepath.Join(dirB, "Naruto", "Vol 02", "001.jpg"), []byte("naruto-page2"), 0o644)
+	_ = os.MkdirAll(filepath.Join(dirB, "Action", "One Piece", "Vol 01"), 0o755)
+	_ = os.WriteFile(filepath.Join(dirB, "Action", ".collection"), []byte(""), 0o644)
+	_ = os.WriteFile(filepath.Join(dirB, "Action", "One Piece", "Vol 01", "001.jpg"), []byte("op-page1"), 0o644)
+
+	initSettings := settingsService.Get()
+	initSettings.DuplicateMergeMode = contracts.DuplicateMergeModeSeparate
+	initSettings.LibrarySources = []contracts.LibrarySource{
+		{
+			ID:      "src-local",
+			Name:    "Local Manga",
+			Type:    contracts.SourceTypeLocal,
+			Path:    dirA,
+			Enabled: true,
+			Status:  contracts.SourceStatusOnline,
+		},
+		{
+			ID:      "src-network",
+			Name:    "Network Manga",
+			Type:    contracts.SourceTypeNetwork,
+			Path:    dirB,
+			Enabled: true,
+			Status:  contracts.SourceStatusOnline,
+		},
+	}
+	_, err = settingsService.Update(initSettings)
+	if err != nil {
+		t.Fatalf("update settings: %v", err)
+	}
+
+	app := &App{
+		store:    sqliteStore,
+		settings: settingsService,
+	}
+
+	// 1. Separate mode: both items exist independently
+	itemsSep, err := app.ListLibraryManga()
+	if err != nil {
+		t.Fatalf("ListLibraryManga (separate): %v", err)
+	}
+
+	var sepColls, sepNaruto int
+	for _, it := range itemsSep {
+		if it.ParentPath == "" && it.IsCollection && it.RelativePath == "Action" {
+			sepColls++
+		}
+		if it.ParentPath == "" && !it.IsCollection && it.RelativePath == "Naruto" {
+			sepNaruto++
+		}
+	}
+	if sepColls != 2 {
+		t.Fatalf("expected 2 Action collections in separate mode, got %d", sepColls)
+	}
+	if sepNaruto != 2 {
+		t.Fatalf("expected 2 Naruto mangas in separate mode, got %d", sepNaruto)
+	}
+
+	// 2. Switch to Merge Mode
+	current := app.settings.Get()
+	current.DuplicateMergeMode = contracts.DuplicateMergeModeMerge
+	_, err = app.UpdateSettings(current)
+	if err != nil {
+		t.Fatalf("update settings to merge mode: %v", err)
+	}
+
+	itemsMerged, err := app.ListLibraryManga()
+	if err != nil {
+		t.Fatalf("ListLibraryManga (merge): %v", err)
+	}
+
+	var mergedColl *contracts.LibraryManga
+	var mergedNaruto *contracts.LibraryManga
+	var mergedChildren []contracts.LibraryManga
+
+	for i := range itemsMerged {
+		it := itemsMerged[i]
+		if it.ParentPath == "" && it.IsCollection && it.RelativePath == "Action" {
+			mergedColl = &it
+		}
+		if it.ParentPath == "" && !it.IsCollection && it.RelativePath == "Naruto" {
+			mergedNaruto = &it
+		}
+		if it.ParentPath == "Action" {
+			mergedChildren = append(mergedChildren, it)
+		}
+	}
+
+	if mergedColl == nil {
+		t.Fatal("merged collection Action not found")
+	}
+	if mergedColl.SourceID != "src-local" {
+		t.Fatalf("expected merged collection source to be local, got %s", mergedColl.SourceID)
+	}
+	if mergedColl.MangaCount != 2 {
+		t.Fatalf("expected merged collection to contain 2 children, got %d", mergedColl.MangaCount)
+	}
+	if len(mergedChildren) != 2 {
+		t.Fatalf("expected 2 child mangas under Action, got %d", len(mergedChildren))
+	}
+
+	if mergedNaruto == nil {
+		t.Fatal("merged Naruto not found")
+	}
+	if mergedNaruto.SourceID != "src-local" {
+		t.Fatalf("expected merged Naruto source to be local, got %s", mergedNaruto.SourceID)
+	}
+	if mergedNaruto.ChapterCount != 2 {
+		t.Fatalf("expected merged Naruto chapter count to be 2, got %d", mergedNaruto.ChapterCount)
+	}
+
+	// 3. Test GetReaderManifest in merge mode
+	manifest, err := app.GetReaderManifest(mergedNaruto.ID)
+	if err != nil {
+		t.Fatalf("GetReaderManifest (merged): %v", err)
+	}
+	if len(manifest.Chapters) != 2 {
+		t.Fatalf("expected 2 merged chapters in reader manifest, got %d", len(manifest.Chapters))
+	}
+	if manifest.Chapters[0].Title != "Vol 01" || manifest.Chapters[1].Title != "Vol 02" {
+		t.Fatalf("unexpected chapter order: %s, %s", manifest.Chapters[0].Title, manifest.Chapters[1].Title)
+	}
+	if manifest.TotalPages != 2 {
+		t.Fatalf("expected 2 total pages, got %d", manifest.TotalPages)
 	}
 }

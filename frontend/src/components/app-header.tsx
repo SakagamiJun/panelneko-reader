@@ -200,7 +200,7 @@ export function AppHeader({
                       ? "bg-muted text-foreground border-border/80 shadow-xs"
                       : "bg-muted/40 hover:bg-muted/70 text-foreground/80 hover:text-foreground border-border/50"
                   )}
-                  title={activeSource?.path || t("library.sourceFilter")}
+                  title={activeSource ? `${activeSource.name} (${activeSource.path})` : t("library.sourceFilter")}
                   aria-expanded={isSourceMenuOpen}
                 >
                   {!isAllSources && (
@@ -228,7 +228,7 @@ export function AppHeader({
 
                 {isSourceMenuOpen && (
                   <div
-                    className="absolute left-0 top-full mt-1.5 w-60 rounded-xl border border-border/80 bg-card shadow-xl p-1 z-50 animate-in fade-in-0 zoom-in-95 origin-top-left"
+                    className="absolute left-0 top-full mt-1.5 w-72 rounded-xl border border-border/80 bg-card shadow-xl p-1 z-50 animate-in fade-in-0 zoom-in-95 origin-top-left"
                     role="menu"
                   >
                     {/* All Directories Item */}
@@ -274,10 +274,10 @@ export function AppHeader({
                             )}
                             title={s.path}
                           >
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <div className="flex items-start gap-2 min-w-0 flex-1">
                               <span
                                 className={cn(
-                                  "h-1.5 w-1.5 rounded-full shrink-0",
+                                  "h-1.5 w-1.5 rounded-full shrink-0 mt-1.5",
                                   !s.enabled
                                     ? "bg-muted-foreground/40"
                                     : isOffline
@@ -285,17 +285,24 @@ export function AppHeader({
                                     : "bg-emerald-500"
                                 )}
                               />
-                              <span className="truncate flex-1">{s.name}</span>
-                              {typeof s.mangaCount === "number" && (
-                                <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0">
-                                  {s.mangaCount}
+                              <div className="flex flex-col min-w-0 flex-1 gap-0.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="truncate flex-1 font-medium">{s.name}</span>
+                                  {typeof s.mangaCount === "number" && (
+                                    <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0">
+                                      {s.mangaCount}
+                                    </span>
+                                  )}
+                                  {s.type && (
+                                    <span className="text-[9px] uppercase tracking-wider font-mono text-muted-foreground/50 px-1 rounded border border-border/40 shrink-0">
+                                      {s.type}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] font-mono text-muted-foreground/50 truncate max-w-[210px]" title={s.path}>
+                                  {s.path}
                                 </span>
-                              )}
-                              {s.type && (
-                                <span className="text-[9px] uppercase tracking-wider font-mono text-muted-foreground/50 px-1 rounded border border-border/40 shrink-0">
-                                  {s.type}
-                                </span>
-                              )}
+                              </div>
                             </div>
                             {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary ml-2" />}
                           </button>

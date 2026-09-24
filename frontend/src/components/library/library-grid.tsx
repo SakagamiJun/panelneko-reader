@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { BookImage, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MangaCard } from "@/components/library/manga-card";
-import type { LibraryManga } from "@/lib/contracts";
+import type { LibraryManga, LibrarySource } from "@/lib/contracts";
 
 export interface LibraryGridProps {
   items: LibraryManga[];
@@ -14,11 +14,12 @@ export interface LibraryGridProps {
   loading: boolean;
   emptyLabel: string;
   onOpenManga: (mangaID: string) => void;
-  onOpenCollection: (collectionPath: string) => void;
+  onOpenCollection: (collectionPath: string, sourceID?: string) => void;
   onOpenSettings: () => void;
   onTogglePin: (mangaID: string) => void;
   onToggleCollection?: (item: LibraryManga) => void;
   onOpenDirectory: (mangaID: string) => void;
+  sources?: LibrarySource[];
 }
 
 export function LibraryGrid({
@@ -34,9 +35,13 @@ export function LibraryGrid({
   onTogglePin,
   onToggleCollection,
   onOpenDirectory,
+  sources,
 }: LibraryGridProps) {
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const [columns, setColumns] = useState(1);
+
+  const sourceMap = new Map((sources ?? []).map((s) => [s.id, s.name]));
+  const showSourceBadge = (sources?.length ?? 0) > 1;
 
   useEffect(() => {
     if (!scrollEl) return;
@@ -157,6 +162,7 @@ export function LibraryGrid({
                   onTogglePin={onTogglePin}
                   onToggleCollection={onToggleCollection}
                   onOpenDirectory={onOpenDirectory}
+                  sourceName={showSourceBadge ? sourceMap.get(item.sourceID || "default") : undefined}
                 />
               ))}
             </div>

@@ -149,6 +149,27 @@ describe("MockAdapter Pin Functionality", () => {
     });
     expect(updated.librarySources?.some((s) => s.id === "test-src")).toBe(true);
 
+    // 1b. Reject duplicate path
+    await expect(adapter.addLibrarySource({
+      id: "dup-path-src",
+      name: "Duplicate",
+      type: "local",
+      path: "/Volumes/manga",
+      enabled: true,
+    })).rejects.toThrow(/already exists/);
+
+    // 1c. Disambiguate duplicate name
+    const withDupName = await adapter.addLibrarySource({
+      id: "dup-name-src",
+      name: "Default Library",
+      type: "local",
+      path: "/Volumes/other-manga",
+      enabled: true,
+    });
+    const dupNameSrc = withDupName.librarySources?.find((s) => s.id === "dup-name-src");
+    expect(dupNameSrc?.name).not.toBe("Default Library");
+    expect(dupNameSrc?.name).toContain("Default Library");
+
     // 2. Update source
     const updated2 = await adapter.updateLibrarySource({
       id: "test-src",
@@ -160,6 +181,10 @@ describe("MockAdapter Pin Functionality", () => {
     expect(updated2.librarySources?.find((s) => s.id === "test-src")?.name).toBe("Renamed NAS");
 
     // 3. Relocate source
+    // 3a. Reject relocating to an existing source's path
+    await expect(adapter.relocateLibrarySource("test-src", "/mock/library")).rejects.toThrow(/already exists/);
+
+    // 3b. Successfully relocate to a new path
     const updated3 = await adapter.relocateLibrarySource("test-src", "/Volumes/new-manga");
     expect(updated3.librarySources?.find((s) => s.id === "test-src")?.path).toBe("/Volumes/new-manga");
 

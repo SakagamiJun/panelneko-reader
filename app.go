@@ -368,7 +368,11 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 		return nil, err
 	}
 
-	items = library.ApplyPinsAndSort(items, pins)
+	if currentSettings.DuplicateMergeMode == contracts.DuplicateMergeModeMerge {
+		items = library.MergeLibraryManga(items, currentSettings.LibrarySources, pins)
+	}
+
+	items = library.ApplyPinsAndSort(items, pins, currentSettings.DuplicateMergeMode)
 
 	quality := currentSettings.ThumbnailQuality
 	if quality == "" {
@@ -438,7 +442,7 @@ func (a *App) GetReaderManifest(mangaID string) (contracts.ReaderManifest, error
 		return contracts.ReaderManifest{}, err
 	}
 
-	return library.GetReaderManifestWithSources(a.getActiveSources(), mangaID)
+	return library.GetReaderManifestWithSources(a.getActiveSources(), mangaID, a.settings.Get().DuplicateMergeMode)
 }
 
 func (a *App) GetReaderProgress(mangaID string) (contracts.ReaderProgress, error) {
@@ -642,6 +646,12 @@ func (a *App) RelocateLibrarySource(sourceID string, newPath string) (contracts.
 	}
 
 	current := a.settings.Get()
+	for _, s := range current.LibrarySources {
+		if s.ID != sourceID && filepath.Clean(s.Path) == filepath.Clean(cleanPath) {
+			return contracts.AppSettings{}, fmt.Errorf("library source with path %q already exists", cleanPath)
+		}
+	}
+
 	found := false
 	for i, s := range current.LibrarySources {
 		if s.ID == sourceID {

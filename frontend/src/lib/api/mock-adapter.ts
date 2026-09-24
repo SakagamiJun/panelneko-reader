@@ -51,6 +51,7 @@ const defaultSettings: AppSettings = {
   autoCheckUpdates: true,
   enableThumbnailCache: true,
   thumbnailQuality: "medium",
+  duplicateMergeMode: "separate",
 };
 
 function createMockReaderManifest(index: number, title: string): ReaderManifest {
@@ -368,10 +369,40 @@ export class MockAdapter implements AppAdapter {
   async addLibrarySource(source: LibrarySource): Promise<AppSettings> {
     const current = this.readSettings();
     const sources = [...(current.librarySources ?? [])];
+    const cleanPath = (source.path || "").trim();
+    if (!cleanPath) {
+      throw new Error("source path cannot be empty");
+    }
+    if (sources.some((s) => s.path === cleanPath)) {
+      throw new Error(`library source with path "${cleanPath}" already exists`);
+    }
+
+    let name = (source.name || "").trim();
+    if (!name) {
+      const parts = cleanPath.replace(/[\\/]+$/, "").split(/[\\/]/);
+      name = parts[parts.length - 1] || "New Library";
+    }
+
+    const existingNames = new Set(sources.map((s) => s.name));
+    if (existingNames.has(name)) {
+      const parts = cleanPath.replace(/[\\/]+$/, "").split(/[\\/]/);
+      const parentDir = parts.length > 1 ? parts[parts.length - 2] : "";
+      if (parentDir && !existingNames.has(`${name} (${parentDir})`)) {
+        name = `${name} (${parentDir})`;
+      } else {
+        let idx = 2;
+        while (existingNames.has(`${name} (${idx})`)) {
+          idx++;
+        }
+        name = `${name} (${idx})`;
+      }
+    }
+
     const newSource: LibrarySource = {
       ...source,
       id: source.id || `src-${Date.now()}`,
-      name: source.name || "New Library",
+      name,
+      path: cleanPath,
       type: source.type || "local",
       enabled: true,
       status: "online",
@@ -403,8 +434,15 @@ export class MockAdapter implements AppAdapter {
 
   async relocateLibrarySource(sourceID: string, newPath: string): Promise<AppSettings> {
     const current = this.readSettings();
+    const cleanPath = (newPath || "").trim();
+    if (!cleanPath) {
+      throw new Error("source path cannot be empty");
+    }
+    if ((current.librarySources ?? []).some((s) => s.id !== sourceID && s.path === cleanPath)) {
+      throw new Error(`library source with path "${cleanPath}" already exists`);
+    }
     const sources = (current.librarySources ?? []).map((s) =>
-      s.id === sourceID ? { ...s, path: newPath, status: "online" as const, errorMessage: undefined } : s
+      s.id === sourceID ? { ...s, path: cleanPath, status: "online" as const, errorMessage: undefined } : s
     );
     const updated = await this.updateSettings({ ...current, librarySources: sources });
     this.emit(EVENTS.LIBRARY_UPDATED, {});

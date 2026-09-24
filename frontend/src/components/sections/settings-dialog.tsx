@@ -11,6 +11,7 @@ import {
   Info,
   Keyboard,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   Settings2,
@@ -29,6 +30,7 @@ import { appAdapter } from "@/lib/api";
 import { APP_LINKS } from "@/lib/constants";
 import type {
   AppSettings,
+  DuplicateMergeMode,
   LibrarySource,
   ReaderDirection,
   ReaderFitMode,
@@ -82,6 +84,8 @@ export function SettingsDialog({
   const [sourceToDelete, setSourceToDelete] = useState<LibrarySource | null>(null);
   const [scanningSourceId, setScanningSourceId] = useState<string | null>(null);
   const [sourceOpError, setSourceOpError] = useState<string | null>(null);
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  const [editingSourceName, setEditingSourceName] = useState("");
 
   useEffect(() => {
     setForm(settings);
@@ -171,7 +175,21 @@ export function SettingsDialog({
         setNewSourcePath(selected);
         if (!newSourceName) {
           const parts = selected.replace(/[\\/]+$/, "").split(/[\\/]/);
-          setNewSourceName(parts[parts.length - 1] || "Manga Library");
+          let base = parts[parts.length - 1] || "Manga Library";
+          const existingNames = new Set((form.librarySources ?? []).map((s) => s.name));
+          if (existingNames.has(base)) {
+            const parent = parts.length > 1 ? parts[parts.length - 2] : "";
+            if (parent && !existingNames.has(`${base} (${parent})`)) {
+              base = `${base} (${parent})`;
+            } else {
+              let idx = 2;
+              while (existingNames.has(`${base} (${idx})`)) {
+                idx++;
+              }
+              base = `${base} (${idx})`;
+            }
+          }
+          setNewSourceName(base);
         }
       }
     } catch (err) {
@@ -252,6 +270,22 @@ export function SettingsDialog({
       setSourceToDelete(null);
     } catch (err) {
       console.error("Failed to remove source:", err);
+    }
+  };
+
+  const handleSaveSourceName = async (source: LibrarySource) => {
+    const trimmed = editingSourceName.trim();
+    if (!trimmed) return;
+    try {
+      const updated = await appAdapter.updateLibrarySource({
+        ...source,
+        name: trimmed,
+      });
+      setForm(updated);
+      onSave(updated);
+      setEditingSourceId(null);
+    } catch (err) {
+      console.error("Failed to update source alias:", err);
     }
   };
 
@@ -644,34 +678,79 @@ export function SettingsDialog({
                           )}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span
-                                className={cn(
-                                  "h-2 w-2 rounded-full shrink-0",
-                                  !source.enabled
-                                    ? "bg-muted-foreground/40"
-                                    : isOffline
-                                    ? "bg-destructive"
-                                    : "bg-emerald-500"
+                            {editingSourceId === source.id ? (
+                              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                <Input
+                                  value={editingSourceName}
+                                  onChange={(e) => setEditingSourceName(e.target.value)}
+                                  placeholder={t("settings.sourceEditNamePlaceholder")}
+                                  className="h-7 text-xs flex-1"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveSourceName(source);
+                                    if (e.key === "Escape") setEditingSourceId(null);
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  variant="primary"
+                                  className="h-7 px-2 text-[10px]"
+                                  onClick={() => handleSaveSourceName(source)}
+                                >
+                                  {t("settings.sourceSave")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-[10px]"
+                                  onClick={() => setEditingSourceId(null)}
+                                >
+                                  {t("settings.sourceCancel")}
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className={cn(
+                                    "h-2 w-2 rounded-full shrink-0",
+                                    !source.enabled
+                                      ? "bg-muted-foreground/40"
+                                      : isOffline
+                                      ? "bg-destructive"
+                                      : "bg-emerald-500"
+                                  )}
+                                />
+                                <span className="font-semibold text-xs text-foreground truncate">
+                                  {source.name || t("settings.sourceName")}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSourceId(source.id);
+                                    setEditingSourceName(source.name || "");
+                                  }}
+                                  className="p-1 rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+                                  title={t("settings.sourceEditName")}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                {isDefault && (
+                                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20 shrink-0">
+                                    {t("settings.sourceDefaultBadge")}
+                                  </span>
                                 )}
-                              />
-                              <span className="font-semibold text-xs text-foreground truncate">
-                                {source.name || t("settings.sourceName")}
-                              </span>
-                              {isDefault && (
-                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20 shrink-0">
-                                  {t("settings.sourceDefaultBadge")}
+                                {source.readOnly && (
+                                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground border border-border/50 shrink-0">
+                                    {t("settings.sourceReadOnly")}
+                                  </span>
+                                )}
+                                <span className="text-[11px] text-muted-foreground/80 shrink-0">
+                                  {t("settings.sourceMangaCount", { count: source.mangaCount ?? 0 })}
                                 </span>
-                              )}
-                              {source.readOnly && (
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground border border-border/50 shrink-0">
-                                  {t("settings.sourceReadOnly")}
-                                </span>
-                              )}
-                              <span className="text-[11px] text-muted-foreground/80 shrink-0">
-                                {t("settings.sourceMangaCount", { count: source.mangaCount ?? 0 })}
-                              </span>
-                            </div>
+                              </div>
+                            )}
 
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[11px] text-muted-foreground">
@@ -796,6 +875,38 @@ export function SettingsDialog({
                     </div>
                   </div>
                 )}
+
+                <div className="pt-2">
+                  <SettingGroup
+                    title={t("settings.duplicateMergeMode")}
+                    description={t("settings.duplicateMergeModeDesc")}
+                  >
+                    <SettingRow
+                      title={t("settings.duplicateMergeMode")}
+                      description={
+                        form.duplicateMergeMode === "merge"
+                          ? t("settings.duplicateMergeMergeDesc")
+                          : t("settings.duplicateMergeSeparateDesc")
+                      }
+                      control={
+                        <SegmentedControl<DuplicateMergeMode>
+                          value={form.duplicateMergeMode ?? "separate"}
+                          onChange={(mode) => updateField("duplicateMergeMode", mode)}
+                          options={[
+                            {
+                              value: "separate",
+                              label: t("settings.duplicateMergeSeparate"),
+                            },
+                            {
+                              value: "merge",
+                              label: t("settings.duplicateMergeMerge"),
+                            },
+                          ]}
+                        />
+                      }
+                    />
+                  </SettingGroup>
+                </div>
               </div>
             )}
 

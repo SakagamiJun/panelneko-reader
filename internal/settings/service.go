@@ -94,6 +94,7 @@ func DefaultSettings() contracts.AppSettings {
 		AutoCheckUpdates:     boolPtr(true),
 		EnableThumbnailCache: boolPtr(true),
 		ThumbnailQuality:     contracts.ThumbnailQualityMedium,
+		DuplicateMergeMode:   contracts.DuplicateMergeModeSeparate,
 	}
 }
 
@@ -125,7 +126,19 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 	if len(input.LibrarySources) > 0 {
 		var normalizedSources []contracts.LibrarySource
 		seenIDs := make(map[string]bool)
+		seenPaths := make(map[string]bool)
+		seenNames := make(map[string]int)
+
 		for i, src := range input.LibrarySources {
+			pathVal := strings.TrimSpace(src.Path)
+			if pathVal != "" {
+				cleanP := filepath.Clean(pathVal)
+				if seenPaths[cleanP] {
+					continue
+				}
+				seenPaths[cleanP] = true
+			}
+
 			id := strings.TrimSpace(src.ID)
 			if id == "" {
 				id = fmt.Sprintf("src-%d-%d", time.Now().UnixNano(), i+1)
@@ -136,7 +149,6 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 			seenIDs[id] = true
 
 			name := strings.TrimSpace(src.Name)
-			pathVal := strings.TrimSpace(src.Path)
 			if name == "" {
 				if pathVal != "" {
 					name = filepath.Base(pathVal)
@@ -144,6 +156,29 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 				if name == "" || name == "." || name == "/" {
 					name = fmt.Sprintf("Library %d", i+1)
 				}
+			}
+
+			if count, exists := seenNames[name]; exists {
+				seenNames[name] = count + 1
+				parentDir := ""
+				if pathVal != "" {
+					parentDir = filepath.Base(filepath.Dir(filepath.Clean(pathVal)))
+				}
+				if parentDir != "" && parentDir != "." && parentDir != "/" && parentDir != name {
+					candidate := fmt.Sprintf("%s (%s)", name, parentDir)
+					if _, candidateExists := seenNames[candidate]; !candidateExists {
+						name = candidate
+						seenNames[candidate] = 1
+					} else {
+						name = fmt.Sprintf("%s (%d)", name, count+1)
+						seenNames[name] = 1
+					}
+				} else {
+					name = fmt.Sprintf("%s (%d)", name, count+1)
+					seenNames[name] = 1
+				}
+			} else {
+				seenNames[name] = 1
 			}
 
 			srcType := src.Type
@@ -331,6 +366,18 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 		return contracts.AppSettings{}, contracts.ContractError{
 			Code:    contracts.ErrCodeSettingsInvalid,
 			Message: fmt.Sprintf("unsupported theme mode: %s", input.ThemeMode),
+		}
+	}
+
+	switch input.DuplicateMergeMode {
+	case contracts.DuplicateMergeModeMerge:
+		settings.DuplicateMergeMode = contracts.DuplicateMergeModeMerge
+	case "", contracts.DuplicateMergeModeSeparate:
+		settings.DuplicateMergeMode = contracts.DuplicateMergeModeSeparate
+	default:
+		return contracts.AppSettings{}, contracts.ContractError{
+			Code:    contracts.ErrCodeSettingsInvalid,
+			Message: fmt.Sprintf("unsupported duplicate merge mode: %s", input.DuplicateMergeMode),
 		}
 	}
 
