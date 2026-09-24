@@ -27,6 +27,7 @@ var libraryManifestSemaphore = make(chan struct{}, 32)
 const (
 	LibraryAssetPrefix        = "/library-files/"
 	LibraryArchiveAssetPrefix = "/library-archive/"
+	LibrarySourceAssetPrefix  = "_src/"
 	archiveSidecarSuffix      = ".panelneko-chapter.json"
 )
 
@@ -141,11 +142,34 @@ func getMangaModTime(mangaPath string, fallback int64) int64 {
 }
 
 func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryManga, prevModTimes map[string]int64) ([]contracts.LibraryManga, map[string]int64, error) {
+	items, modTimes, err := ScanSource(contracts.LibrarySource{
+		ID:      "default",
+		Path:    outputRoot,
+		Enabled: true,
+	}, prevItems, prevModTimes)
+	if err != nil && (os.IsNotExist(err) || errors.Is(err, os.ErrNotExist)) {
+		return []contracts.LibraryManga{}, nil, nil
+	}
+	return items, modTimes, err
+}
+
+func ScanSource(source contracts.LibrarySource, prevItems map[string]contracts.LibraryManga, prevModTimes map[string]int64) ([]contracts.LibraryManga, map[string]int64, error) {
+	outputRoot := source.Path
+	sourceID := source.ID
+	if sourceID == "" {
+		sourceID = "default"
+	}
+
+	info, err := os.Stat(outputRoot)
+	if err != nil {
+		return nil, nil, fmt.Errorf("stat library source: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, nil, fmt.Errorf("library source path is not a directory: %s", outputRoot)
+	}
+
 	entries, err := os.ReadDir(outputRoot)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []contracts.LibraryManga{}, nil, nil
-		}
 		return nil, nil, fmt.Errorf("read library root: %w", err)
 	}
 
@@ -158,7 +182,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 	var errOnce sync.Once
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() && !isSupportedArchivePath(entry.Name()) {
 			continue
 		}
 
@@ -202,10 +226,14 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 				if prevTime, ok := prevModTimes[collRelativePath]; ok && prevTime == collModTimeMax {
 					if prevColl, ok := prevItems[collRelativePath]; ok && prevColl.IsCollection {
 						mu.Lock()
+						prevColl.SourceID = sourceID
+						prevColl.IsAvailable = true
 						items = append(items, prevColl)
 						newModTimes[prevColl.ID] = collModTimeMax
 						for _, prev := range prevItems {
 							if prev.ParentPath == collRelativePath {
+								prev.SourceID = sourceID
+								prev.IsAvailable = true
 								items = append(items, prev)
 								newModTimes[prev.ID] = prevModTimes[prev.RelativePath]
 							}
@@ -232,13 +260,15 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 
 					if prevTime, ok := prevModTimes[subRelPath]; ok && prevTime == subModTime {
 						if prevItem, ok := prevItems[subRelPath]; ok {
+							prevItem.SourceID = sourceID
+							prevItem.IsAvailable = true
 							collItems = append(collItems, prevItem)
 							collModTimes[prevItem.ID] = subModTime
 							continue
 						}
 					}
 
-					manifest, err := loadMangaManifest(outputRoot, subPath, subRelPath)
+					manifest, err := loadMangaManifestWithSource(outputRoot, sourceID, subPath, subRelPath)
 					if err != nil {
 						continue
 					}
@@ -248,6 +278,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 
 					subItem := contracts.LibraryManga{
 						ID:            manifest.reader.MangaID,
+						SourceID:      sourceID,
 						Title:         manifest.reader.Title,
 						SourceURL:     manifest.sourceURL,
 						RelativePath:  manifest.relativePath,
@@ -258,6 +289,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 						ChapterCount:  len(manifest.reader.Chapters),
 						PageCount:     manifest.reader.TotalPages,
 						LastUpdated:   manifest.updatedAt.UTC().Format(time.RFC3339),
+						IsAvailable:   true,
 					}
 
 					collItems = append(collItems, subItem)
@@ -283,7 +315,8 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 					}
 
 					collItem := contracts.LibraryManga{
-						ID:            encodeMangaID(collRelativePath),
+						ID:            EncodeMangaIDWithSource(sourceID, collRelativePath),
+						SourceID:      sourceID,
 						Title:         entry.Name(),
 						SourceURL:     "",
 						RelativePath:  collRelativePath,
@@ -294,6 +327,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 						ChapterCount:  totalChapters,
 						PageCount:     totalPages,
 						LastUpdated:   latestUpdate.Format(time.RFC3339),
+						IsAvailable:   true,
 					}
 
 					mu.Lock()
@@ -314,6 +348,8 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 			if prevTime, ok := prevModTimes[relPath]; ok && prevTime == modTime {
 				if prevItem, ok := prevItems[relPath]; ok && !prevItem.IsCollection {
 					mu.Lock()
+					prevItem.SourceID = sourceID
+					prevItem.IsAvailable = true
 					items = append(items, prevItem)
 					newModTimes[prevItem.ID] = modTime
 					mu.Unlock()
@@ -321,7 +357,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 				}
 			}
 
-			manifest, err := loadMangaManifest(outputRoot, entryPath, relPath)
+			manifest, err := loadMangaManifestWithSource(outputRoot, sourceID, entryPath, relPath)
 			if err != nil {
 				errOnce.Do(func() { firstErr = err })
 				return
@@ -332,6 +368,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 
 			item := contracts.LibraryManga{
 				ID:            manifest.reader.MangaID,
+				SourceID:      sourceID,
 				Title:         manifest.reader.Title,
 				SourceURL:     manifest.sourceURL,
 				RelativePath:  manifest.relativePath,
@@ -342,6 +379,7 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 				ChapterCount:  len(manifest.reader.Chapters),
 				PageCount:     manifest.reader.TotalPages,
 				LastUpdated:   manifest.updatedAt.UTC().Format(time.RFC3339),
+				IsAvailable:   true,
 			}
 
 			mu.Lock()
@@ -359,18 +397,104 @@ func ScanLibraryManga(outputRoot string, prevItems map[string]contracts.LibraryM
 	return items, newModTimes, nil
 }
 
+type SourceScanResult struct {
+	Source      contracts.LibrarySource
+	Items       []contracts.LibraryManga
+	NewModTimes map[string]int64
+	Err         error
+}
+
+func ScanAllSources(
+	sources []contracts.LibrarySource,
+	prevItemsBySource map[string]map[string]contracts.LibraryManga,
+	prevModTimesBySource map[string]map[string]int64,
+) []SourceScanResult {
+	results := make([]SourceScanResult, len(sources))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+
+	for i, src := range sources {
+		wg.Add(1)
+		go func(idx int, source contracts.LibrarySource) {
+			defer wg.Done()
+
+			if !source.Enabled {
+				source.Status = contracts.SourceStatusDisabled
+				results[idx] = SourceScanResult{
+					Source: source,
+				}
+				return
+			}
+
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			sourcePrevItems := prevItemsBySource[source.ID]
+			sourcePrevModTimes := prevModTimesBySource[source.ID]
+
+			items, newModTimes, err := ScanSource(source, sourcePrevItems, sourcePrevModTimes)
+			if err != nil {
+				source.Status = contracts.SourceStatusOffline
+				source.ErrorMessage = err.Error()
+				results[idx] = SourceScanResult{
+					Source: source,
+					Err:    err,
+				}
+				return
+			}
+
+			source.Status = contracts.SourceStatusOnline
+			source.ErrorMessage = ""
+			source.MangaCount = len(items)
+			source.LastScanned = time.Now().UTC().Format(time.RFC3339)
+
+			results[idx] = SourceScanResult{
+				Source:      source,
+				Items:       items,
+				NewModTimes: newModTimes,
+			}
+		}(i, src)
+	}
+
+	wg.Wait()
+	return results
+}
+
 func GetReaderManifest(outputRoot string, mangaID string) (contracts.ReaderManifest, error) {
-	relativePath, err := decodeMangaID(mangaID)
+	return GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: outputRoot, Enabled: true}}, mangaID)
+}
+
+func GetReaderManifestWithSources(sources []contracts.LibrarySource, mangaID string) (contracts.ReaderManifest, error) {
+	sourceID, relativePath, err := DecodeMangaIDWithSource(mangaID)
 	if err != nil {
 		return contracts.ReaderManifest{}, err
 	}
 
-	mangaDir, err := resolveWithinRoot(outputRoot, relativePath)
+	var matchedSource *contracts.LibrarySource
+	for i := range sources {
+		if sources[i].ID == sourceID {
+			matchedSource = &sources[i]
+			break
+		}
+	}
+	if matchedSource == nil {
+		if (sourceID == "default" || sourceID == "") && len(sources) > 0 {
+			matchedSource = &sources[0]
+		} else {
+			return contracts.ReaderManifest{}, fmt.Errorf("library source %q not found", sourceID)
+		}
+	}
+
+	if !matchedSource.Enabled {
+		return contracts.ReaderManifest{}, fmt.Errorf("library source %q is disabled", matchedSource.Name)
+	}
+
+	mangaDir, err := resolveWithinRoot(matchedSource.Path, relativePath)
 	if err != nil {
 		return contracts.ReaderManifest{}, err
 	}
 
-	manifest, err := loadMangaManifest(outputRoot, mangaDir, relativePath)
+	manifest, err := loadMangaManifestWithSource(matchedSource.Path, matchedSource.ID, mangaDir, relativePath)
 	if err != nil {
 		return contracts.ReaderManifest{}, err
 	}
@@ -379,12 +503,32 @@ func GetReaderManifest(outputRoot string, mangaID string) (contracts.ReaderManif
 }
 
 func ResolveDirectoryPath(outputRoot string, mangaID string) (string, error) {
-	relativePath, err := decodeMangaID(mangaID)
+	return ResolveDirectoryPathWithSources([]contracts.LibrarySource{{ID: "default", Path: outputRoot, Enabled: true}}, mangaID)
+}
+
+func ResolveDirectoryPathWithSources(sources []contracts.LibrarySource, mangaID string) (string, error) {
+	sourceID, relativePath, err := DecodeMangaIDWithSource(mangaID)
 	if err != nil {
 		relativePath = filepath.FromSlash(mangaID)
+		sourceID = "default"
 	}
 
-	targetPath, err := resolveWithinRoot(outputRoot, relativePath)
+	var matchedSource *contracts.LibrarySource
+	for i := range sources {
+		if sources[i].ID == sourceID {
+			matchedSource = &sources[i]
+			break
+		}
+	}
+	if matchedSource == nil {
+		if len(sources) > 0 {
+			matchedSource = &sources[0]
+		} else {
+			return "", fmt.Errorf("library source %q not found", sourceID)
+		}
+	}
+
+	targetPath, err := resolveWithinRoot(matchedSource.Path, relativePath)
 	if err != nil {
 		return "", err
 	}
@@ -402,19 +546,43 @@ func ResolveDirectoryPath(outputRoot string, mangaID string) (string, error) {
 }
 
 func ToggleCollectionMarker(outputRoot string, mangaID string) (bool, error) {
-	relativePath, err := decodeMangaID(mangaID)
+	return ToggleCollectionMarkerWithSources([]contracts.LibrarySource{{ID: "default", Path: outputRoot, Enabled: true}}, mangaID)
+}
+
+func ToggleCollectionMarkerWithSources(sources []contracts.LibrarySource, mangaID string) (bool, error) {
+	sourceID, relativePath, err := DecodeMangaIDWithSource(mangaID)
 	if err != nil {
 		relativePath = filepath.FromSlash(mangaID)
+		sourceID = "default"
+	}
+
+	var matchedSource *contracts.LibrarySource
+	for i := range sources {
+		if sources[i].ID == sourceID {
+			matchedSource = &sources[i]
+			break
+		}
+	}
+	if matchedSource == nil {
+		if len(sources) > 0 {
+			matchedSource = &sources[0]
+		} else {
+			return false, fmt.Errorf("library source %q not found", sourceID)
+		}
+	}
+
+	if matchedSource.ReadOnly {
+		return false, fmt.Errorf("library source %q is read-only", matchedSource.Name)
+	}
+
+	targetPath, err := resolveWithinRoot(matchedSource.Path, relativePath)
+	if err != nil {
+		return false, err
 	}
 
 	relSlash := filepath.ToSlash(filepath.Clean(relativePath))
 	if strings.Contains(relSlash, "/") {
 		return false, fmt.Errorf("nested collections are not supported")
-	}
-
-	targetPath, err := resolveWithinRoot(outputRoot, relativePath)
-	if err != nil {
-		return false, err
 	}
 
 	info, err := os.Stat(targetPath)
@@ -461,14 +629,31 @@ func OpenDirectoryInFileManager(dirPath string) error {
 
 var FileOpener = OpenDirectoryInFileManager
 
-func ResolveLibraryAssetPath(outputRoot string, requestPath string) (string, error) {
+func ResolveMultiSourceAssetPath(sourcesMap map[string]string, defaultRoot string, requestPath string) (string, error) {
 	if !strings.HasPrefix(requestPath, LibraryAssetPrefix) {
 		return "", fmt.Errorf("unsupported asset path: %s", requestPath)
 	}
 
-	relativeURLPath := strings.TrimPrefix(requestPath, LibraryAssetPrefix)
-	if relativeURLPath == "" {
+	trimmed := strings.TrimPrefix(requestPath, LibraryAssetPrefix)
+	if trimmed == "" {
 		return "", fmt.Errorf("empty asset path")
+	}
+
+	root := defaultRoot
+	relativeURLPath := trimmed
+
+	if strings.HasPrefix(trimmed, LibrarySourceAssetPrefix) {
+		afterPrefix := strings.TrimPrefix(trimmed, LibrarySourceAssetPrefix)
+		parts := strings.SplitN(afterPrefix, "/", 2)
+		if len(parts) == 2 {
+			srcID, err := url.PathUnescape(parts[0])
+			if err == nil {
+				if r, ok := sourcesMap[srcID]; ok && r != "" {
+					root = r
+					relativeURLPath = parts[1]
+				}
+			}
+		}
 	}
 
 	decodedPath, err := url.PathUnescape(relativeURLPath)
@@ -476,7 +661,7 @@ func ResolveLibraryAssetPath(outputRoot string, requestPath string) (string, err
 		return "", fmt.Errorf("decode asset path: %w", err)
 	}
 
-	targetPath, err := resolveWithinRoot(outputRoot, filepath.FromSlash(decodedPath))
+	targetPath, err := resolveWithinRoot(root, filepath.FromSlash(decodedPath))
 	if err != nil {
 		return "", err
 	}
@@ -496,8 +681,12 @@ func ResolveLibraryAssetPath(outputRoot string, requestPath string) (string, err
 	return targetPath, nil
 }
 
-func OpenArchiveAsset(outputRoot string, requestPath string) (io.ReadCloser, string, int64, error) {
-	archivePath, entryPath, err := resolveArchiveAssetRequest(outputRoot, requestPath)
+func ResolveLibraryAssetPath(outputRoot string, requestPath string) (string, error) {
+	return ResolveMultiSourceAssetPath(map[string]string{"default": outputRoot}, outputRoot, requestPath)
+}
+
+func OpenMultiSourceArchiveAsset(sourcesMap map[string]string, defaultRoot string, requestPath string) (io.ReadCloser, string, int64, error) {
+	archivePath, entryPath, err := resolveMultiSourceArchiveAssetRequest(sourcesMap, defaultRoot, requestPath)
 	if err != nil {
 		return nil, "", -1, err
 	}
@@ -546,7 +735,15 @@ func OpenArchiveAsset(outputRoot string, requestPath string) (io.ReadCloser, str
 	}, contentType, size, nil
 }
 
+func OpenArchiveAsset(outputRoot string, requestPath string) (io.ReadCloser, string, int64, error) {
+	return OpenMultiSourceArchiveAsset(map[string]string{"default": outputRoot}, outputRoot, requestPath)
+}
+
 func AssetURLForPath(outputRoot string, filePath string) (string, error) {
+	return AssetURLForSourcePath(outputRoot, "default", filePath)
+}
+
+func AssetURLForSourcePath(outputRoot string, sourceID string, filePath string) (string, error) {
 	relativePath, err := relativePathWithinRoot(outputRoot, filePath)
 	if err != nil {
 		return "", err
@@ -557,10 +754,18 @@ func AssetURLForPath(outputRoot string, filePath string) (string, error) {
 		segments[index] = url.PathEscape(segment)
 	}
 
+	if sourceID != "" && sourceID != "default" {
+		return LibraryAssetPrefix + LibrarySourceAssetPrefix + url.PathEscape(sourceID) + "/" + strings.Join(segments, "/"), nil
+	}
+
 	return LibraryAssetPrefix + strings.Join(segments, "/"), nil
 }
 
 func ArchiveAssetURL(outputRoot string, archivePath string, entryPath string) (string, error) {
+	return ArchiveAssetURLForSource(outputRoot, "default", archivePath, entryPath)
+}
+
+func ArchiveAssetURLForSource(outputRoot string, sourceID string, archivePath string, entryPath string) (string, error) {
 	relativeArchivePath, err := relativePathWithinRoot(outputRoot, archivePath)
 	if err != nil {
 		return "", err
@@ -578,6 +783,16 @@ func ArchiveAssetURL(outputRoot string, archivePath string, entryPath string) (s
 		return "", fmt.Errorf("unsupported archive entry extension: %s", normalizedEntryPath)
 	}
 
+	if sourceID != "" && sourceID != "default" {
+		return LibraryArchiveAssetPrefix +
+			LibrarySourceAssetPrefix +
+			url.PathEscape(sourceID) +
+			"/" +
+			encodePathToken(relativeArchivePath) +
+			"/" +
+			encodePathToken(normalizedEntryPath), nil
+	}
+
 	return LibraryArchiveAssetPrefix +
 		encodePathToken(relativeArchivePath) +
 		"/" +
@@ -589,6 +804,10 @@ func ArchiveSidecarPath(archivePath string) string {
 }
 
 func loadMangaManifest(outputRoot string, mangaPath string, relativePath string) (mangaManifest, error) {
+	return loadMangaManifestWithSource(outputRoot, "default", mangaPath, relativePath)
+}
+
+func loadMangaManifestWithSource(outputRoot string, sourceID string, mangaPath string, relativePath string) (mangaManifest, error) {
 	info, err := os.Stat(mangaPath)
 	if err != nil {
 		return mangaManifest{}, fmt.Errorf("stat manga path: %w", err)
@@ -665,7 +884,7 @@ func loadMangaManifest(outputRoot string, mangaPath string, relativePath string)
 			defer wg.Done()
 
 			libraryManifestSemaphore <- struct{}{}
-			source, err := loadChapterSource(outputRoot, descriptor)
+			source, err := loadChapterSource(outputRoot, sourceID, descriptor)
 			<-libraryManifestSemaphore
 
 			if err != nil {
@@ -724,7 +943,7 @@ func loadMangaManifest(outputRoot string, mangaPath string, relativePath string)
 		updatedAt:    updatedAt,
 		sourceURL:    sourceURL,
 		reader: contracts.ReaderManifest{
-			MangaID:       encodeMangaID(relativePath),
+			MangaID:       EncodeMangaIDWithSource(sourceID, relativePath),
 			Title:         title,
 			CoverImageURL: coverImageURL,
 			TotalPages:    totalPages,
@@ -733,18 +952,18 @@ func loadMangaManifest(outputRoot string, mangaPath string, relativePath string)
 	}, nil
 }
 
-func loadChapterSource(outputRoot string, descriptor chapterSourceDescriptor) (chapterSource, error) {
+func loadChapterSource(outputRoot string, sourceID string, descriptor chapterSourceDescriptor) (chapterSource, error) {
 	switch descriptor.kind {
 	case chapterSourceDirectory:
-		return loadDirectoryChapterSource(outputRoot, descriptor)
+		return loadDirectoryChapterSource(outputRoot, sourceID, descriptor)
 	case chapterSourceArchive:
-		return loadArchiveChapterSource(outputRoot, descriptor)
+		return loadArchiveChapterSource(outputRoot, sourceID, descriptor)
 	default:
 		return chapterSource{}, fmt.Errorf("unsupported chapter source type: %s", descriptor.kind)
 	}
 }
 
-func loadDirectoryChapterSource(outputRoot string, descriptor chapterSourceDescriptor) (chapterSource, error) {
+func loadDirectoryChapterSource(outputRoot string, sourceID string, descriptor chapterSourceDescriptor) (chapterSource, error) {
 	chapterDir := descriptor.path
 	info, hasInfo := readComicInfoFromDir(chapterDir)
 
@@ -760,7 +979,7 @@ func loadDirectoryChapterSource(outputRoot string, descriptor chapterSourceDescr
 			metadata.id = parts[1]
 		}
 	}
-	pages, err := readDirectoryPages(outputRoot, chapterDir, metadata)
+	pages, err := readDirectoryPages(outputRoot, sourceID, chapterDir, metadata)
 	if err != nil {
 		return chapterSource{}, err
 	}
@@ -782,7 +1001,7 @@ func loadDirectoryChapterSource(outputRoot string, descriptor chapterSourceDescr
 	}, nil
 }
 
-func loadArchiveChapterSource(outputRoot string, descriptor chapterSourceDescriptor) (chapterSource, error) {
+func loadArchiveChapterSource(outputRoot string, sourceID string, descriptor chapterSourceDescriptor) (chapterSource, error) {
 	archivePath := descriptor.path
 	cacheEntry, err := acquireArchive(archivePath)
 	if err != nil {
@@ -804,7 +1023,7 @@ func loadArchiveChapterSource(outputRoot string, descriptor chapterSourceDescrip
 			metadata.id = strings.TrimSuffix(parts[1], filepath.Ext(parts[1]))
 		}
 	}
-	pages, err := readArchivePages(outputRoot, archivePath, archiveReader, metadata)
+	pages, err := readArchivePages(outputRoot, sourceID, archivePath, archiveReader, metadata)
 	if err != nil {
 		return chapterSource{}, err
 	}
@@ -943,7 +1162,7 @@ func releaseArchive(entry *archiveCacheEntry) {
 	}
 }
 
-func readDirectoryPages(outputRoot string, chapterDir string, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
+func readDirectoryPages(outputRoot string, sourceID string, chapterDir string, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
 	pages := make([]contracts.ReaderPage, 0)
 
 	chapterRelativePath, err := relativePathWithinRoot(outputRoot, chapterDir)
@@ -954,7 +1173,12 @@ func readDirectoryPages(outputRoot string, chapterDir string, metadata chapterMe
 	for i, seg := range segments {
 		segments[i] = url.PathEscape(seg)
 	}
-	baseSourceURL := LibraryAssetPrefix + strings.Join(segments, "/") + "/"
+	var baseSourceURL string
+	if sourceID != "" && sourceID != "default" {
+		baseSourceURL = LibraryAssetPrefix + LibrarySourceAssetPrefix + url.PathEscape(sourceID) + "/" + strings.Join(segments, "/") + "/"
+	} else {
+		baseSourceURL = LibraryAssetPrefix + strings.Join(segments, "/") + "/"
+	}
 
 	entries, err := os.ReadDir(chapterDir)
 	if err != nil {
@@ -980,7 +1204,7 @@ func readDirectoryPages(outputRoot string, chapterDir string, metadata chapterMe
 	return pages, nil
 }
 
-func readArchivePages(outputRoot string, archivePath string, archiveReader *zip.ReadCloser, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
+func readArchivePages(outputRoot string, sourceID string, archivePath string, archiveReader *zip.ReadCloser, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
 	entries, err := collectArchiveImageEntries(archiveReader)
 	if err != nil {
 		return nil, err
@@ -990,7 +1214,12 @@ func readArchivePages(outputRoot string, archivePath string, archiveReader *zip.
 	if err != nil {
 		return nil, err
 	}
-	baseSourceURL := LibraryArchiveAssetPrefix + encodePathToken(archiveRelativePath) + "/"
+	var baseSourceURL string
+	if sourceID != "" && sourceID != "default" {
+		baseSourceURL = LibraryArchiveAssetPrefix + LibrarySourceAssetPrefix + url.PathEscape(sourceID) + "/" + encodePathToken(archiveRelativePath) + "/"
+	} else {
+		baseSourceURL = LibraryArchiveAssetPrefix + encodePathToken(archiveRelativePath) + "/"
+	}
 
 	pages := make([]contracts.ReaderPage, 0)
 
@@ -1041,13 +1270,34 @@ func resolveChapterMetadata(baseName string, info ComicInfo, hasInfo bool) chapt
 }
 
 func resolveArchiveAssetRequest(outputRoot string, requestPath string) (string, string, error) {
+	return resolveMultiSourceArchiveAssetRequest(map[string]string{"default": outputRoot}, outputRoot, requestPath)
+}
+
+func resolveMultiSourceArchiveAssetRequest(sourcesMap map[string]string, defaultRoot string, requestPath string) (string, string, error) {
 	if !strings.HasPrefix(requestPath, LibraryArchiveAssetPrefix) {
 		return "", "", fmt.Errorf("unsupported archive asset path: %s", requestPath)
 	}
 
-	relativeURLPath := strings.TrimPrefix(requestPath, LibraryArchiveAssetPrefix)
-	if relativeURLPath == "" {
+	trimmed := strings.TrimPrefix(requestPath, LibraryArchiveAssetPrefix)
+	if trimmed == "" {
 		return "", "", fmt.Errorf("empty archive asset path")
+	}
+
+	root := defaultRoot
+	relativeURLPath := trimmed
+
+	if strings.HasPrefix(trimmed, LibrarySourceAssetPrefix) {
+		afterPrefix := strings.TrimPrefix(trimmed, LibrarySourceAssetPrefix)
+		parts := strings.SplitN(afterPrefix, "/", 2)
+		if len(parts) == 2 {
+			srcID, err := url.PathUnescape(parts[0])
+			if err == nil {
+				if r, ok := sourcesMap[srcID]; ok && r != "" {
+					root = r
+					relativeURLPath = parts[1]
+				}
+			}
+		}
 	}
 
 	pathSegments := strings.Split(relativeURLPath, "/")
@@ -1064,7 +1314,7 @@ func resolveArchiveAssetRequest(outputRoot string, requestPath string) (string, 
 		return "", "", fmt.Errorf("decode archive entry: %w", err)
 	}
 
-	archivePath, err := resolveWithinRoot(outputRoot, filepath.FromSlash(archiveRelativePath))
+	archivePath, err := resolveWithinRoot(root, filepath.FromSlash(archiveRelativePath))
 	if err != nil {
 		return "", "", err
 	}
@@ -1288,16 +1538,37 @@ func decodePathToken(value string) (string, error) {
 	return string(decoded), nil
 }
 
+const mangaIDDelimiter = "::"
+
+func EncodeMangaIDWithSource(sourceID, relativePath string) string {
+	if sourceID == "" || sourceID == "default" {
+		return base64.RawURLEncoding.EncodeToString([]byte(filepath.ToSlash(relativePath)))
+	}
+	combined := sourceID + mangaIDDelimiter + filepath.ToSlash(relativePath)
+	return base64.RawURLEncoding.EncodeToString([]byte(combined))
+}
+
+func DecodeMangaIDWithSource(identifier string) (string, string, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(identifier)
+	if err != nil {
+		return "", "", fmt.Errorf("decode manga id: %w", err)
+	}
+	decodedStr := string(decoded)
+	if idx := strings.Index(decodedStr, mangaIDDelimiter); idx >= 0 {
+		sourceID := decodedStr[:idx]
+		relPath := filepath.FromSlash(decodedStr[idx+len(mangaIDDelimiter):])
+		return sourceID, relPath, nil
+	}
+	return "default", filepath.FromSlash(decodedStr), nil
+}
+
 func encodeMangaID(relativePath string) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(filepath.ToSlash(relativePath)))
+	return EncodeMangaIDWithSource("default", relativePath)
 }
 
 func decodeMangaID(identifier string) (string, error) {
-	decoded, err := base64.RawURLEncoding.DecodeString(identifier)
-	if err != nil {
-		return "", fmt.Errorf("decode manga id: %w", err)
-	}
-	return filepath.FromSlash(string(decoded)), nil
+	_, relPath, err := DecodeMangaIDWithSource(identifier)
+	return relPath, err
 }
 
 func inferChapterNumber(chapterDirName string) float64 {

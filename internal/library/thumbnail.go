@@ -105,10 +105,14 @@ func computeThumbnailCacheKey(sourcePath string, modTime time.Time, entryPath st
 // ServeThumbnail handles thumbnail derivation, disk caching, and HTTP delivery.
 // If enabled is false or generation fails, it transparently falls back to serving the original raw asset.
 func ServeThumbnail(outputRoot string, cacheDir string, requestPath string, w http.ResponseWriter, r *http.Request, enabled bool) error {
+	return ServeMultiSourceThumbnail(map[string]string{"default": outputRoot}, outputRoot, cacheDir, requestPath, w, r, enabled)
+}
+
+func ServeMultiSourceThumbnail(sourcesMap map[string]string, defaultRoot string, cacheDir string, requestPath string, w http.ResponseWriter, r *http.Request, enabled bool) error {
 	subPath := StripThumbnailURL(requestPath)
 
 	if !enabled {
-		return serveFallbackAsset(outputRoot, subPath, w, r)
+		return serveMultiSourceFallbackAsset(sourcesMap, defaultRoot, subPath, w, r)
 	}
 
 	isArchive := strings.HasPrefix(subPath, LibraryArchiveAssetPrefix)
@@ -123,7 +127,7 @@ func ServeThumbnail(outputRoot string, cacheDir string, requestPath string, w ht
 
 	if isArchive {
 		var err error
-		sourcePath, entryPath, err = resolveArchiveAssetRequest(outputRoot, subPath)
+		sourcePath, entryPath, err = resolveMultiSourceArchiveAssetRequest(sourcesMap, defaultRoot, subPath)
 		if err != nil {
 			return err
 		}
@@ -134,7 +138,7 @@ func ServeThumbnail(outputRoot string, cacheDir string, requestPath string, w ht
 		modTime = info.ModTime()
 	} else {
 		var err error
-		sourcePath, err = ResolveLibraryAssetPath(outputRoot, subPath)
+		sourcePath, err = ResolveMultiSourceAssetPath(sourcesMap, defaultRoot, subPath)
 		if err != nil {
 			return err
 		}
@@ -218,7 +222,7 @@ func ServeThumbnail(outputRoot string, cacheDir string, requestPath string, w ht
 			}
 
 			dstRGBA := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
-			draw.BiLinear.Scale(dstRGBA, dstRGBA.Bounds(), srcImg, bounds, draw.Over, nil)
+			draw.CatmullRom.Scale(dstRGBA, dstRGBA.Bounds(), srcImg, bounds, draw.Over, nil)
 			finalImg = dstRGBA
 		}
 
@@ -228,28 +232,27 @@ func ServeThumbnail(outputRoot string, cacheDir string, requestPath string, w ht
 		}
 		tmpPath := tmpFile.Name()
 
-		encodeErr := jpeg.Encode(tmpFile, finalImg, &jpeg.Options{Quality: ThumbnailQuality})
-		closeErr := tmpFile.Close()
-		if encodeErr != nil {
+		jpegOpts := &jpeg.Options{Quality: ThumbnailQuality}
+		if err := jpeg.Encode(tmpFile, finalImg, jpegOpts); err != nil {
+			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
-			return nil, fmt.Errorf("encode jpeg: %w", encodeErr)
+			return nil, fmt.Errorf("encode jpeg: %w", err)
 		}
-		if closeErr != nil {
+		if err := tmpFile.Close(); err != nil {
 			_ = os.Remove(tmpPath)
-			return nil, fmt.Errorf("close temp thumbnail: %w", closeErr)
+			return nil, fmt.Errorf("close temp thumbnail: %w", err)
 		}
 
 		if err := os.Rename(tmpPath, cachedFilePath); err != nil {
 			_ = os.Remove(tmpPath)
-			return nil, fmt.Errorf("rename thumbnail: %w", err)
+			return nil, fmt.Errorf("rename temp thumbnail: %w", err)
 		}
 
 		return nil, nil
 	})
 
 	if err != nil {
-		// Log or handle generation failure: gracefully fallback to original asset
-		return serveFallbackAsset(outputRoot, subPath, w, r)
+		return serveMultiSourceFallbackAsset(sourcesMap, defaultRoot, subPath, w, r)
 	}
 
 	if fileExists(cachedFilePath) {
@@ -257,7 +260,7 @@ func ServeThumbnail(outputRoot string, cacheDir string, requestPath string, w ht
 		return nil
 	}
 
-	return serveFallbackAsset(outputRoot, subPath, w, r)
+	return serveMultiSourceFallbackAsset(sourcesMap, defaultRoot, subPath, w, r)
 }
 
 func serveCachedThumbnail(cachedFilePath string, cacheKey string, w http.ResponseWriter, r *http.Request) {
@@ -275,8 +278,12 @@ func serveCachedThumbnail(cachedFilePath string, cacheKey string, w http.Respons
 }
 
 func serveFallbackAsset(outputRoot string, subPath string, w http.ResponseWriter, r *http.Request) error {
+	return serveMultiSourceFallbackAsset(map[string]string{"default": outputRoot}, outputRoot, subPath, w, r)
+}
+
+func serveMultiSourceFallbackAsset(sourcesMap map[string]string, defaultRoot string, subPath string, w http.ResponseWriter, r *http.Request) error {
 	if strings.HasPrefix(subPath, LibraryArchiveAssetPrefix) {
-		reader, contentType, contentLength, err := OpenArchiveAsset(outputRoot, subPath)
+		reader, contentType, contentLength, err := OpenMultiSourceArchiveAsset(sourcesMap, defaultRoot, subPath)
 		if err != nil {
 			return err
 		}
@@ -300,7 +307,7 @@ func serveFallbackAsset(outputRoot string, subPath string, w http.ResponseWriter
 		return err
 	}
 
-	targetPath, err := ResolveLibraryAssetPath(outputRoot, subPath)
+	targetPath, err := ResolveMultiSourceAssetPath(sourcesMap, defaultRoot, subPath)
 	if err != nil {
 		return err
 	}

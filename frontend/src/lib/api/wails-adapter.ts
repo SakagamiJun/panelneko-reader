@@ -2,6 +2,7 @@ import type {
   AppSettings,
   AppVersionInfo,
   LibraryManga,
+  LibrarySource,
   ReaderManifest,
   ReaderProgress,
   UpdateCheckResult,
@@ -83,6 +84,26 @@ export class WailsAdapter implements AppAdapter {
 
   async clearThumbnailCache(): Promise<void> {
     await (getWailsApp() as any)?.ClearThumbnailCache?.();
+  }
+
+  async addLibrarySource(source: LibrarySource): Promise<AppSettings> {
+    return (await (getWailsApp() as any)?.AddLibrarySource?.(source)) as AppSettings;
+  }
+
+  async removeLibrarySource(sourceID: string): Promise<AppSettings> {
+    return (await (getWailsApp() as any)?.RemoveLibrarySource?.(sourceID)) as AppSettings;
+  }
+
+  async updateLibrarySource(source: LibrarySource): Promise<AppSettings> {
+    return (await (getWailsApp() as any)?.UpdateLibrarySource?.(source)) as AppSettings;
+  }
+
+  async relocateLibrarySource(sourceID: string, newPath: string): Promise<AppSettings> {
+    return (await (getWailsApp() as any)?.RelocateLibrarySource?.(sourceID, newPath)) as AppSettings;
+  }
+
+  async rescanSource(sourceID: string): Promise<void> {
+    await (getWailsApp() as any)?.RescanSource?.(sourceID);
   }
 
   subscribe(eventName: string, callback: (payload: unknown) => void) {

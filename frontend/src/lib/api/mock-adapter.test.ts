@@ -121,4 +121,42 @@ describe("MockAdapter Pin Functionality", () => {
   it("opens external url without throwing", async () => {
     await expect(adapter.openURL("https://github.com")).resolves.toBeUndefined();
   });
+
+  it("manages library sources correctly in mock adapter", async () => {
+    const settings = await adapter.getSettings();
+    expect(settings.librarySources).toBeDefined();
+    expect(settings.librarySources?.length).toBeGreaterThan(0);
+
+    // 1. Add source
+    const updated = await adapter.addLibrarySource({
+      id: "test-src",
+      name: "Test NAS",
+      type: "smb",
+      path: "/Volumes/manga",
+      enabled: true,
+    });
+    expect(updated.librarySources?.some((s) => s.id === "test-src")).toBe(true);
+
+    // 2. Update source
+    const updated2 = await adapter.updateLibrarySource({
+      id: "test-src",
+      name: "Renamed NAS",
+      type: "smb",
+      path: "/Volumes/manga",
+      enabled: false,
+    });
+    expect(updated2.librarySources?.find((s) => s.id === "test-src")?.name).toBe("Renamed NAS");
+
+    // 3. Relocate source
+    const updated3 = await adapter.relocateLibrarySource("test-src", "/Volumes/new-manga");
+    expect(updated3.librarySources?.find((s) => s.id === "test-src")?.path).toBe("/Volumes/new-manga");
+
+    // 4. Rescan source
+    await expect(adapter.rescanSource("test-src")).resolves.toBeUndefined();
+
+    // 5. Remove source
+    const updated4 = await adapter.removeLibrarySource("test-src");
+    expect(updated4.librarySources?.some((s) => s.id === "test-src")).toBe(false);
+  });
 });
+

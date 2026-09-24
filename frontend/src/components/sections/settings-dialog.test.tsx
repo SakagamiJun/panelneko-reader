@@ -189,3 +189,89 @@ describe("SettingsDialog Component - Performance & Cache Settings", () => {
     expect(clearSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("SettingsDialog Component - Sources Tab", () => {
+  const multiSourceSettings: AppSettings = {
+    ...mockSettings,
+    librarySources: [
+      {
+        id: "src-1",
+        name: "Main Manga",
+        type: "local",
+        path: "/mock/library/main",
+        enabled: true,
+        status: "online",
+        mangaCount: 12,
+      },
+      {
+        id: "src-2",
+        name: "External Drive",
+        type: "local",
+        path: "/Volumes/ExtSSD/comics",
+        enabled: true,
+        status: "offline",
+        mangaCount: 8,
+      },
+    ],
+  };
+
+  it("renders sources list with status, names, paths, and manga counts", () => {
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={multiSourceSettings}
+        onSave={vi.fn()}
+        defaultTab="sources"
+      />
+    );
+
+    expect(screen.getByText("Main Manga")).toBeInTheDocument();
+    expect(screen.getByText("/mock/library/main")).toBeInTheDocument();
+    expect(screen.getByText("External Drive")).toBeInTheDocument();
+    expect(screen.getByText("/Volumes/ExtSSD/comics")).toBeInTheDocument();
+  });
+
+  it("triggers rescan when rescan button is clicked", async () => {
+    const rescanSpy = vi.spyOn(appAdapter, "rescanSource").mockResolvedValue(undefined);
+    vi.spyOn(appAdapter, "getSettings").mockResolvedValue(multiSourceSettings);
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={multiSourceSettings}
+        onSave={vi.fn()}
+        defaultTab="sources"
+      />
+    );
+
+    const rescanBtns = screen.getAllByRole("button", { name: /重新扫描|Rescan|再スキャン/i });
+    fireEvent.click(rescanBtns[0]);
+
+    expect(rescanSpy).toHaveBeenCalledWith("src-1");
+  });
+
+  it("opens add source form and cancels", () => {
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={multiSourceSettings}
+        onSave={vi.fn()}
+        defaultTab="sources"
+      />
+    );
+
+    const addBtn = screen.getAllByRole("button", { name: /添加目录|Add Directory|ディレクトリを追加/i })[0];
+    fireEvent.click(addBtn);
+
+    expect(screen.getByText(/添加漫画库目录|Add Library Directory|ライブラリディレクトリを追加/i)).toBeInTheDocument();
+
+    const cancelBtn = screen.getByRole("button", { name: /取消|Cancel|キャンセル/i });
+    fireEvent.click(cancelBtn);
+
+    expect(screen.queryByText(/添加漫画库目录|Add Library Directory|ライブラリディレクトリを追加/i)).not.toBeInTheDocument();
+  });
+});
+

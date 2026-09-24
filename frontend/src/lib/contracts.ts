@@ -7,8 +7,25 @@ export type ReaderFitMode = "contain" | "width" | "height" | "original";
 export type ReaderFilter = "none" | "invert" | "sepia" | "high-contrast";
 export type ReaderSideClickMode = "right_next" | "follow" | "left_next";
 
+export type SourceType = "local" | "smb" | "webdav";
+export type SourceStatus = "online" | "offline" | "disabled" | "syncing";
+
+export interface LibrarySource {
+  id: string;
+  name: string;
+  type: SourceType;
+  path: string;
+  enabled: boolean;
+  readOnly?: boolean;
+  status?: SourceStatus;
+  errorMessage?: string;
+  mangaCount?: number;
+  lastScanned?: string;
+}
+
 export interface AppSettings {
   libraryRoot: string;
+  librarySources?: LibrarySource[];
   localeMode: LocaleMode;
   locale: Locale;
   themeMode: ThemeMode;
@@ -29,6 +46,7 @@ export interface AppSettings {
 
 export interface LibraryManga {
   id: string;
+  sourceID?: string;
   title: string;
   sourceURL: string;
   relativePath: string;
@@ -41,6 +59,7 @@ export interface LibraryManga {
   lastUpdated: string;
   isPinned?: boolean;
   pinnedAt?: string;
+  isAvailable?: boolean;
 }
 
 export interface ReaderManifest {

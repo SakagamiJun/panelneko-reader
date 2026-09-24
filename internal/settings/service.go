@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
@@ -52,8 +54,21 @@ func DefaultSettings() contracts.AppSettings {
 		homeDir = "."
 	}
 
+	defaultRoot := filepath.Join(homeDir, "MangaLibrary")
+	defaultSources := []contracts.LibrarySource{
+		{
+			ID:      "default",
+			Name:    "Default Library",
+			Type:    contracts.SourceTypeLocal,
+			Path:    defaultRoot,
+			Enabled: true,
+			Status:  contracts.SourceStatusOnline,
+		},
+	}
+
 	return contracts.AppSettings{
-		LibraryRoot:               filepath.Join(homeDir, "MangaLibrary"),
+		LibraryRoot:               defaultRoot,
+		LibrarySources:            defaultSources,
 		LocaleMode:                contracts.LocaleModeSystem,
 		Locale:                    "en",
 		ThemeMode:                 contracts.ThemeModeSystem,
@@ -106,8 +121,82 @@ func (s *Service) Update(input contracts.AppSettings) (contracts.AppSettings, er
 func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings, error) {
 	settings := DefaultSettings()
 
-	if input.LibraryRoot != "" {
+	if len(input.LibrarySources) > 0 {
+		var normalizedSources []contracts.LibrarySource
+		seenIDs := make(map[string]bool)
+		for i, src := range input.LibrarySources {
+			id := strings.TrimSpace(src.ID)
+			if id == "" {
+				id = fmt.Sprintf("src-%d-%d", time.Now().UnixNano(), i+1)
+			}
+			if seenIDs[id] {
+				id = fmt.Sprintf("%s-%d", id, i+1)
+			}
+			seenIDs[id] = true
+
+			name := strings.TrimSpace(src.Name)
+			pathVal := strings.TrimSpace(src.Path)
+			if name == "" {
+				if pathVal != "" {
+					name = filepath.Base(pathVal)
+				}
+				if name == "" || name == "." || name == "/" {
+					name = fmt.Sprintf("Library %d", i+1)
+				}
+			}
+
+			srcType := src.Type
+			if srcType == "" {
+				srcType = contracts.SourceTypeLocal
+			}
+
+			status := src.Status
+			if status == "" {
+				status = contracts.SourceStatusOnline
+			}
+
+			normalizedSources = append(normalizedSources, contracts.LibrarySource{
+				ID:           id,
+				Name:         name,
+				Type:         srcType,
+				Path:         pathVal,
+				Enabled:      src.Enabled,
+				ReadOnly:     src.ReadOnly,
+				Status:       status,
+				ErrorMessage: src.ErrorMessage,
+				MangaCount:   src.MangaCount,
+				LastScanned:  src.LastScanned,
+			})
+		}
+		settings.LibrarySources = normalizedSources
+
+		var activePath string
+		for _, s := range normalizedSources {
+			if s.Enabled && s.Path != "" {
+				activePath = s.Path
+				break
+			}
+		}
+		if activePath == "" && len(normalizedSources) > 0 {
+			activePath = normalizedSources[0].Path
+		}
+		if activePath != "" {
+			settings.LibraryRoot = activePath
+		} else if input.LibraryRoot != "" {
+			settings.LibraryRoot = input.LibraryRoot
+		}
+	} else if input.LibraryRoot != "" {
 		settings.LibraryRoot = input.LibraryRoot
+		settings.LibrarySources = []contracts.LibrarySource{
+			{
+				ID:      "default",
+				Name:    "Default Library",
+				Type:    contracts.SourceTypeLocal,
+				Path:    input.LibraryRoot,
+				Enabled: true,
+				Status:  contracts.SourceStatusOnline,
+			},
+		}
 	}
 
 	if input.ReaderScrollCachePages > 0 {

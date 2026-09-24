@@ -1,16 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  AlertTriangle,
   BookOpen,
   Check,
   ExternalLink,
   Folder,
+  FolderInput,
+  FolderOpen,
   Info,
   Keyboard,
   Loader2,
+  Plus,
   RefreshCw,
   Settings2,
   Sliders,
+  Trash2,
   X,
 } from "lucide-react";
 import appIcon from "@/assets/appicon.png";
@@ -24,14 +29,18 @@ import { appAdapter } from "@/lib/api";
 import { APP_LINKS } from "@/lib/constants";
 import type {
   AppSettings,
+  LibrarySource,
   ReaderDirection,
   ReaderFitMode,
   ReaderFilter,
   ReaderSpreadMode,
   ReaderSideClickMode,
+  SourceType,
   UpdateCheckResult,
 } from "@/lib/contracts";
 import { cn, formatBytes } from "@/lib/utils";
+
+export type SettingsTab = "general" | "sources" | "reader" | "shortcuts" | "about";
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -40,10 +49,8 @@ export interface SettingsDialogProps {
   onSave: (settings: AppSettings) => void;
   version?: string;
   commit?: string;
-  defaultTab?: "general" | "reader" | "shortcuts" | "about";
+  defaultTab?: SettingsTab;
 }
-
-export type SettingsTab = "general" | "reader" | "shortcuts" | "about";
 
 export function SettingsDialog({
   open,
@@ -64,6 +71,20 @@ export function SettingsDialog({
   const [cacheSizeBytes, setCacheSizeBytes] = useState<number>(0);
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [isCacheClearedRecently, setIsCacheClearedRecently] = useState(false);
+
+  // Source Management State
+  const [isAddingSource, setIsAddingSource] = useState(false);
+  const [newSourceName, setNewSourceName] = useState("");
+  const [newSourcePath, setNewSourcePath] = useState("");
+  const [newSourceType, setNewSourceType] = useState<SourceType>("local");
+  const [newSourceReadOnly, setNewSourceReadOnly] = useState(false);
+  const [sourceToDelete, setSourceToDelete] = useState<LibrarySource | null>(null);
+  const [scanningSourceId, setScanningSourceId] = useState<string | null>(null);
+  const [sourceOpError, setSourceOpError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setForm(settings);
+  }, [settings]);
 
   useEffect(() => {
     if (open && activeTab === "general") {
@@ -136,19 +157,100 @@ export function SettingsDialog({
     }, 1500);
   };
 
-  const handleSelectDirectory = async () => {
+  const handleBrowseNewSource = async () => {
     try {
       const selected = await appAdapter.selectDirectory();
       if (selected) {
-        updateField("libraryRoot", selected);
+        setNewSourcePath(selected);
+        if (!newSourceName) {
+          const parts = selected.replace(/[\\/]+$/, "").split(/[\\/]/);
+          setNewSourceName(parts[parts.length - 1] || "Manga Library");
+        }
       }
-    } catch (error) {
-      console.error("Failed to select directory:", error);
+    } catch (err) {
+      console.error("Failed to select directory:", err);
+    }
+  };
+
+  const handleAddSourceSubmit = async () => {
+    if (!newSourcePath.trim()) return;
+    setSourceOpError(null);
+    try {
+      const updated = await appAdapter.addLibrarySource({
+        id: "",
+        name: newSourceName.trim(),
+        path: newSourcePath.trim(),
+        type: newSourceType,
+        readOnly: newSourceReadOnly,
+        enabled: true,
+      });
+      setForm(updated);
+      onSave(updated);
+      setIsAddingSource(false);
+      setNewSourceName("");
+      setNewSourcePath("");
+      setNewSourceReadOnly(false);
+      setNewSourceType("local");
+    } catch (err: unknown) {
+      setSourceOpError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleToggleSourceEnabled = async (source: LibrarySource) => {
+    try {
+      const updated = await appAdapter.updateLibrarySource({
+        ...source,
+        enabled: !source.enabled,
+      });
+      setForm(updated);
+      onSave(updated);
+    } catch (err) {
+      console.error("Failed to toggle source:", err);
+    }
+  };
+
+  const handleRelocateSource = async (source: LibrarySource) => {
+    try {
+      const selected = await appAdapter.selectDirectory();
+      if (selected && selected !== source.path) {
+        const updated = await appAdapter.relocateLibrarySource(source.id, selected);
+        setForm(updated);
+        onSave(updated);
+      }
+    } catch (err) {
+      console.error("Failed to relocate source:", err);
+    }
+  };
+
+  const handleRescanSource = async (sourceId: string) => {
+    setScanningSourceId(sourceId);
+    try {
+      await appAdapter.rescanSource(sourceId);
+      const fresh = await appAdapter.getSettings();
+      setForm(fresh);
+      onSave(fresh);
+    } catch (err) {
+      console.error("Failed to rescan source:", err);
+    } finally {
+      setScanningSourceId(null);
+    }
+  };
+
+  const handleConfirmDeleteSource = async () => {
+    if (!sourceToDelete) return;
+    try {
+      const updated = await appAdapter.removeLibrarySource(sourceToDelete.id);
+      setForm(updated);
+      onSave(updated);
+      setSourceToDelete(null);
+    } catch (err) {
+      console.error("Failed to remove source:", err);
     }
   };
 
   const tabs: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
     { id: "general", label: t("settings.generalTab"), icon: <Sliders className="h-4 w-4" /> },
+    { id: "sources", label: t("settings.sourcesTab"), icon: <Folder className="h-4 w-4" /> },
     { id: "reader", label: t("settings.readerPreferences"), icon: <BookOpen className="h-4 w-4" /> },
     { id: "shortcuts", label: t("settings.shortcuts"), icon: <Keyboard className="h-4 w-4" /> },
     { id: "about", label: t("settings.aboutTab"), icon: <Info className="h-4 w-4" /> },
@@ -282,28 +384,6 @@ export function SettingsDialog({
                   description={t("settings.subtitle")}
                 >
                   <SettingRow
-                    title={t("settings.outputRoot")}
-                    description={t("settings.outputRootDesc")}
-                    control={
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={handleSelectDirectory}
-                        className="gap-1.5 shrink-0"
-                      >
-                        <Folder className="h-3.5 w-3.5" />
-                        <span>{t("settings.browse")}</span>
-                      </Button>
-                    }
-                  />
-                  {form.libraryRoot && (
-                    <div className="px-3.5 py-2.5 text-xs font-mono text-muted-foreground bg-muted/25 break-all select-all">
-                      {form.libraryRoot}
-                    </div>
-                  )}
-
-                  <SettingRow
                     title={t("settings.autoRestoreReaderProgress")}
                     description={t("settings.autoRestoreReaderProgressHint")}
                     control={
@@ -382,6 +462,317 @@ export function SettingsDialog({
                     }
                   />
                 </SettingGroup>
+              </div>
+            )}
+
+            {activeTab === "sources" && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">
+                      {t("settings.sourcesTitle")}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {t("settings.sourcesDesc")}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
+                      setSourceOpError(null);
+                      setIsAddingSource(true);
+                    }}
+                    className="gap-1.5 shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>{t("settings.addSource")}</span>
+                  </Button>
+                </div>
+
+                {/* Add Source Inline Card */}
+                {isAddingSource && (
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3.5 animate-in fade-in-50 zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Folder className="h-4 w-4 text-primary" />
+                        <h4 className="text-xs font-bold text-foreground">
+                          {t("settings.addSourceDialogTitle")}
+                        </h4>
+                      </div>
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => setIsAddingSource(false)}
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground">
+                      {t("settings.addSourceDialogDesc")}
+                    </p>
+
+                    {sourceOpError && (
+                      <div className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-2 flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        <span>{sourceOpError}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-2.5">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted-foreground">
+                          {t("settings.sourcePath")}
+                        </label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={newSourcePath}
+                            onChange={(e) => setNewSourcePath(e.target.value)}
+                            placeholder={t("settings.sourcePathPlaceholder")}
+                            className="text-xs font-mono flex-1 h-8"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={handleBrowseNewSource}
+                            className="gap-1.5 shrink-0 h-8 text-xs"
+                          >
+                            <Folder className="h-3.5 w-3.5" />
+                            <span>{t("settings.browse")}</span>
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted-foreground">
+                          {t("settings.sourceName")}
+                        </label>
+                        <Input
+                          value={newSourceName}
+                          onChange={(e) => setNewSourceName(e.target.value)}
+                          placeholder={t("settings.sourceNamePlaceholder")}
+                          className="text-xs h-8"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between py-1">
+                        <div>
+                          <div className="text-xs font-medium text-foreground">
+                            {t("settings.sourceReadOnly")}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {t("settings.sourceReadOnlyHint")}
+                          </div>
+                        </div>
+                        <Switch
+                          checked={newSourceReadOnly}
+                          onChange={setNewSourceReadOnly}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => setIsAddingSource(false)}
+                      >
+                        {t("library.cancel")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="primary"
+                        disabled={!newSourcePath.trim()}
+                        onClick={handleAddSourceSubmit}
+                      >
+                        {t("library.confirm")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sources List */}
+                <div className="space-y-3">
+                  {(!form.librarySources || form.librarySources.length === 0) ? (
+                    <div className="rounded-xl border border-dashed border-border/70 p-8 text-center text-muted-foreground">
+                      <Folder className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                      <p className="text-xs">{t("settings.sourceEmpty")}</p>
+                    </div>
+                  ) : (
+                    form.librarySources.map((source, index) => {
+                      const isScanning = scanningSourceId === source.id;
+                      const isOffline = source.status === "offline";
+                      const isDefault = source.id === "default" || index === 0;
+
+                      return (
+                        <div
+                          key={source.id}
+                          className={cn(
+                            "rounded-xl border border-border/60 bg-card/60 p-3.5 transition-all duration-150 space-y-2.5",
+                            !source.enabled && "opacity-60 bg-muted/20",
+                            isOffline && source.enabled && "border-destructive/40 bg-destructive/5"
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={cn(
+                                  "h-2 w-2 rounded-full shrink-0",
+                                  !source.enabled
+                                    ? "bg-muted-foreground/40"
+                                    : isOffline
+                                    ? "bg-destructive"
+                                    : "bg-emerald-500"
+                                )}
+                              />
+                              <span className="font-semibold text-xs text-foreground truncate">
+                                {source.name || t("settings.sourceName")}
+                              </span>
+                              {isDefault && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20 shrink-0">
+                                  {t("settings.sourceDefaultBadge")}
+                                </span>
+                              )}
+                              {source.readOnly && (
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground border border-border/50 shrink-0">
+                                  {t("settings.sourceReadOnly")}
+                                </span>
+                              )}
+                              <span className="text-[11px] text-muted-foreground/80 shrink-0">
+                                {t("settings.sourceMangaCount", { count: source.mangaCount ?? 0 })}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[11px] text-muted-foreground">
+                                {!source.enabled
+                                  ? t("settings.sourceDisabled")
+                                  : isOffline
+                                  ? t("settings.sourceOffline")
+                                  : t("settings.sourceOnline")}
+                              </span>
+                              <Switch
+                                checked={source.enabled}
+                                onChange={() => handleToggleSourceEnabled(source)}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="text-[11px] font-mono text-muted-foreground bg-muted/30 rounded-lg px-2.5 py-1.5 break-all select-all border border-border/30">
+                            {source.path}
+                          </div>
+
+                          {isOffline && source.enabled && (
+                            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-2 text-[11px] text-destructive flex items-start gap-2">
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                              <div className="min-w-0 flex-1">
+                                {source.errorMessage || t("library.offlineAlertDesc")}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
+                            <span className="text-[10px] font-mono text-muted-foreground/60">
+                              {source.lastScanned
+                                ? t("settings.sourceLastScanned", {
+                                    time: new Date(source.lastScanned).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    }),
+                                  })
+                                : ""}
+                            </span>
+
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                onClick={() => handleRelocateSource(source)}
+                                className="h-6 px-2 text-[10px] gap-1"
+                                title={t("settings.sourceRelocate")}
+                              >
+                                <FolderInput className="h-3 w-3" />
+                                <span>{t("settings.sourceRelocate")}</span>
+                              </Button>
+
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                disabled={isScanning || !source.enabled}
+                                onClick={() => handleRescanSource(source.id)}
+                                className="h-6 px-2 text-[10px] gap-1"
+                                title={t("settings.sourceRescan")}
+                              >
+                                <RefreshCw className={cn("h-3 w-3", isScanning && "animate-spin")} />
+                                <span>{t("settings.sourceRescan")}</span>
+                              </Button>
+
+                              {(form.librarySources && form.librarySources.length > 1) && (
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => setSourceToDelete(source)}
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  title={t("settings.sourceRemove")}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {sourceToDelete && (
+                  <div
+                    className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+                    onClick={() => setSourceToDelete(null)}
+                  >
+                    <div
+                      className="w-full max-w-sm rounded-xl border border-border/80 bg-card p-4 space-y-3 shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <h4 className="text-sm font-bold text-foreground">
+                        {t("settings.sourceRemoveConfirmTitle", { name: sourceToDelete.name })}
+                      </h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {t("settings.sourceRemoveConfirmDesc")}
+                      </p>
+                      <div className="flex items-center justify-end gap-2 pt-2">
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => setSourceToDelete(null)}
+                        >
+                          {t("library.cancel")}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="primary"
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={handleConfirmDeleteSource}
+                        >
+                          {t("settings.sourceRemove")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

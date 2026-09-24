@@ -97,6 +97,10 @@ func (s *SQLiteStore) init() error {
 	s.addColumnIfNotExists("library_manga", "parent_path", "TEXT NOT NULL DEFAULT ''")
 	s.addColumnIfNotExists("library_manga", "is_collection", "INTEGER NOT NULL DEFAULT 0")
 	s.addColumnIfNotExists("library_manga", "manga_count", "INTEGER NOT NULL DEFAULT 0")
+	s.addColumnIfNotExists("library_manga", "source_id", "TEXT NOT NULL DEFAULT 'default'")
+	s.addColumnIfNotExists("library_manga", "is_available", "INTEGER NOT NULL DEFAULT 1")
+
+	_, _ = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_library_manga_source ON library_manga (source_id)`)
 
 	return nil
 }
@@ -194,8 +198,8 @@ func (s *SQLiteStore) SaveLibraryManga(mangas []contracts.LibraryManga, modTimes
 	}
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO library_manga (id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO library_manga (id, source_id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time, is_available)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -208,12 +212,80 @@ func (s *SQLiteStore) SaveLibraryManga(mangas []contracts.LibraryManga, modTimes
 		if m.IsCollection {
 			isColl = 1
 		}
-		if _, err := stmt.Exec(m.ID, m.Title, m.SourceURL, m.RelativePath, m.ParentPath, isColl, m.MangaCount, m.CoverImageURL, m.ChapterCount, m.PageCount, m.LastUpdated, modTime); err != nil {
+		sourceID := m.SourceID
+		if sourceID == "" {
+			sourceID = "default"
+		}
+		isAvail := 1
+		if !m.IsAvailable {
+			isAvail = 0
+		}
+		if _, err := stmt.Exec(m.ID, sourceID, m.Title, m.SourceURL, m.RelativePath, m.ParentPath, isColl, m.MangaCount, m.CoverImageURL, m.ChapterCount, m.PageCount, m.LastUpdated, modTime, isAvail); err != nil {
 			return err
 		}
 	}
 
 	return tx.Commit()
+}
+
+func (s *SQLiteStore) SaveLibraryMangaForSource(sourceID string, mangas []contracts.LibraryManga, modTimes map[string]int64) error {
+	if sourceID == "" {
+		sourceID = "default"
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`DELETE FROM library_manga WHERE source_id = ?`, sourceID)
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO library_manga (id, source_id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time, is_available)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, m := range mangas {
+		modTime := modTimes[m.ID]
+		isColl := 0
+		if m.IsCollection {
+			isColl = 1
+		}
+		itemSourceID := m.SourceID
+		if itemSourceID == "" {
+			itemSourceID = sourceID
+		}
+		isAvail := 1
+		if !m.IsAvailable {
+			isAvail = 0
+		}
+		if _, err := stmt.Exec(m.ID, itemSourceID, m.Title, m.SourceURL, m.RelativePath, m.ParentPath, isColl, m.MangaCount, m.CoverImageURL, m.ChapterCount, m.PageCount, m.LastUpdated, modTime, isAvail); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (s *SQLiteStore) SetSourceAvailability(sourceID string, isAvailable bool) error {
+	avail := 0
+	if isAvailable {
+		avail = 1
+	}
+	_, err := s.db.Exec(`UPDATE library_manga SET is_available = ? WHERE source_id = ?`, avail, sourceID)
+	return err
+}
+
+func (s *SQLiteStore) DeleteSourceLibraryManga(sourceID string) error {
+	_, err := s.db.Exec(`DELETE FROM library_manga WHERE source_id = ?`, sourceID)
+	return err
 }
 
 type LibraryMangaRecord struct {
@@ -223,7 +295,7 @@ type LibraryMangaRecord struct {
 
 func (s *SQLiteStore) ListLibraryManga() ([]LibraryMangaRecord, error) {
 	rows, err := s.db.Query(`
-		SELECT id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time
+		SELECT id, source_id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time, is_available
 		FROM library_manga
 		ORDER BY last_updated DESC
 	`)
@@ -236,13 +308,45 @@ func (s *SQLiteStore) ListLibraryManga() ([]LibraryMangaRecord, error) {
 	for rows.Next() {
 		var r LibraryMangaRecord
 		var isColl int
+		var isAvail int
 		if err := rows.Scan(
-			&r.ID, &r.Title, &r.SourceURL, &r.RelativePath, &r.ParentPath, &isColl, &r.MangaCount, &r.CoverImageURL,
-			&r.ChapterCount, &r.PageCount, &r.LastUpdated, &r.ModTime,
+			&r.ID, &r.SourceID, &r.Title, &r.SourceURL, &r.RelativePath, &r.ParentPath, &isColl, &r.MangaCount, &r.CoverImageURL,
+			&r.ChapterCount, &r.PageCount, &r.LastUpdated, &r.ModTime, &isAvail,
 		); err != nil {
 			return nil, err
 		}
 		r.IsCollection = (isColl == 1)
+		r.IsAvailable = (isAvail == 1)
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}
+
+func (s *SQLiteStore) ListLibraryMangaBySource(sourceID string) ([]LibraryMangaRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT id, source_id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time, is_available
+		FROM library_manga
+		WHERE source_id = ?
+		ORDER BY last_updated DESC
+	`, sourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []LibraryMangaRecord
+	for rows.Next() {
+		var r LibraryMangaRecord
+		var isColl int
+		var isAvail int
+		if err := rows.Scan(
+			&r.ID, &r.SourceID, &r.Title, &r.SourceURL, &r.RelativePath, &r.ParentPath, &isColl, &r.MangaCount, &r.CoverImageURL,
+			&r.ChapterCount, &r.PageCount, &r.LastUpdated, &r.ModTime, &isAvail,
+		); err != nil {
+			return nil, err
+		}
+		r.IsCollection = (isColl == 1)
+		r.IsAvailable = (isAvail == 1)
 		records = append(records, r)
 	}
 	return records, rows.Err()

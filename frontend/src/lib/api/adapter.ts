@@ -2,6 +2,7 @@ import type {
   AppSettings,
   AppVersionInfo,
   LibraryManga,
+  LibrarySource,
   ReaderManifest,
   ReaderProgress,
   UpdateCheckResult,
@@ -25,4 +26,9 @@ export interface AppAdapter {
   openURL(url: string): Promise<void>;
   getThumbnailCacheSize(): Promise<number>;
   clearThumbnailCache(): Promise<void>;
+  addLibrarySource(source: LibrarySource): Promise<AppSettings>;
+  removeLibrarySource(sourceID: string): Promise<AppSettings>;
+  updateLibrarySource(source: LibrarySource): Promise<AppSettings>;
+  relocateLibrarySource(sourceID: string, newPath: string): Promise<AppSettings>;
+  rescanSource(sourceID: string): Promise<void>;
 }

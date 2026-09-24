@@ -540,3 +540,219 @@ func TestAppExportedMethodsWailsCompliance(t *testing.T) {
 		}
 	}
 }
+
+func TestMultiSourceLibraryManagement(t *testing.T) {
+	tempRoot := t.TempDir()
+	app, cleanup := newAssetTestApp(t, tempRoot)
+	defer cleanup()
+
+	dir1 := filepath.Join(tempRoot, "Dir1")
+	dir2 := filepath.Join(tempRoot, "Dir2")
+	_ = os.MkdirAll(dir1, 0o755)
+	_ = os.MkdirAll(dir2, 0o755)
+
+	// 1. Add Library Source
+	updated, err := app.AddLibrarySource(contracts.LibrarySource{
+		ID:   "src-1",
+		Name: "Custom Source 1",
+		Path: dir1,
+	})
+	if err != nil {
+		t.Fatalf("AddLibrarySource failed: %v", err)
+	}
+
+	found := false
+	for _, s := range updated.LibrarySources {
+		if s.ID == "src-1" && s.Name == "Custom Source 1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected src-1 in updated settings: %+v", updated.LibrarySources)
+	}
+
+	// 2. Reject duplicate path
+	if _, err := app.AddLibrarySource(contracts.LibrarySource{Path: dir1}); err == nil {
+		t.Fatal("expected error adding duplicate path, got nil")
+	}
+
+	// 3. Reject empty path
+	if _, err := app.AddLibrarySource(contracts.LibrarySource{Path: ""}); err == nil {
+		t.Fatal("expected error adding empty path, got nil")
+	}
+
+	// 4. Update Library Source
+	updated, err = app.UpdateLibrarySource(contracts.LibrarySource{
+		ID:       "src-1",
+		Name:     "Renamed Source 1",
+		Enabled:  true,
+		ReadOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("UpdateLibrarySource failed: %v", err)
+	}
+	for _, s := range updated.LibrarySources {
+		if s.ID == "src-1" {
+			if s.Name != "Renamed Source 1" || !s.ReadOnly {
+				t.Fatalf("unexpected updated source: %+v", s)
+			}
+		}
+	}
+
+	// 5. Relocate Library Source
+	updated, err = app.RelocateLibrarySource("src-1", dir2)
+	if err != nil {
+		t.Fatalf("RelocateLibrarySource failed: %v", err)
+	}
+	for _, s := range updated.LibrarySources {
+		if s.ID == "src-1" {
+			if s.Path != dir2 {
+				t.Fatalf("expected relocated path %s, got %s", dir2, s.Path)
+			}
+		}
+	}
+
+	// 6. Rescan Source
+	if err := app.RescanSource("src-1"); err != nil {
+		t.Fatalf("RescanSource failed: %v", err)
+	}
+
+	// 7. Remove Library Source
+	updated, err = app.RemoveLibrarySource("src-1")
+	if err != nil {
+		t.Fatalf("RemoveLibrarySource failed: %v", err)
+	}
+	for _, s := range updated.LibrarySources {
+		if s.ID == "src-1" {
+			t.Fatalf("expected src-1 to be removed from settings: %+v", updated.LibrarySources)
+		}
+	}
+}
+
+func TestMultiSourceScanningAndOfflineFallback(t *testing.T) {
+	tempRoot := t.TempDir()
+	app, cleanup := newAssetTestApp(t, tempRoot)
+	defer cleanup()
+
+	dirA := filepath.Join(tempRoot, "SourceA")
+	dirB := filepath.Join(tempRoot, "SourceB")
+	_ = os.MkdirAll(filepath.Join(dirA, "Manga A", "Ch 1"), 0o755)
+	_ = os.WriteFile(filepath.Join(dirA, "Manga A", "Ch 1", "001.jpg"), []byte("page-a"), 0o644)
+	_ = os.MkdirAll(filepath.Join(dirB, "Manga B", "Ch 1"), 0o755)
+	_ = os.WriteFile(filepath.Join(dirB, "Manga B", "Ch 1", "001.jpg"), []byte("page-b"), 0o644)
+
+	// Configure both sources
+	_, err := app.UpdateSettings(contracts.AppSettings{
+		LibrarySources: []contracts.LibrarySource{
+			{
+				ID:      "src-a",
+				Name:    "Source A",
+				Path:    dirA,
+				Enabled: true,
+			},
+			{
+				ID:      "src-b",
+				Name:    "Source B",
+				Path:    dirB,
+				Enabled: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateSettings failed: %v", err)
+	}
+
+	// First scan: both are online
+	items, err := app.ListLibraryManga()
+	if err != nil {
+		t.Fatalf("ListLibraryManga failed: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 manga items, got %d", len(items))
+	}
+	for _, it := range items {
+		if !it.IsAvailable {
+			t.Fatalf("expected item %s to be available", it.Title)
+		}
+	}
+
+	// Find manga B and test ReaderManifest & OpenDirectory
+	var mangaB contracts.LibraryManga
+	for _, it := range items {
+		if it.Title == "Manga B" {
+			mangaB = it
+		}
+	}
+	if mangaB.ID == "" {
+		t.Fatal("manga B not found")
+	}
+
+	manifest, err := app.GetReaderManifest(mangaB.ID)
+	if err != nil {
+		t.Fatalf("GetReaderManifest for Manga B failed: %v", err)
+	}
+	if manifest.Title != "Manga B" || len(manifest.Chapters) == 0 {
+		t.Fatalf("unexpected manifest for Manga B: %+v", manifest)
+	}
+
+	// Test multi-source asset routing
+	pageURL := manifest.Chapters[0].Pages[0].SourceURL
+	req := httptest.NewRequest(http.MethodGet, pageURL, nil)
+	rec := httptest.NewRecorder()
+	app.assetHandler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "page-b" {
+		t.Fatalf("asset handler unexpected result: code=%d body=%q", rec.Code, rec.Body.String())
+	}
+
+	// Now simulate offline: remove directory B from disk
+	_ = os.RemoveAll(dirB)
+
+	// Second scan: source B should fail/offline, but its manga remains in library with IsAvailable=false!
+	itemsOffline, err := app.ListLibraryManga()
+	if err != nil {
+		t.Fatalf("ListLibraryManga during offline failed: %v", err)
+	}
+	if len(itemsOffline) != 2 {
+		t.Fatalf("expected both manga items to remain in library, got %d", len(itemsOffline))
+	}
+
+	var foundA, foundB *contracts.LibraryManga
+	for i := range itemsOffline {
+		if itemsOffline[i].Title == "Manga A" {
+			foundA = &itemsOffline[i]
+		} else if itemsOffline[i].Title == "Manga B" {
+			foundB = &itemsOffline[i]
+		}
+	}
+
+	if foundA == nil || !foundA.IsAvailable {
+		t.Fatalf("expected Manga A to be available, got %+v", foundA)
+	}
+	if foundB == nil || foundB.IsAvailable {
+		t.Fatalf("expected Manga B to be offline (IsAvailable=false), got %+v", foundB)
+	}
+
+	// Verify settings source status updated
+	settingsAfter := app.settings.Get()
+	for _, s := range settingsAfter.LibrarySources {
+		if s.ID == "src-b" && s.Status != contracts.SourceStatusOffline {
+			t.Fatalf("expected src-b status to be offline, got %s", s.Status)
+		}
+	}
+
+	// Now restore directory B
+	_ = os.MkdirAll(filepath.Join(dirB, "Manga B", "Ch 1"), 0o755)
+	_ = os.WriteFile(filepath.Join(dirB, "Manga B", "Ch 1", "001.jpg"), []byte("page-b"), 0o644)
+
+	// Third scan: Manga B should become available again!
+	itemsOnline, err := app.ListLibraryManga()
+	if err != nil {
+		t.Fatalf("ListLibraryManga after restore failed: %v", err)
+	}
+	for _, it := range itemsOnline {
+		if it.Title == "Manga B" && !it.IsAvailable {
+			t.Fatalf("expected Manga B to be available again after restore, got %+v", it)
+		}
+	}
+}

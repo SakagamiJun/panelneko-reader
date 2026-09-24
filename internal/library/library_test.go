@@ -825,3 +825,156 @@ func TestToggleCollectionMarker(t *testing.T) {
 		t.Fatal("expected nested path to fail toggle")
 	}
 }
+
+func TestMangaIDEncodingWithSource(t *testing.T) {
+	// 1. Default source backward compatibility
+	legacyEncoded := encodeMangaID("Sample Manga")
+	srcID, relPath, err := DecodeMangaIDWithSource(legacyEncoded)
+	if err != nil {
+		t.Fatalf("decode legacy id: %v", err)
+	}
+	if srcID != "default" || relPath != "Sample Manga" {
+		t.Fatalf("unexpected legacy decode: srcID=%s, relPath=%s", srcID, relPath)
+	}
+
+	// 2. Custom source encoding & decoding
+	customEncoded := EncodeMangaIDWithSource("nas_01", "Action/Manga 1")
+	srcID2, relPath2, err := DecodeMangaIDWithSource(customEncoded)
+	if err != nil {
+		t.Fatalf("decode custom id: %v", err)
+	}
+	if srcID2 != "nas_01" || relPath2 != filepath.FromSlash("Action/Manga 1") {
+		t.Fatalf("unexpected custom decode: srcID=%s, relPath=%s", srcID2, relPath2)
+	}
+}
+
+func TestMultiSourceLibraryScanningAndResolution(t *testing.T) {
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	missingRoot := filepath.Join(t.TempDir(), "non_existent_dir")
+
+	// Setup source A with 1 manga
+	mangaA := filepath.Join(rootA, "Manga A")
+	if err := os.MkdirAll(mangaA, 0o755); err != nil {
+		t.Fatalf("mkdir mangaA: %v", err)
+	}
+	writeFile(t, filepath.Join(mangaA, "001.jpg"), "test-page-a")
+
+	// Setup source B with 1 archive manga
+	archiveB := filepath.Join(rootB, "Manga B.cbz")
+	writeZipArchive(t, archiveB, map[string]string{
+		"001.jpg": "test-page-b",
+	})
+
+	sources := []contracts.LibrarySource{
+		{
+			ID:      "src-a",
+			Name:    "Source A",
+			Type:    contracts.SourceTypeLocal,
+			Path:    rootA,
+			Enabled: true,
+		},
+		{
+			ID:      "src-b",
+			Name:    "Source B (Archive)",
+			Type:    contracts.SourceTypeLocal,
+			Path:    rootB,
+			Enabled: true,
+		},
+		{
+			ID:      "src-missing",
+			Name:    "Offline Source",
+			Type:    contracts.SourceTypeNetwork,
+			Path:    missingRoot,
+			Enabled: true,
+		},
+		{
+			ID:      "src-disabled",
+			Name:    "Disabled Source",
+			Type:    contracts.SourceTypeLocal,
+			Path:    rootA,
+			Enabled: false,
+		},
+	}
+
+	results := ScanAllSources(sources, nil, nil)
+	if len(results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(results))
+	}
+
+	// Source A should be online with 1 item
+	if results[0].Source.Status != contracts.SourceStatusOnline || len(results[0].Items) != 1 {
+		t.Fatalf("unexpected source A result: status=%s, items=%d", results[0].Source.Status, len(results[0].Items))
+	}
+	if results[0].Items[0].SourceID != "src-a" || !results[0].Items[0].IsAvailable {
+		t.Fatalf("unexpected item metadata: %+v", results[0].Items[0])
+	}
+
+	// Source B should be online with 1 item
+	if results[1].Source.Status != contracts.SourceStatusOnline || len(results[1].Items) != 1 {
+		t.Fatalf("unexpected source B result: status=%s, items=%d", results[1].Source.Status, len(results[1].Items))
+	}
+	if results[1].Items[0].SourceID != "src-b" || !results[1].Items[0].IsAvailable {
+		t.Fatalf("unexpected item B metadata: %+v", results[1].Items[0])
+	}
+
+	// Missing Source should be offline with error
+	if results[2].Source.Status != contracts.SourceStatusOffline || results[2].Err == nil {
+		t.Fatalf("expected source 2 to be offline with error: status=%s, err=%v", results[2].Source.Status, results[2].Err)
+	}
+
+	// Disabled Source should be disabled
+	if results[3].Source.Status != contracts.SourceStatusDisabled {
+		t.Fatalf("expected source 3 to be disabled: status=%s", results[3].Source.Status)
+	}
+
+	// Test GetReaderManifestWithSources across multiple sources
+	manifestA, err := GetReaderManifestWithSources(sources, results[0].Items[0].ID)
+	if err != nil {
+		t.Fatalf("get manifest A: %v", err)
+	}
+	if manifestA.Title != "Manga A" || manifestA.TotalPages != 1 {
+		t.Fatalf("unexpected manifest A: %+v", manifestA)
+	}
+	if !strings.Contains(manifestA.Chapters[0].Pages[0].SourceURL, "_src/src-a/") {
+		t.Fatalf("expected SourceURL to contain _src/src-a/, got %q", manifestA.Chapters[0].Pages[0].SourceURL)
+	}
+
+	manifestB, err := GetReaderManifestWithSources(sources, results[1].Items[0].ID)
+	if err != nil {
+		t.Fatalf("get manifest B: %v", err)
+	}
+	if manifestB.Title != "Manga B" || manifestB.TotalPages != 1 {
+		t.Fatalf("unexpected manifest B: %+v", manifestB)
+	}
+	if !strings.Contains(manifestB.Chapters[0].Pages[0].SourceURL, "_src/src-b/") {
+		t.Fatalf("expected SourceURL to contain _src/src-b/, got %q", manifestB.Chapters[0].Pages[0].SourceURL)
+	}
+
+	// Test Asset resolution across sources
+	sourcesMap := map[string]string{
+		"src-a": rootA,
+		"src-b": rootB,
+	}
+
+	assetPathA, err := ResolveMultiSourceAssetPath(sourcesMap, rootA, manifestA.Chapters[0].Pages[0].SourceURL)
+	if err != nil {
+		t.Fatalf("resolve asset path A: %v", err)
+	}
+	expectedPathA, err := filepath.EvalSymlinks(filepath.Join(mangaA, "001.jpg"))
+	if err != nil {
+		t.Fatalf("eval symlinks A: %v", err)
+	}
+	if assetPathA != expectedPathA {
+		t.Fatalf("unexpected asset path A: got %s, want %s", assetPathA, expectedPathA)
+	}
+
+	readerB, contentTypeB, sizeB, err := OpenMultiSourceArchiveAsset(sourcesMap, rootA, manifestB.Chapters[0].Pages[0].SourceURL)
+	if err != nil {
+		t.Fatalf("open archive asset B: %v", err)
+	}
+	defer readerB.Close()
+	if contentTypeB != "image/jpeg" || sizeB <= 0 {
+		t.Fatalf("unexpected archive asset B attributes: type=%s, size=%d", contentTypeB, sizeB)
+	}
+}

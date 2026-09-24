@@ -23,6 +23,11 @@ const requiredAdapterMethods: AdapterMethod[] = [
   "openURL",
   "getThumbnailCacheSize",
   "clearThumbnailCache",
+  "addLibrarySource",
+  "removeLibrarySource",
+  "updateLibrarySource",
+  "relocateLibrarySource",
+  "rescanSource",
 ];
 
 describe("AppAdapter Interface Completeness Guard", () => {

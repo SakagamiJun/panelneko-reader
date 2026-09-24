@@ -56,8 +56,40 @@ const (
 	ReaderSideClickModeLeftNext  ReaderSideClickMode = "left_next"
 )
 
+type SourceType string
+
+const (
+	SourceTypeLocal   SourceType = "local"
+	SourceTypeSMB     SourceType = "smb"
+	SourceTypeWebDAV  SourceType = "webdav"
+	SourceTypeNetwork SourceType = "network"
+)
+
+type SourceStatus string
+
+const (
+	SourceStatusOnline   SourceStatus = "online"
+	SourceStatusScanning SourceStatus = "scanning"
+	SourceStatusOffline  SourceStatus = "offline"
+	SourceStatusDisabled SourceStatus = "disabled"
+)
+
+type LibrarySource struct {
+	ID           string       `json:"id"`
+	Name         string       `json:"name"`
+	Type         SourceType   `json:"type"`
+	Path         string       `json:"path"`
+	Enabled      bool         `json:"enabled"`
+	ReadOnly     bool         `json:"readOnly,omitempty"`
+	Status       SourceStatus `json:"status,omitempty"`
+	ErrorMessage string       `json:"errorMessage,omitempty"`
+	MangaCount   int          `json:"mangaCount,omitempty"`
+	LastScanned  string       `json:"lastScanned,omitempty"`
+}
+
 type AppSettings struct {
 	LibraryRoot               string              `json:"libraryRoot"`
+	LibrarySources            []LibrarySource     `json:"librarySources,omitempty"`
 	LocaleMode                LocaleMode          `json:"localeMode"`
 	Locale                    string              `json:"locale"`
 	ThemeMode                 ThemeMode           `json:"themeMode"`
@@ -78,6 +110,7 @@ type AppSettings struct {
 
 type LibraryManga struct {
 	ID            string `json:"id"`
+	SourceID      string `json:"sourceID,omitempty"`
 	Title         string `json:"title"`
 	SourceURL     string `json:"sourceURL"`
 	RelativePath  string `json:"relativePath"`
@@ -90,6 +123,7 @@ type LibraryManga struct {
 	LastUpdated   string `json:"lastUpdated"`
 	IsPinned      bool   `json:"isPinned,omitempty"`
 	PinnedAt      string `json:"pinnedAt,omitempty"`
+	IsAvailable   bool   `json:"isAvailable"`
 }
 
 type ReaderManifest struct {

@@ -2,6 +2,7 @@ import {
   type AppSettings,
   EVENTS,
   type LibraryManga,
+  type LibrarySource,
   type ReaderManifest,
   type ReaderProgress,
   type UpdateCheckResult,
@@ -14,6 +15,17 @@ const PINNED_STORAGE_KEY = "panelneko-pinned-items";
 
 const defaultSettings: AppSettings = {
   libraryRoot: "/mock/library",
+  librarySources: [
+    {
+      id: "default",
+      name: "Default Library",
+      type: "local",
+      path: "/mock/library",
+      enabled: true,
+      status: "online",
+      mangaCount: 4,
+    },
+  ],
   localeMode: "system",
   locale: "en",
   themeMode: "system",
@@ -82,6 +94,7 @@ const mockReaderManifests: ReaderManifest[] = [
 const mockLibrary: LibraryManga[] = [
   {
     id: mockReaderManifests[0].mangaID,
+    sourceID: "default",
     title: mockReaderManifests[0].title,
     sourceURL: `https://example.com/mock-library-1.html`,
     relativePath: mockReaderManifests[0].title,
@@ -89,9 +102,11 @@ const mockLibrary: LibraryManga[] = [
     chapterCount: mockReaderManifests[0].chapters.length,
     pageCount: mockReaderManifests[0].totalPages,
     lastUpdated: new Date(Date.now() - 172800000).toISOString(),
+    isAvailable: true,
   },
   {
     id: mockReaderManifests[1].mangaID,
+    sourceID: "default",
     title: mockReaderManifests[1].title,
     sourceURL: `https://example.com/mock-library-2.html`,
     relativePath: mockReaderManifests[1].title,
@@ -99,9 +114,11 @@ const mockLibrary: LibraryManga[] = [
     chapterCount: mockReaderManifests[1].chapters.length,
     pageCount: mockReaderManifests[1].totalPages,
     lastUpdated: new Date(Date.now() - 345600000).toISOString(),
+    isAvailable: true,
   },
   {
     id: "mock-coll-1",
+    sourceID: "default",
     title: "Special Collection",
     sourceURL: "",
     relativePath: "Special Collection",
@@ -111,9 +128,11 @@ const mockLibrary: LibraryManga[] = [
     chapterCount: mockReaderManifests[2].chapters.length + mockReaderManifests[3].chapters.length,
     pageCount: mockReaderManifests[2].totalPages + mockReaderManifests[3].totalPages,
     lastUpdated: new Date(Date.now() - 86400000).toISOString(),
+    isAvailable: true,
   },
   {
     id: mockReaderManifests[2].mangaID,
+    sourceID: "default",
     title: mockReaderManifests[2].title,
     sourceURL: `https://example.com/mock-library-3.html`,
     relativePath: `Special Collection/${mockReaderManifests[2].title}`,
@@ -122,9 +141,11 @@ const mockLibrary: LibraryManga[] = [
     chapterCount: mockReaderManifests[2].chapters.length,
     pageCount: mockReaderManifests[2].totalPages,
     lastUpdated: new Date(Date.now() - 86400000).toISOString(),
+    isAvailable: true,
   },
   {
     id: mockReaderManifests[3].mangaID,
+    sourceID: "default",
     title: mockReaderManifests[3].title,
     sourceURL: `https://example.com/mock-library-4.html`,
     relativePath: `Special Collection/${mockReaderManifests[3].title}`,
@@ -133,6 +154,7 @@ const mockLibrary: LibraryManga[] = [
     chapterCount: mockReaderManifests[3].chapters.length,
     pageCount: mockReaderManifests[3].totalPages,
     lastUpdated: new Date(Date.now() - 50000000).toISOString(),
+    isAvailable: true,
   },
 ];
 
@@ -156,15 +178,24 @@ export class MockAdapter implements AppAdapter {
 
   async listLibraryManga() {
     const pins = this.readPins();
+    const settings = this.readSettings();
+    const sourceMap = new Map<string, LibrarySource>();
+    for (const s of settings.librarySources ?? []) {
+      sourceMap.set(s.id, s);
+    }
+
     const items: LibraryManga[] = mockLibrary.map((item) => {
       const isPinned = Boolean(pins[item.id]);
       const overrideColl = this.collectionOverrides.get(item.id);
       const isCollection = overrideColl !== undefined ? overrideColl : item.isCollection;
+      const src = sourceMap.get(item.sourceID ?? "default");
+      const isAvailable = src ? src.enabled && src.status !== "offline" : true;
       return {
         ...item,
         isCollection,
         isPinned,
         pinnedAt: pins[item.id] || undefined,
+        isAvailable,
       };
     });
 
@@ -318,6 +349,56 @@ export class MockAdapter implements AppAdapter {
 
   async clearThumbnailCache(): Promise<void> {
     this.mockCacheSize = 0;
+  }
+
+  async addLibrarySource(source: LibrarySource): Promise<AppSettings> {
+    const current = this.readSettings();
+    const sources = [...(current.librarySources ?? [])];
+    const newSource: LibrarySource = {
+      ...source,
+      id: source.id || `src-${Date.now()}`,
+      name: source.name || "New Library",
+      type: source.type || "local",
+      enabled: true,
+      status: "online",
+      mangaCount: 0,
+    };
+    sources.push(newSource);
+    const updated = await this.updateSettings({ ...current, librarySources: sources });
+    this.emit(EVENTS.LIBRARY_UPDATED, {});
+    return updated;
+  }
+
+  async removeLibrarySource(sourceID: string): Promise<AppSettings> {
+    const current = this.readSettings();
+    const sources = (current.librarySources ?? []).filter((s) => s.id !== sourceID);
+    const updated = await this.updateSettings({ ...current, librarySources: sources });
+    this.emit(EVENTS.LIBRARY_UPDATED, {});
+    return updated;
+  }
+
+  async updateLibrarySource(source: LibrarySource): Promise<AppSettings> {
+    const current = this.readSettings();
+    const sources = (current.librarySources ?? []).map((s) =>
+      s.id === source.id ? { ...s, ...source } : s
+    );
+    const updated = await this.updateSettings({ ...current, librarySources: sources });
+    this.emit(EVENTS.LIBRARY_UPDATED, {});
+    return updated;
+  }
+
+  async relocateLibrarySource(sourceID: string, newPath: string): Promise<AppSettings> {
+    const current = this.readSettings();
+    const sources = (current.librarySources ?? []).map((s) =>
+      s.id === sourceID ? { ...s, path: newPath, status: "online" as const, errorMessage: undefined } : s
+    );
+    const updated = await this.updateSettings({ ...current, librarySources: sources });
+    this.emit(EVENTS.LIBRARY_UPDATED, {});
+    return updated;
+  }
+
+  async rescanSource(_sourceID: string): Promise<void> {
+    this.emit(EVENTS.LIBRARY_UPDATED, {});
   }
 
   subscribe(eventName: string, callback: Listener) {

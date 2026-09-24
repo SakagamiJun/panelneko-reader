@@ -33,7 +33,12 @@ export const MangaCard = memo(function MangaCard({
   };
 
   return (
-    <article className="group relative flex flex-col rounded-xl border border-border/70 bg-card overflow-hidden transition-all duration-200 hover:border-primary/40 hover:shadow-lg shadow-xs">
+    <article
+      className={cn(
+        "group relative flex flex-col rounded-xl border border-border/70 bg-card overflow-hidden transition-all duration-200 hover:border-primary/40 hover:shadow-lg shadow-xs",
+        item.isAvailable === false && "opacity-60 grayscale-[35%] hover:opacity-85"
+      )}
+    >
       <div
         role="button"
         tabIndex={0}
@@ -65,6 +70,13 @@ export const MangaCard = memo(function MangaCard({
             </div>
           )}
 
+          {/* Offline badge */}
+          {item.isAvailable === false && (
+            <div className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-destructive/90 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm backdrop-blur-sm">
+              <span>{t("library.offlineBadge")}</span>
+            </div>
+          )}
+
           {/* Collection badge */}
           {item.isCollection && (
             <div className="absolute top-2 right-2 z-10 flex items-center gap-1 rounded-md bg-black/65 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm backdrop-blur-md border border-white/10">
@@ -75,7 +87,12 @@ export const MangaCard = memo(function MangaCard({
 
           {/* Pinned bookmark tag */}
           {item.isPinned && (
-            <div className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-bold text-black shadow-sm backdrop-blur-sm">
+            <div
+              className={cn(
+                "absolute top-2 z-10 flex items-center gap-1 rounded-md bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-bold text-black shadow-sm backdrop-blur-sm",
+                item.isAvailable === false ? "left-12" : "left-2"
+              )}
+            >
               <Pin className="h-2.5 w-2.5 fill-black" />
               <span>{t("library.pinnedBadge")}</span>
             </div>

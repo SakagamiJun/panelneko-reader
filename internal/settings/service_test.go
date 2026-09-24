@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
 )
 
@@ -183,5 +184,78 @@ func TestNormalizeEnableThumbnailCache(t *testing.T) {
 	}
 	if normalized.EnableThumbnailCache == nil || !*normalized.EnableThumbnailCache {
 		t.Fatal("expected EnableThumbnailCache to default to true when nil")
+	}
+}
+
+func TestNormalizeLibrarySources(t *testing.T) {
+	sqliteStore, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	// 1. Default settings has 1 source
+	defaults := DefaultSettings()
+	if len(defaults.LibrarySources) != 1 {
+		t.Fatalf("expected 1 default library source, got %d", len(defaults.LibrarySources))
+	}
+	if defaults.LibrarySources[0].ID != "default" {
+		t.Fatalf("expected default source ID to be 'default', got %s", defaults.LibrarySources[0].ID)
+	}
+
+	// 2. Legacy input with only LibraryRoot migrations to LibrarySources
+	inputLegacy := contracts.AppSettings{
+		LibraryRoot: "/legacy/manga/path",
+	}
+	normLegacy, err := service.Normalize(inputLegacy)
+	if err != nil {
+		t.Fatalf("normalize legacy settings: %v", err)
+	}
+	if len(normLegacy.LibrarySources) != 1 {
+		t.Fatalf("expected 1 migrated library source, got %d", len(normLegacy.LibrarySources))
+	}
+	if normLegacy.LibrarySources[0].Path != "/legacy/manga/path" {
+		t.Fatalf("expected migrated path, got %s", normLegacy.LibrarySources[0].Path)
+	}
+
+	// 3. Multi-source input normalizes properly
+	inputMulti := contracts.AppSettings{
+		LibrarySources: []contracts.LibrarySource{
+			{
+				ID:      "s1",
+				Name:    "Local SSD",
+				Type:    contracts.SourceTypeLocal,
+				Path:    "/Volumes/SSD/Manga",
+				Enabled: false,
+			},
+			{
+				ID:      "s1", // duplicate ID test
+				Name:    "",   // empty name test
+				Type:    contracts.SourceTypeSMB,
+				Path:    "/Volumes/NAS/Comics",
+				Enabled: true,
+			},
+		},
+	}
+	normMulti, err := service.Normalize(inputMulti)
+	if err != nil {
+		t.Fatalf("normalize multi-source settings: %v", err)
+	}
+	if len(normMulti.LibrarySources) != 2 {
+		t.Fatalf("expected 2 sources, got %d", len(normMulti.LibrarySources))
+	}
+	if normMulti.LibrarySources[0].ID == normMulti.LibrarySources[1].ID {
+		t.Fatalf("expected duplicate IDs to be disambiguated, got %s and %s", normMulti.LibrarySources[0].ID, normMulti.LibrarySources[1].ID)
+	}
+	if normMulti.LibrarySources[1].Name != "Comics" {
+		t.Fatalf("expected empty name to default to base path 'Comics', got %s", normMulti.LibrarySources[1].Name)
+	}
+	if normMulti.LibraryRoot != "/Volumes/NAS/Comics" {
+		t.Fatalf("expected LibraryRoot to sync with first enabled source, got %s", normMulti.LibraryRoot)
 	}
 }

@@ -62,4 +62,19 @@ export const appAdapter: AppAdapter = {
   clearThumbnailCache() {
     return currentAdapter().clearThumbnailCache();
   },
+  addLibrarySource(source) {
+    return currentAdapter().addLibrarySource(source);
+  },
+  removeLibrarySource(sourceID) {
+    return currentAdapter().removeLibrarySource(sourceID);
+  },
+  updateLibrarySource(source) {
+    return currentAdapter().updateLibrarySource(source);
+  },
+  relocateLibrarySource(sourceID, newPath) {
+    return currentAdapter().relocateLibrarySource(sourceID, newPath);
+  },
+  rescanSource(sourceID) {
+    return currentAdapter().rescanSource(sourceID);
+  },
 };

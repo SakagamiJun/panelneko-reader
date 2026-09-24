@@ -31,6 +31,8 @@ export default function App() {
   const [readerJumpRequest, setReaderJumpRequest] = useState<ReaderJumpRequest | null>(null);
   const [, setReaderChapterTitle] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSourceID, setSelectedSourceID] = useState<string>("all");
+  const [offlineMangaAlert, setOfflineMangaAlert] = useState<LibraryManga | null>(null);
   const [collectionToToggle, setCollectionToToggle] = useState<LibraryManga | null>(null);
   const [updateNotification, setUpdateNotification] = useState<UpdateCheckResult | null>(null);
   const hasCheckedStartupRef = useRef(false);
@@ -236,6 +238,11 @@ export default function App() {
 
   const displayedItems = library
     .filter((item) => {
+      if (selectedSourceID !== "all") {
+        if ((item.sourceID || "default") !== selectedSourceID) {
+          return false;
+        }
+      }
       if (selectedCollectionPath) {
         return item.parentPath === selectedCollectionPath;
       }
@@ -343,13 +350,9 @@ export default function App() {
           onCycleLocale={cycleLocale}
           settingsOpen={settingsOpen}
           onToggleSettings={() => openSettingsWithTab("general")}
-          onOpenLibraryFolder={
-            settings?.libraryRoot
-              ? () => {
-                  void appAdapter.selectDirectory();
-                }
-              : undefined
-          }
+          selectedSourceId={selectedSourceID}
+          onSelectSourceId={setSelectedSourceID}
+          onOpenManageSources={() => openSettingsWithTab("sources")}
         />
       )}
 
@@ -394,6 +397,11 @@ export default function App() {
             loading={libraryQuery.isLoading}
             emptyLabel={t("library.empty")}
             onOpenManga={(id) => {
+              const item = library.find((i) => i.id === id);
+              if (item && item.isAvailable === false) {
+                setOfflineMangaAlert(item);
+                return;
+              }
               setSelectedLibraryID(id);
             }}
             onOpenCollection={setSelectedCollectionPath}
@@ -401,6 +409,11 @@ export default function App() {
             onTogglePin={(id) => togglePinMutation.mutate(id)}
             onToggleCollection={setCollectionToToggle}
             onOpenDirectory={(id) => {
+              const item = library.find((i) => i.id === id);
+              if (item && item.isAvailable === false) {
+                setOfflineMangaAlert(item);
+                return;
+              }
               void appAdapter.openDirectory(id);
             }}
           />
@@ -419,6 +432,20 @@ export default function App() {
           defaultTab={settingsDefaultTab}
         />
       )}
+
+      {/* Offline Manga Guidance Dialog */}
+      <ConfirmDialog
+        open={Boolean(offlineMangaAlert)}
+        title={t("library.offlineAlertTitle")}
+        description={t("library.offlineAlertDesc")}
+        confirmLabel={t("settings.sourcesTab")}
+        cancelLabel={t("library.confirm")}
+        onConfirm={() => {
+          setOfflineMangaAlert(null);
+          openSettingsWithTab("sources");
+        }}
+        onCancel={() => setOfflineMangaAlert(null)}
+      />
 
       {/* Collection Toggle Confirmation Dialog */}
       <ConfirmDialog

@@ -1,9 +1,11 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   BookOpen,
-  FolderOpen,
+  Check,
+  ChevronDown,
+  FolderCog,
   Folders,
   Languages,
   MoonStar,
@@ -34,7 +36,9 @@ interface AppHeaderProps {
   onCycleLocale: () => void;
   settingsOpen: boolean;
   onToggleSettings: () => void;
-  onOpenLibraryFolder?: () => void;
+  onOpenManageSources?: () => void;
+  selectedSourceId?: string;
+  onSelectSourceId?: (sourceId: string) => void;
 }
 
 export function AppHeader({
@@ -51,11 +55,18 @@ export function AppHeader({
   onCycleLocale,
   settingsOpen,
   onToggleSettings,
-  onOpenLibraryFolder,
+  onOpenManageSources,
+  selectedSourceId = "all",
+  onSelectSourceId,
 }: AppHeaderProps) {
   const { t } = useTranslation();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const sourceMenuRef = useRef<HTMLDivElement>(null);
+  const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false);
   const isMac = isMacPlatform();
+
+  const isAllSources = !selectedSourceId || selectedSourceId === "all";
+  const activeSource = settings?.librarySources?.find((s) => s.id === selectedSourceId);
 
   const themeIcon =
     settings?.themeMode === "dark" ? (
@@ -101,6 +112,27 @@ export function AppHeader({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [searchQuery, onSearchChange]);
+
+  // Click outside or Escape to dismiss source dropdown popover
+  useEffect(() => {
+    if (!isSourceMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sourceMenuRef.current && !sourceMenuRef.current.contains(e.target as Node)) {
+        setIsSourceMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsSourceMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isSourceMenuOpen]);
 
   return (
     <header
@@ -155,6 +187,144 @@ export function AppHeader({
             <Badge tone="default" className="shrink-0 font-mono text-[10px]">
               {totalCount}
             </Badge>
+
+            {/* Multi-source directory dropdown popover */}
+            {settings?.librarySources && settings.librarySources.length > 1 && onSelectSourceId && (
+              <div ref={sourceMenuRef} className="relative ml-1">
+                <button
+                  type="button"
+                  onClick={() => setIsSourceMenuOpen((prev) => !prev)}
+                  className={cn(
+                    "flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-medium transition-colors border select-none cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-primary/30",
+                    isSourceMenuOpen
+                      ? "bg-muted text-foreground border-border/80 shadow-xs"
+                      : "bg-muted/40 hover:bg-muted/70 text-foreground/80 hover:text-foreground border-border/50"
+                  )}
+                  title={activeSource?.path || t("library.sourceFilter")}
+                  aria-expanded={isSourceMenuOpen}
+                >
+                  {!isAllSources && (
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full shrink-0",
+                        !activeSource?.enabled
+                          ? "bg-muted-foreground/40"
+                          : activeSource?.status === "offline"
+                          ? "bg-destructive"
+                          : "bg-emerald-500"
+                      )}
+                    />
+                  )}
+                  <span className="truncate max-w-[120px]">
+                    {isAllSources ? t("library.filterAllSources") : activeSource?.name || t("library.filterAllSources")}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-3 w-3 text-muted-foreground/70 transition-transform duration-150 shrink-0",
+                      isSourceMenuOpen && "rotate-180"
+                    )}
+                  />
+                </button>
+
+                {isSourceMenuOpen && (
+                  <div
+                    className="absolute left-0 top-full mt-1.5 w-60 rounded-xl border border-border/80 bg-card shadow-xl p-1 z-50 animate-in fade-in-0 zoom-in-95 origin-top-left"
+                    role="menu"
+                  >
+                    {/* All Directories Item */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        onSelectSourceId("all");
+                        setIsSourceMenuOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                        isAllSources
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "text-foreground hover:bg-muted/60"
+                      )}
+                    >
+                      <span className="truncate">{t("library.filterAllSources")}</span>
+                      {isAllSources && <Check className="h-3.5 w-3.5 shrink-0 text-primary ml-2" />}
+                    </button>
+
+                    <div className="h-px bg-border/40 my-1 mx-1" />
+
+                    {/* Sources List */}
+                    <div className="max-h-56 overflow-y-auto space-y-0.5 pr-0.5">
+                      {settings.librarySources.map((s) => {
+                        const isSelected = selectedSourceId === s.id;
+                        const isOffline = s.status === "offline";
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              onSelectSourceId(s.id);
+                              setIsSourceMenuOpen(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left group",
+                              isSelected
+                                ? "bg-primary/10 text-primary font-medium"
+                                : "text-foreground hover:bg-muted/60"
+                            )}
+                            title={s.path}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span
+                                className={cn(
+                                  "h-1.5 w-1.5 rounded-full shrink-0",
+                                  !s.enabled
+                                    ? "bg-muted-foreground/40"
+                                    : isOffline
+                                    ? "bg-destructive"
+                                    : "bg-emerald-500"
+                                )}
+                              />
+                              <span className="truncate flex-1">{s.name}</span>
+                              {typeof s.mangaCount === "number" && (
+                                <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0">
+                                  {s.mangaCount}
+                                </span>
+                              )}
+                              {s.type && (
+                                <span className="text-[9px] uppercase tracking-wider font-mono text-muted-foreground/50 px-1 rounded border border-border/40 shrink-0">
+                                  {s.type}
+                                </span>
+                              )}
+                            </div>
+                            {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary ml-2" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Manage Directories shortcut */}
+                    {onOpenManageSources && (
+                      <>
+                        <div className="h-px bg-border/40 my-1 mx-1" />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setIsSourceMenuOpen(false);
+                            onOpenManageSources();
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-left font-medium"
+                        >
+                          <FolderCog className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{t("library.manageSources")}</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -189,21 +359,8 @@ export function AppHeader({
         </div>
       </div>
 
-      {/* Right section: Theme, Language, Open Folder, Settings */}
+      {/* Right section: Theme, Language, Settings */}
       <div className="app-window-no-drag flex items-center gap-1.5 shrink-0">
-        {onOpenLibraryFolder && (
-          <Button
-            type="button"
-            size="xs"
-            variant="ghost"
-            onClick={onOpenLibraryFolder}
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-            title={t("library.openDirectory")}
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-          </Button>
-        )}
-
         {/* Theme Cycler */}
         <Button
           type="button"

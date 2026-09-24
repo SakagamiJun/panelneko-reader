@@ -258,9 +258,99 @@ func (a *App) SelectDirectory() (string, error) {
 	return selected, nil
 }
 
+func (a *App) getActiveSources() []contracts.LibrarySource {
+	currentSettings := a.settings.Get()
+	sources := currentSettings.LibrarySources
+	if len(sources) == 0 && currentSettings.LibraryRoot != "" {
+		sources = []contracts.LibrarySource{
+			{
+				ID:      "default",
+				Name:    filepath.Base(currentSettings.LibraryRoot),
+				Type:    contracts.SourceTypeLocal,
+				Path:    currentSettings.LibraryRoot,
+				Enabled: true,
+				Status:  contracts.SourceStatusOnline,
+			},
+		}
+	}
+	return sources
+}
+
 func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 	if err := a.ensureReady(); err != nil {
 		return nil, err
+	}
+
+	sources := a.getActiveSources()
+
+	prevItemsBySource := make(map[string]map[string]contracts.LibraryManga)
+	prevModTimesBySource := make(map[string]map[string]int64)
+
+	for _, src := range sources {
+		records, err := a.store.ListLibraryMangaBySource(src.ID)
+		if err != nil {
+			return nil, err
+		}
+		itemsMap := make(map[string]contracts.LibraryManga)
+		modTimesMap := make(map[string]int64)
+		for _, r := range records {
+			modTimesMap[r.RelativePath] = r.ModTime
+			itemsMap[r.RelativePath] = r.LibraryManga
+		}
+		prevItemsBySource[src.ID] = itemsMap
+		prevModTimesBySource[src.ID] = modTimesMap
+	}
+
+	results := library.ScanAllSources(sources, prevItemsBySource, prevModTimesBySource)
+
+	var sourcesUpdated bool
+	currentSettings := a.settings.Get()
+	sourceMap := make(map[string]contracts.LibrarySource)
+	for _, s := range currentSettings.LibrarySources {
+		sourceMap[s.ID] = s
+	}
+
+	for _, res := range results {
+		s, exists := sourceMap[res.Source.ID]
+		if exists {
+			if s.Status != res.Source.Status || s.ErrorMessage != res.Source.ErrorMessage || s.MangaCount != len(res.Items) {
+				s.Status = res.Source.Status
+				s.ErrorMessage = res.Source.ErrorMessage
+				if res.Err == nil && res.Source.Enabled {
+					s.MangaCount = len(res.Items)
+					s.LastScanned = time.Now().UTC().Format(time.RFC3339)
+				}
+				sourceMap[res.Source.ID] = s
+				sourcesUpdated = true
+			}
+		}
+
+		if !res.Source.Enabled {
+			if err := a.store.SetSourceAvailability(res.Source.ID, false); err != nil {
+				return nil, err
+			}
+		} else if res.Err != nil {
+			if err := a.store.SetSourceAvailability(res.Source.ID, false); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := a.store.SaveLibraryMangaForSource(res.Source.ID, res.Items, res.NewModTimes); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if sourcesUpdated {
+		var updatedList []contracts.LibrarySource
+		for _, orig := range currentSettings.LibrarySources {
+			if updated, ok := sourceMap[orig.ID]; ok {
+				updatedList = append(updatedList, updated)
+			} else {
+				updatedList = append(updatedList, orig)
+			}
+		}
+		currentSettings.LibrarySources = updatedList
+		_, _ = a.settings.Update(currentSettings)
 	}
 
 	records, err := a.store.ListLibraryManga()
@@ -268,20 +358,9 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 		return nil, err
 	}
 
-	prevModTimes := make(map[string]int64)
-	prevItems := make(map[string]contracts.LibraryManga)
+	items := make([]contracts.LibraryManga, 0, len(records))
 	for _, r := range records {
-		prevModTimes[r.RelativePath] = r.ModTime
-		prevItems[r.RelativePath] = r.LibraryManga
-	}
-
-	items, newModTimes, err := library.ScanLibraryManga(a.settings.Get().LibraryRoot, prevItems, prevModTimes)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := a.store.SaveLibraryManga(items, newModTimes); err != nil {
-		return nil, err
+		items = append(items, r.LibraryManga)
 	}
 
 	pins, err := a.store.GetPinnedMap()
@@ -292,8 +371,8 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 	items = library.ApplyPinsAndSort(items, pins)
 
 	enabled := true
-	if a.settings.Get().EnableThumbnailCache != nil {
-		enabled = *a.settings.Get().EnableThumbnailCache
+	if currentSettings.EnableThumbnailCache != nil {
+		enabled = *currentSettings.EnableThumbnailCache
 	}
 
 	for i := range items {
@@ -327,7 +406,7 @@ func (a *App) ToggleCollection(mangaID string) (bool, error) {
 		return false, err
 	}
 
-	isCollection, err := library.ToggleCollectionMarker(a.settings.Get().LibraryRoot, mangaID)
+	isCollection, err := library.ToggleCollectionMarkerWithSources(a.getActiveSources(), mangaID)
 	if err != nil {
 		return false, err
 	}
@@ -342,7 +421,7 @@ func (a *App) OpenDirectory(mangaID string) error {
 		return err
 	}
 
-	dirPath, err := library.ResolveDirectoryPath(a.settings.Get().LibraryRoot, mangaID)
+	dirPath, err := library.ResolveDirectoryPathWithSources(a.getActiveSources(), mangaID)
 	if err != nil {
 		return err
 	}
@@ -355,7 +434,7 @@ func (a *App) GetReaderManifest(mangaID string) (contracts.ReaderManifest, error
 		return contracts.ReaderManifest{}, err
 	}
 
-	return library.GetReaderManifest(a.settings.Get().LibraryRoot, mangaID)
+	return library.GetReaderManifestWithSources(a.getActiveSources(), mangaID)
 }
 
 func (a *App) GetReaderProgress(mangaID string) (contracts.ReaderProgress, error) {
@@ -407,6 +486,246 @@ func (a *App) ClearThumbnailCache() error {
 	return library.ClearThumbnailCache(cacheDir)
 }
 
+func (a *App) AddLibrarySource(source contracts.LibrarySource) (contracts.AppSettings, error) {
+	if err := a.ensureReady(); err != nil {
+		return contracts.AppSettings{}, err
+	}
+
+	cleanPath := strings.TrimSpace(source.Path)
+	if cleanPath == "" {
+		return contracts.AppSettings{}, fmt.Errorf("source path cannot be empty")
+	}
+
+	current := a.settings.Get()
+	for _, s := range current.LibrarySources {
+		if filepath.Clean(s.Path) == filepath.Clean(cleanPath) {
+			return contracts.AppSettings{}, fmt.Errorf("library source with path %q already exists", cleanPath)
+		}
+	}
+
+	sourceID := strings.TrimSpace(source.ID)
+	if sourceID == "" {
+		sourceID = fmt.Sprintf("src-%d", time.Now().UnixNano())
+	}
+
+	name := strings.TrimSpace(source.Name)
+	if name == "" {
+		name = filepath.Base(cleanPath)
+	}
+
+	srcType := source.Type
+	if srcType == "" {
+		srcType = contracts.SourceTypeLocal
+	}
+
+	newSource := contracts.LibrarySource{
+		ID:       sourceID,
+		Name:     name,
+		Type:     srcType,
+		Path:     cleanPath,
+		Enabled:  true,
+		ReadOnly: source.ReadOnly,
+		Status:   contracts.SourceStatusOnline,
+	}
+
+	current.LibrarySources = append(current.LibrarySources, newSource)
+	updated, err := a.settings.Update(current)
+	if err != nil {
+		return contracts.AppSettings{}, err
+	}
+
+	a.emit(contracts.EventSettingsUpdated, updated)
+	a.emit(contracts.EventLibraryUpdated, nil)
+
+	return updated, nil
+}
+
+func (a *App) RemoveLibrarySource(sourceID string) (contracts.AppSettings, error) {
+	if err := a.ensureReady(); err != nil {
+		return contracts.AppSettings{}, err
+	}
+
+	sourceID = strings.TrimSpace(sourceID)
+	if sourceID == "" {
+		return contracts.AppSettings{}, fmt.Errorf("source id cannot be empty")
+	}
+
+	current := a.settings.Get()
+	found := false
+	var filtered []contracts.LibrarySource
+	for _, s := range current.LibrarySources {
+		if s.ID == sourceID {
+			found = true
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+
+	if !found {
+		return contracts.AppSettings{}, fmt.Errorf("source with id %q not found", sourceID)
+	}
+
+	if err := a.store.DeleteSourceLibraryManga(sourceID); err != nil {
+		return contracts.AppSettings{}, fmt.Errorf("delete source manga: %w", err)
+	}
+
+	current.LibrarySources = filtered
+	updated, err := a.settings.Update(current)
+	if err != nil {
+		return contracts.AppSettings{}, err
+	}
+
+	a.emit(contracts.EventSettingsUpdated, updated)
+	a.emit(contracts.EventLibraryUpdated, nil)
+
+	return updated, nil
+}
+
+func (a *App) UpdateLibrarySource(source contracts.LibrarySource) (contracts.AppSettings, error) {
+	if err := a.ensureReady(); err != nil {
+		return contracts.AppSettings{}, err
+	}
+
+	sourceID := strings.TrimSpace(source.ID)
+	if sourceID == "" {
+		return contracts.AppSettings{}, fmt.Errorf("source id cannot be empty")
+	}
+
+	current := a.settings.Get()
+	found := false
+	for i, s := range current.LibrarySources {
+		if s.ID == sourceID {
+			found = true
+			if strings.TrimSpace(source.Name) != "" {
+				current.LibrarySources[i].Name = strings.TrimSpace(source.Name)
+			}
+			current.LibrarySources[i].Enabled = source.Enabled
+			current.LibrarySources[i].ReadOnly = source.ReadOnly
+			if source.Type != "" {
+				current.LibrarySources[i].Type = source.Type
+			}
+			if !source.Enabled {
+				_ = a.store.SetSourceAvailability(sourceID, false)
+			}
+			break
+		}
+	}
+
+	if !found {
+		return contracts.AppSettings{}, fmt.Errorf("source with id %q not found", sourceID)
+	}
+
+	updated, err := a.settings.Update(current)
+	if err != nil {
+		return contracts.AppSettings{}, err
+	}
+
+	a.emit(contracts.EventSettingsUpdated, updated)
+	a.emit(contracts.EventLibraryUpdated, nil)
+
+	return updated, nil
+}
+
+func (a *App) RelocateLibrarySource(sourceID string, newPath string) (contracts.AppSettings, error) {
+	if err := a.ensureReady(); err != nil {
+		return contracts.AppSettings{}, err
+	}
+
+	sourceID = strings.TrimSpace(sourceID)
+	cleanPath := strings.TrimSpace(newPath)
+	if sourceID == "" || cleanPath == "" {
+		return contracts.AppSettings{}, fmt.Errorf("source id and new path cannot be empty")
+	}
+
+	current := a.settings.Get()
+	found := false
+	for i, s := range current.LibrarySources {
+		if s.ID == sourceID {
+			found = true
+			current.LibrarySources[i].Path = cleanPath
+			current.LibrarySources[i].Status = contracts.SourceStatusOnline
+			current.LibrarySources[i].ErrorMessage = ""
+			break
+		}
+	}
+
+	if !found {
+		return contracts.AppSettings{}, fmt.Errorf("source with id %q not found", sourceID)
+	}
+
+	updated, err := a.settings.Update(current)
+	if err != nil {
+		return contracts.AppSettings{}, err
+	}
+
+	_ = a.RescanSource(sourceID)
+
+	a.emit(contracts.EventSettingsUpdated, updated)
+	a.emit(contracts.EventLibraryUpdated, nil)
+
+	return updated, nil
+}
+
+func (a *App) RescanSource(sourceID string) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+
+	sourceID = strings.TrimSpace(sourceID)
+	sources := a.getActiveSources()
+	var targetSource *contracts.LibrarySource
+	for _, s := range sources {
+		if s.ID == sourceID {
+			targetSource = &s
+			break
+		}
+	}
+
+	if targetSource == nil {
+		return fmt.Errorf("source with id %q not found", sourceID)
+	}
+
+	records, err := a.store.ListLibraryMangaBySource(sourceID)
+	if err != nil {
+		return err
+	}
+
+	prevModTimes := make(map[string]int64)
+	prevItems := make(map[string]contracts.LibraryManga)
+	for _, r := range records {
+		prevModTimes[r.RelativePath] = r.ModTime
+		prevItems[r.RelativePath] = r.LibraryManga
+	}
+
+	items, newModTimes, err := library.ScanSource(*targetSource, prevItems, prevModTimes)
+	if err != nil {
+		_ = a.store.SetSourceAvailability(sourceID, false)
+		targetSource.Status = contracts.SourceStatusOffline
+		targetSource.ErrorMessage = err.Error()
+	} else {
+		targetSource.Status = contracts.SourceStatusOnline
+		targetSource.ErrorMessage = ""
+		targetSource.MangaCount = len(items)
+		targetSource.LastScanned = time.Now().UTC().Format(time.RFC3339)
+		if err := a.store.SaveLibraryMangaForSource(sourceID, items, newModTimes); err != nil {
+			return err
+		}
+	}
+
+	current := a.settings.Get()
+	for i, s := range current.LibrarySources {
+		if s.ID == sourceID {
+			current.LibrarySources[i] = *targetSource
+			break
+		}
+	}
+	updated, _ := a.settings.Update(current)
+
+	a.emit(contracts.EventSettingsUpdated, updated)
+	a.emit(contracts.EventLibraryUpdated, nil)
+	return nil
+}
+
 func (a *App) assetHandler() http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if !library.IsLibraryAssetRequest(request.URL.Path) {
@@ -419,7 +738,20 @@ func (a *App) assetHandler() http.Handler {
 			return
 		}
 
-		libraryRoot := a.settings.Get().LibraryRoot
+		sources := a.getActiveSources()
+		sourcesMap := make(map[string]string, len(sources))
+		var defaultRoot string
+		for _, src := range sources {
+			if src.Enabled {
+				sourcesMap[src.ID] = src.Path
+			}
+			if src.ID == "default" || defaultRoot == "" {
+				defaultRoot = src.Path
+			}
+		}
+		if defaultRoot == "" {
+			defaultRoot = a.settings.Get().LibraryRoot
+		}
 
 		if strings.HasPrefix(request.URL.Path, library.LibraryThumbnailPrefix) {
 			enabled := true
@@ -427,7 +759,7 @@ func (a *App) assetHandler() http.Handler {
 				enabled = *a.settings.Get().EnableThumbnailCache
 			}
 			cacheDir := filepath.Join(a.store.DataDir(), "cache", "thumbnails")
-			if err := library.ServeThumbnail(libraryRoot, cacheDir, request.URL.Path, writer, request, enabled); err != nil {
+			if err := library.ServeMultiSourceThumbnail(sourcesMap, defaultRoot, cacheDir, request.URL.Path, writer, request, enabled); err != nil {
 				if os.IsNotExist(err) {
 					http.NotFound(writer, request)
 					return
@@ -438,7 +770,7 @@ func (a *App) assetHandler() http.Handler {
 		}
 
 		if strings.HasPrefix(request.URL.Path, library.LibraryArchiveAssetPrefix) {
-			reader, contentType, contentLength, err := library.OpenArchiveAsset(libraryRoot, request.URL.Path)
+			reader, contentType, contentLength, err := library.OpenMultiSourceArchiveAsset(sourcesMap, defaultRoot, request.URL.Path)
 			if err != nil {
 				if os.IsNotExist(err) {
 					http.NotFound(writer, request)
@@ -467,7 +799,7 @@ func (a *App) assetHandler() http.Handler {
 			return
 		}
 
-		targetPath, err := library.ResolveLibraryAssetPath(libraryRoot, request.URL.Path)
+		targetPath, err := library.ResolveMultiSourceAssetPath(sourcesMap, defaultRoot, request.URL.Path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				http.NotFound(writer, request)
