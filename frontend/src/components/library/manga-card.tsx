@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BookImage, Folder, FolderOpen, Folders, Pin } from "lucide-react";
 import type { LibraryManga } from "@/lib/contracts";
@@ -25,6 +25,11 @@ export const MangaCard = memo(function MangaCard({
   sourceName,
 }: MangaCardProps) {
   const { t } = useTranslation();
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [item.coverImageURL, item.id]);
 
   const handleOpen = () => {
     if (item.isCollection) {
@@ -54,13 +59,14 @@ export const MangaCard = memo(function MangaCard({
         }}
       >
         <div className="relative aspect-[4/5] overflow-hidden bg-muted/40 w-full">
-          {item.coverImageURL ? (
+          {item.coverImageURL && !imageError ? (
             <img
               alt={item.title}
               className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
               decoding="async"
               loading="lazy"
               src={item.coverImageURL}
+              onError={() => setImageError(true)}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-muted-foreground/60">

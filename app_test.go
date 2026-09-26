@@ -736,10 +736,25 @@ func TestMultiSourceScanningAndOfflineFallback(t *testing.T) {
 	// Now simulate offline: remove directory B from disk
 	_ = os.RemoveAll(dirB)
 
-	// Second scan: source B should fail/offline, but its manga remains in library with IsAvailable=false!
-	itemsOffline, err := app.ListLibraryManga()
+	// Before rescanning, normal ListLibraryManga reads from SQLite cache without re-probing disk
+	itemsCached, err := app.ListLibraryManga()
 	if err != nil {
-		t.Fatalf("ListLibraryManga during offline failed: %v", err)
+		t.Fatalf("ListLibraryManga cached read failed: %v", err)
+	}
+	var cachedB *contracts.LibraryManga
+	for i := range itemsCached {
+		if itemsCached[i].Title == "Manga B" {
+			cachedB = &itemsCached[i]
+		}
+	}
+	if cachedB == nil || !cachedB.IsAvailable {
+		t.Fatalf("expected cached Manga B to remain available before explicit scan, got %+v", cachedB)
+	}
+
+	// Manual rescan confirms offline status: source B should fail/offline, manga remains with IsAvailable=false!
+	itemsOffline, err := app.ScanLibrary()
+	if err != nil {
+		t.Fatalf("ScanLibrary during offline failed: %v", err)
 	}
 	if len(itemsOffline) != 2 {
 		t.Fatalf("expected both manga items to remain in library, got %d", len(itemsOffline))
@@ -773,10 +788,10 @@ func TestMultiSourceScanningAndOfflineFallback(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(dirB, "Manga B", "Ch 1"), 0o755)
 	_ = os.WriteFile(filepath.Join(dirB, "Manga B", "Ch 1", "001.jpg"), []byte("page-b"), 0o644)
 
-	// Third scan: Manga B should become available again!
-	itemsOnline, err := app.ListLibraryManga()
+	// Rescan after restore: Manga B should become available again!
+	itemsOnline, err := app.ScanLibrary()
 	if err != nil {
-		t.Fatalf("ListLibraryManga after restore failed: %v", err)
+		t.Fatalf("ScanLibrary after restore failed: %v", err)
 	}
 	for _, it := range itemsOnline {
 		if it.Title == "Manga B" && !it.IsAvailable {
@@ -934,5 +949,22 @@ func TestAppDuplicateMergeMode(t *testing.T) {
 	}
 	if manifest.TotalPages != 2 {
 		t.Fatalf("expected 2 total pages, got %d", manifest.TotalPages)
+	}
+
+	// 4. Test Remote Source Disconnection Fallback
+	// Simulate DirB (network source) being disconnected or inaccessible
+	_ = os.RemoveAll(dirB)
+
+	// In separate mode, request remote manga ID with fallback to local source
+	current.DuplicateMergeMode = contracts.DuplicateMergeModeSeparate
+	_, _ = app.UpdateSettings(current)
+
+	remoteNarutoID := library.EncodeMangaIDWithSource("src-network", "Naruto")
+	manifestFallback, err := app.GetReaderManifest(remoteNarutoID)
+	if err != nil {
+		t.Fatalf("expected fallback to local source for disconnected remote Naruto, got error: %v", err)
+	}
+	if len(manifestFallback.Chapters) != 1 || manifestFallback.Chapters[0].Title != "Vol 01" {
+		t.Fatalf("expected local chapter Vol 01 to be loaded via fallback, got %v", manifestFallback.Chapters)
 	}
 }

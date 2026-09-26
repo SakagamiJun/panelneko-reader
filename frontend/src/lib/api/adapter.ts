@@ -31,4 +31,5 @@ export interface AppAdapter {
   updateLibrarySource(source: LibrarySource): Promise<AppSettings>;
   relocateLibrarySource(sourceID: string, newPath: string): Promise<AppSettings>;
   rescanSource(sourceID: string): Promise<void>;
+  scanLibrary(): Promise<LibraryManga[]>;
 }

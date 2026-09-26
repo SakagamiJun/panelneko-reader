@@ -215,9 +215,14 @@ export class MockAdapter implements AppAdapter {
     });
 
     // Update collection cover if child is pinned
+    const isMergeMode = settings.duplicateMergeMode === "merge";
     for (const item of items) {
       if (item.isCollection) {
-        const children = items.filter((c) => c.parentPath === item.relativePath);
+        const children = items.filter(
+          (c) =>
+            c.parentPath === item.relativePath &&
+            (isMergeMode || (c.sourceID || "default") === (item.sourceID || "default"))
+        );
         const pinnedChildren = children.filter((c) => c.isPinned);
         if (pinnedChildren.length > 0) {
           pinnedChildren.sort((a, b) => (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? ""));
@@ -240,12 +245,18 @@ export class MockAdapter implements AppAdapter {
       return b.lastUpdated.localeCompare(a.lastUpdated);
     });
 
+    const getCollectionKey = (sourceID: string | undefined, path: string) => {
+      if (isMergeMode) return path;
+      return (sourceID || "default") + "::" + path;
+    };
+
     const childItemsMap = new Map<string, LibraryManga[]>();
     for (const item of items) {
       if (item.parentPath) {
-        const list = childItemsMap.get(item.parentPath) ?? [];
+        const key = getCollectionKey(item.sourceID, item.parentPath);
+        const list = childItemsMap.get(key) ?? [];
         list.push(item);
-        childItemsMap.set(item.parentPath, list);
+        childItemsMap.set(key, list);
       }
     }
 
@@ -264,9 +275,10 @@ export class MockAdapter implements AppAdapter {
     const result: LibraryManga[] = [...rootItems];
     for (const root of rootItems) {
       if (root.isCollection) {
-        const children = childItemsMap.get(root.relativePath) ?? [];
+        const key = getCollectionKey(root.sourceID, root.relativePath);
+        const children = childItemsMap.get(key) ?? [];
         result.push(...children);
-        childItemsMap.delete(root.relativePath);
+        childItemsMap.delete(key);
       }
     }
     for (const [, children] of childItemsMap) {
@@ -451,6 +463,11 @@ export class MockAdapter implements AppAdapter {
 
   async rescanSource(_sourceID: string): Promise<void> {
     this.emit(EVENTS.LIBRARY_UPDATED, {});
+  }
+
+  async scanLibrary(): Promise<LibraryManga[]> {
+    this.emit(EVENTS.LIBRARY_UPDATED, {});
+    return this.listLibraryManga();
   }
 
   subscribe(eventName: string, callback: Listener) {

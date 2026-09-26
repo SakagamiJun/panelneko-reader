@@ -28,6 +28,7 @@ const requiredAdapterMethods: AdapterMethod[] = [
   "updateLibrarySource",
   "relocateLibrarySource",
   "rescanSource",
+  "scanLibrary",
 ];
 
 describe("AppAdapter Interface Completeness Guard", () => {

@@ -30,6 +30,8 @@ export function RemoveLibrarySource(arg1:string):Promise<contracts.AppSettings>;
 
 export function RescanSource(arg1:string):Promise<void>;
 
+export function ScanLibrary():Promise<Array<contracts.LibraryManga>>;
+
 export function SelectDirectory():Promise<string>;
 
 export function ToggleCollection(arg1:string):Promise<boolean>;

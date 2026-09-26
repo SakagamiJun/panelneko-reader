@@ -1465,3 +1465,133 @@ func TestGetReaderManifestMergeChapters(t *testing.T) {
 		t.Fatalf("expected chapter 3 page to point to src-b, got %s", manifestMerged.Chapters[2].Pages[0].SourceURL)
 	}
 }
+
+func TestResolveMultiSourceAssetPathFallback(t *testing.T) {
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+
+	mangaDirB := filepath.Join(rootB, "MangaB")
+	if err := os.MkdirAll(mangaDirB, 0o755); err != nil {
+		t.Fatalf("mkdir MangaB: %v", err)
+	}
+	writeFile(t, filepath.Join(mangaDirB, "cover.jpg"), "cover-bytes")
+	writeZipArchive(t, filepath.Join(mangaDirB, "ch1.cbz"), map[string]string{
+		"001.jpg": "page-bytes",
+	})
+
+	sourcesMap := map[string]string{
+		"src-a": rootA,
+		"src-b": rootB,
+	}
+
+	// 1. Filesystem asset fallback: URL points to src-a or default, but file exists in src-b
+	reqURLWithoutSource := "/library-files/MangaB/cover.jpg"
+	resolvedPath, err := ResolveMultiSourceAssetPath(sourcesMap, rootA, reqURLWithoutSource)
+	if err != nil {
+		t.Fatalf("expected fallback resolution to succeed, got: %v", err)
+	}
+	expectedPath, _ := filepath.EvalSymlinks(filepath.Join(mangaDirB, "cover.jpg"))
+	if resolvedPath != expectedPath {
+		t.Fatalf("expected resolved path %q, got %q", expectedPath, resolvedPath)
+	}
+
+	// URL with mismatched source prefix also falls back if not in primary
+	reqURLWithSrcA := "/library-files/_src/src-a/MangaB/cover.jpg"
+	resolvedPath2, err := ResolveMultiSourceAssetPath(sourcesMap, rootA, reqURLWithSrcA)
+	if err != nil {
+		t.Fatalf("expected fallback resolution for mismatched src-a to succeed, got: %v", err)
+	}
+	if resolvedPath2 != expectedPath {
+		t.Fatalf("expected resolved path %q, got %q", expectedPath, resolvedPath2)
+	}
+
+	// 2. Archive asset fallback
+	reqArchiveURL := LibraryArchiveAssetPrefix + LibrarySourceAssetPrefix + "src-a/" + encodePathToken("MangaB/ch1.cbz") + "/" + encodePathToken("001.jpg")
+	rc, contentType, size, err := OpenMultiSourceArchiveAsset(sourcesMap, rootA, reqArchiveURL)
+	if err != nil {
+		t.Fatalf("expected archive fallback to succeed, got: %v", err)
+	}
+	rc.Close()
+	if contentType != "image/jpeg" || size <= 0 {
+		t.Fatalf("unexpected archive asset attributes: type=%s, size=%d", contentType, size)
+	}
+
+	// 3. GetReaderManifestWithSources fallback when mangaID has no source prefix or default, but manga is in src-b
+	sourcesList := []contracts.LibrarySource{
+		{ID: "src-a", Name: "Source A", Path: rootA, Enabled: true},
+		{ID: "src-b", Name: "Source B", Path: rootB, Enabled: true},
+	}
+	manifestFallback, err := GetReaderManifestWithSources(sourcesList, encodeMangaID("MangaB"), contracts.DuplicateMergeModeSeparate)
+	if err != nil {
+		t.Fatalf("expected manifest fallback to find MangaB in src-b, got: %v", err)
+	}
+	if len(manifestFallback.Chapters) != 1 {
+		t.Fatalf("expected 1 chapter from MangaB, got %d", len(manifestFallback.Chapters))
+	}
+}
+
+func TestCollectionKeyNormalization(t *testing.T) {
+	keyEmpty := collectionKey("", "CollectionA")
+	keyDefault := collectionKey("default", "CollectionA")
+	keyCustom := collectionKey("src-1", "CollectionA")
+
+	if keyEmpty != "default::CollectionA" {
+		t.Fatalf("expected default::CollectionA, got %s", keyEmpty)
+	}
+	if keyDefault != "default::CollectionA" {
+		t.Fatalf("expected default::CollectionA, got %s", keyDefault)
+	}
+	if keyEmpty != keyDefault {
+		t.Fatalf("expected keyEmpty == keyDefault, got %s != %s", keyEmpty, keyDefault)
+	}
+	if keyCustom != "src-1::CollectionA" {
+		t.Fatalf("expected src-1::CollectionA, got %s", keyCustom)
+	}
+}
+
+func TestRemoteSourceDisconnectedFallback(t *testing.T) {
+	rootLocal := t.TempDir()
+	rootRemote := filepath.Join(t.TempDir(), "non-existent-or-disconnected")
+
+	// Local source has Action/Manga1
+	mangaLocalDir := filepath.Join(rootLocal, "Action", "Manga1")
+	if err := os.MkdirAll(mangaLocalDir, 0o755); err != nil {
+		t.Fatalf("mkdir mangaLocal: %v", err)
+	}
+	writeFile(t, filepath.Join(mangaLocalDir, "001.jpg"), "page1")
+
+	sources := []contracts.LibrarySource{
+		{
+			ID:      "src-local",
+			Name:    "Local",
+			Path:    rootLocal,
+			Enabled: true,
+		},
+		{
+			ID:      "src-remote",
+			Name:    "Remote",
+			Path:    rootRemote,
+			Enabled: true,
+		},
+	}
+
+	// 1. GetReaderManifestWithSources fallback when mangaID explicitly points to disconnected src-remote
+	remoteMangaID := EncodeMangaIDWithSource("src-remote", "Action/Manga1")
+	manifest, err := GetReaderManifestWithSources(sources, remoteMangaID, contracts.DuplicateMergeModeSeparate)
+	if err != nil {
+		t.Fatalf("expected fallback to local source for disconnected remote manga, got: %v", err)
+	}
+	if len(manifest.Chapters) != 1 {
+		t.Fatalf("expected 1 chapter loaded from local fallback, got %d", len(manifest.Chapters))
+	}
+
+	// 2. ResolveDirectoryPathWithSources fallback when src-remote is disconnected
+	dirPath, err := ResolveDirectoryPathWithSources(sources, remoteMangaID)
+	if err != nil {
+		t.Fatalf("expected directory fallback to local source, got: %v", err)
+	}
+	expectedDir, _ := filepath.EvalSymlinks(mangaLocalDir)
+	if dirPath != expectedDir {
+		t.Fatalf("expected dir %q, got %q", expectedDir, dirPath)
+	}
+}

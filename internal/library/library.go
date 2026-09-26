@@ -481,27 +481,62 @@ func GetReaderManifestWithSources(sources []contracts.LibrarySource, mangaID str
 		if (sourceID == "default" || sourceID == "") && len(sources) > 0 {
 			matchedSource = &sources[0]
 		} else {
+			// If sourceID was not matched, attempt fallback search across enabled sources
+			for i := range sources {
+				if !sources[i].Enabled {
+					continue
+				}
+				if candDir, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
+					if manifest, mErr := loadMangaManifestWithSource(sources[i].Path, sources[i].ID, candDir, relativePath); mErr == nil && len(manifest.reader.Chapters) > 0 {
+						return manifest.reader, nil
+					}
+				}
+			}
 			return contracts.ReaderManifest{}, fmt.Errorf("library source %q not found", sourceID)
 		}
 	}
 
 	if !matchedSource.Enabled {
+		// If matched source is disabled, attempt fallback search across other enabled sources
+		for i := range sources {
+			if !sources[i].Enabled || sources[i].ID == matchedSource.ID {
+				continue
+			}
+			if candDir, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
+				if manifest, mErr := loadMangaManifestWithSource(sources[i].Path, sources[i].ID, candDir, relativePath); mErr == nil && len(manifest.reader.Chapters) > 0 {
+					return manifest.reader, nil
+				}
+			}
+		}
 		return contracts.ReaderManifest{}, fmt.Errorf("library source %q is disabled", matchedSource.Name)
 	}
 
 	isMerge := len(mergeMode) > 0 && mergeMode[0] == contracts.DuplicateMergeModeMerge
 	if !isMerge {
-		mangaDir, err := resolveWithinRoot(matchedSource.Path, relativePath)
-		if err != nil {
-			return contracts.ReaderManifest{}, err
+		var primaryErr error
+		if mangaDir, err := resolveWithinRoot(matchedSource.Path, relativePath); err == nil {
+			manifest, mErr := loadMangaManifestWithSource(matchedSource.Path, matchedSource.ID, mangaDir, relativePath)
+			if mErr == nil {
+				return manifest.reader, nil
+			}
+			primaryErr = mErr
+		} else {
+			primaryErr = err
 		}
 
-		manifest, err := loadMangaManifestWithSource(matchedSource.Path, matchedSource.ID, mangaDir, relativePath)
-		if err != nil {
-			return contracts.ReaderManifest{}, err
+		if len(sources) > 1 {
+			for i := range sources {
+				if !sources[i].Enabled || sources[i].ID == matchedSource.ID {
+					continue
+				}
+				if candDir, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
+					if manifest, mErr := loadMangaManifestWithSource(sources[i].Path, sources[i].ID, candDir, relativePath); mErr == nil && len(manifest.reader.Chapters) > 0 {
+						return manifest.reader, nil
+					}
+				}
+			}
 		}
-
-		return manifest.reader, nil
+		return contracts.ReaderManifest{}, primaryErr
 	}
 
 	// In merge mode: find all enabled sources where relativePath exists
@@ -617,26 +652,55 @@ func ResolveDirectoryPathWithSources(sources []contracts.LibrarySource, mangaID 
 		}
 	}
 	if matchedSource == nil {
-		if len(sources) > 0 {
+		if (sourceID == "default" || sourceID == "") && len(sources) > 0 {
 			matchedSource = &sources[0]
 		} else {
+			for i := range sources {
+				if !sources[i].Enabled {
+					continue
+				}
+				if cand, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
+					if candInfo, statErr := os.Stat(cand); statErr == nil {
+						if !candInfo.IsDir() {
+							return filepath.Dir(cand), nil
+						}
+						return cand, nil
+					}
+				}
+			}
 			return "", fmt.Errorf("library source %q not found", sourceID)
 		}
 	}
 
 	targetPath, err := resolveWithinRoot(matchedSource.Path, relativePath)
+	if err == nil {
+		if info, statErr := os.Stat(targetPath); statErr == nil {
+			if !info.IsDir() {
+				return filepath.Dir(targetPath), nil
+			}
+			return targetPath, nil
+		}
+	}
+
+	// Fallback across other enabled sources if primary source path failed or is inaccessible
+	for i := range sources {
+		if !sources[i].Enabled || sources[i].ID == matchedSource.ID {
+			continue
+		}
+		if cand, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
+			if candInfo, statErr := os.Stat(cand); statErr == nil {
+				if !candInfo.IsDir() {
+					return filepath.Dir(cand), nil
+				}
+				return cand, nil
+			}
+		}
+	}
+
 	if err != nil {
 		return "", err
 	}
-
-	info, err := os.Stat(targetPath)
-	if err != nil {
-		return "", err
-	}
-
-	if !info.IsDir() {
-		return filepath.Dir(targetPath), nil
-	}
+	return "", fmt.Errorf("manga directory not found: %s", relativePath)
 
 	return targetPath, nil
 }
@@ -744,9 +808,9 @@ func ResolveMultiSourceAssetPath(sourcesMap map[string]string, defaultRoot strin
 		if len(parts) == 2 {
 			srcID, err := url.PathUnescape(parts[0])
 			if err == nil {
+				relativeURLPath = parts[1]
 				if r, ok := sourcesMap[srcID]; ok && r != "" {
 					root = r
-					relativeURLPath = parts[1]
 				}
 			}
 		}
@@ -758,6 +822,24 @@ func ResolveMultiSourceAssetPath(sourcesMap map[string]string, defaultRoot strin
 	}
 
 	targetPath, err := resolveWithinRoot(root, filepath.FromSlash(decodedPath))
+	if err == nil && isSupportedImagePath(targetPath) {
+		if info, statErr := os.Stat(targetPath); statErr == nil && !info.IsDir() {
+			return targetPath, nil
+		}
+	}
+
+	// Fallback across other sources in sourcesMap if primary root does not contain the file
+	for _, srcPath := range sourcesMap {
+		if srcPath == root || srcPath == "" {
+			continue
+		}
+		if cand, cErr := resolveWithinRoot(srcPath, filepath.FromSlash(decodedPath)); cErr == nil && isSupportedImagePath(cand) {
+			if info, statErr := os.Stat(cand); statErr == nil && !info.IsDir() {
+				return cand, nil
+			}
+		}
+	}
+
 	if err != nil {
 		return "", err
 	}
@@ -1388,9 +1470,9 @@ func resolveMultiSourceArchiveAssetRequest(sourcesMap map[string]string, default
 		if len(parts) == 2 {
 			srcID, err := url.PathUnescape(parts[0])
 			if err == nil {
+				relativeURLPath = parts[1]
 				if r, ok := sourcesMap[srcID]; ok && r != "" {
 					root = r
-					relativeURLPath = parts[1]
 				}
 			}
 		}
@@ -1411,6 +1493,30 @@ func resolveMultiSourceArchiveAssetRequest(sourcesMap map[string]string, default
 	}
 
 	archivePath, err := resolveWithinRoot(root, filepath.FromSlash(archiveRelativePath))
+	if err == nil && isSupportedArchivePath(archivePath) {
+		if info, statErr := os.Stat(archivePath); statErr == nil && !info.IsDir() {
+			normalizedEntryPath, nErr := normalizeArchiveEntryPath(entryPath)
+			if nErr == nil && !shouldIgnoreArchiveEntry(normalizedEntryPath) && isSupportedImagePath(normalizedEntryPath) {
+				return archivePath, normalizedEntryPath, nil
+			}
+		}
+	}
+
+	// Fallback across other sources in sourcesMap
+	for _, srcPath := range sourcesMap {
+		if srcPath == root || srcPath == "" {
+			continue
+		}
+		if cand, cErr := resolveWithinRoot(srcPath, filepath.FromSlash(archiveRelativePath)); cErr == nil && isSupportedArchivePath(cand) {
+			if info, statErr := os.Stat(cand); statErr == nil && !info.IsDir() {
+				normalizedEntryPath, nErr := normalizeArchiveEntryPath(entryPath)
+				if nErr == nil && !shouldIgnoreArchiveEntry(normalizedEntryPath) && isSupportedImagePath(normalizedEntryPath) {
+					return cand, normalizedEntryPath, nil
+				}
+			}
+		}
+	}
+
 	if err != nil {
 		return "", "", err
 	}
@@ -2193,7 +2299,7 @@ func MergeLibraryManga(items []contracts.LibraryManga, sources []contracts.Libra
 
 func collectionKey(sourceID, path string) string {
 	if sourceID == "" {
-		return path
+		sourceID = "default"
 	}
 	return sourceID + "::" + path
 }

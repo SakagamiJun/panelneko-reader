@@ -77,4 +77,7 @@ export const appAdapter: AppAdapter = {
   rescanSource(sourceID) {
     return currentAdapter().rescanSource(sourceID);
   },
+  scanLibrary() {
+    return currentAdapter().scanLibrary();
+  },
 };

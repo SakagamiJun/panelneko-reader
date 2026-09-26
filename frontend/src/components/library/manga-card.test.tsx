@@ -102,4 +102,28 @@ describe("MangaCard Component", () => {
 
     expect(screen.queryByText("NAS Library")).not.toBeInTheDocument();
   });
+
+  it("falls back to placeholder when cover image encounters load error", () => {
+    const itemWithCover: LibraryManga = {
+      ...baseManga,
+      coverImageURL: "/covers/broken.jpg",
+    };
+
+    render(
+      <MangaCard
+        item={itemWithCover}
+        onOpenManga={vi.fn()}
+        onOpenCollection={vi.fn()}
+        onTogglePin={vi.fn()}
+        onOpenDirectory={vi.fn()}
+      />
+    );
+
+    const img = screen.getByRole("img", { name: "One Piece" });
+    expect(img).toBeInTheDocument();
+
+    fireEvent.error(img);
+
+    expect(screen.queryByRole("img", { name: "One Piece" })).not.toBeInTheDocument();
+  });
 });

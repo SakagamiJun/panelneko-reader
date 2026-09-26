@@ -58,6 +58,10 @@ export function RescanSource(arg1) {
   return window['go']['main']['App']['RescanSource'](arg1);
 }
 
+export function ScanLibrary() {
+  return window['go']['main']['App']['ScanLibrary']();
+}
+
 export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }

@@ -205,6 +205,13 @@ export const en = {
     filterAllSources: "All Directories",
     sourceFilter: "Filter by Directory",
     manageSources: "Manage Directories...",
+    offlineBannerSingle: "1 directory is offline, related manga automatically hidden",
+    offlineBannerMultiple: "{{count}} directories are offline, related manga automatically hidden",
+    rescan: "Rescan",
+    rescanning: "Scanning…",
+    showOffline: "Show offline manga",
+    hideOffline: "Hide offline manga",
+    offlineTag: "Offline",
   },
   reader: {
     scrollMode: "Scroll Mode",

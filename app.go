@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
@@ -172,6 +173,8 @@ type App struct {
 	bootErr  error
 	store    *store.SQLiteStore
 	settings *settings.Service
+	scanMu   sync.Mutex
+	scanOnce sync.Once
 }
 
 func NewApp() *App {
@@ -181,6 +184,13 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.bootErr = a.bootstrap()
+	if a.bootErr == nil {
+		go func() {
+			a.scanOnce.Do(func() {
+				_, _ = a.performSourcesScan()
+			})
+		}()
+	}
 }
 
 func (a *App) bootstrap() error {
@@ -281,6 +291,25 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 		return nil, err
 	}
 
+	a.scanOnce.Do(func() {
+		_, _ = a.performSourcesScan()
+	})
+
+	return a.getCachedLibraryManga()
+}
+
+func (a *App) ScanLibrary() ([]contracts.LibraryManga, error) {
+	if err := a.ensureReady(); err != nil {
+		return nil, err
+	}
+
+	return a.performSourcesScan()
+}
+
+func (a *App) performSourcesScan() ([]contracts.LibraryManga, error) {
+	a.scanMu.Lock()
+	defer a.scanMu.Unlock()
+
 	sources := a.getActiveSources()
 
 	prevItemsBySource := make(map[string]map[string]contracts.LibraryManga)
@@ -350,9 +379,16 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 			}
 		}
 		currentSettings.LibrarySources = updatedList
-		_, _ = a.settings.Update(currentSettings)
+		if updated, err := a.settings.Update(currentSettings); err == nil {
+			a.emit(contracts.EventSettingsUpdated, updated)
+		}
 	}
 
+	a.emit(contracts.EventLibraryUpdated, nil)
+	return a.getCachedLibraryManga()
+}
+
+func (a *App) getCachedLibraryManga() ([]contracts.LibraryManga, error) {
 	records, err := a.store.ListLibraryManga()
 	if err != nil {
 		return nil, err
@@ -368,6 +404,7 @@ func (a *App) ListLibraryManga() ([]contracts.LibraryManga, error) {
 		return nil, err
 	}
 
+	currentSettings := a.settings.Get()
 	if currentSettings.DuplicateMergeMode == contracts.DuplicateMergeModeMerge {
 		items = library.MergeLibraryManga(items, currentSettings.LibrarySources, pins)
 	}

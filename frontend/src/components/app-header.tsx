@@ -218,6 +218,11 @@ export function AppHeader({
                   <span className="truncate max-w-[120px]">
                     {isAllSources ? t("library.filterAllSources") : activeSource?.name || t("library.filterAllSources")}
                   </span>
+                  {!isAllSources && activeSource?.status === "offline" && (
+                    <span className="text-[9px] font-mono text-destructive shrink-0">
+                      [{t("library.offlineTag")}]
+                    </span>
+                  )}
                   <ChevronDown
                     className={cn(
                       "h-3 w-3 text-muted-foreground/70 transition-transform duration-150 shrink-0",
@@ -288,7 +293,12 @@ export function AppHeader({
                               <div className="flex flex-col min-w-0 flex-1 gap-0.5">
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <span className="truncate flex-1 font-medium">{s.name}</span>
-                                  {typeof s.mangaCount === "number" && (
+                                  {isOffline && (
+                                    <span className="text-[9px] font-mono text-destructive bg-destructive/10 px-1 py-0.5 rounded shrink-0">
+                                      {t("library.offlineTag")}
+                                    </span>
+                                  )}
+                                  {typeof s.mangaCount === "number" && !isOffline && (
                                     <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0">
                                       {s.mangaCount}
                                     </span>

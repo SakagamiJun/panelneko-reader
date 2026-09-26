@@ -205,6 +205,13 @@ export const zhCN = {
     filterAllSources: "全部目录",
     sourceFilter: "按目录筛选",
     manageSources: "管理目录...",
+    offlineBannerSingle: "检测到 1 个目录处于离线状态，已自动隐藏对应书籍",
+    offlineBannerMultiple: "检测到 {{count}} 个目录处于离线状态，已自动隐藏对应书籍",
+    rescan: "重新扫描",
+    rescanning: "正在扫描…",
+    showOffline: "显示离线书籍",
+    hideOffline: "隐藏离线书籍",
+    offlineTag: "离线",
   },
   reader: {
     scrollMode: "卷轴模式",

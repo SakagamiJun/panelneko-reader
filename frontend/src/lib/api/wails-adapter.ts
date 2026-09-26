@@ -106,6 +106,10 @@ export class WailsAdapter implements AppAdapter {
     await (getWailsApp() as any)?.RescanSource?.(sourceID);
   }
 
+  async scanLibrary(): Promise<LibraryManga[]> {
+    return ((await (getWailsApp() as any)?.ScanLibrary?.()) ?? []) as LibraryManga[];
+  }
+
   subscribe(eventName: string, callback: (payload: unknown) => void) {
     const runtime = getWailsRuntime();
     const unsubscribe = runtime?.EventsOn?.(eventName, callback);

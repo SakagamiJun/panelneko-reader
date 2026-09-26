@@ -1,16 +1,18 @@
 import { useEffect, useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { LibraryGrid } from "@/components/library/library-grid";
 import { SettingsDialog, type SettingsTab } from "@/components/sections/settings-dialog";
 import { ReaderController, type ReaderJumpRequest } from "@/components/reader-controller";
+import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UpdateToast } from "@/components/ui/update-toast";
 import { appAdapter } from "@/lib/api";
 import {
   type AppSettings,
+  type DuplicateMergeMode,
   EVENTS,
   type LibraryManga,
   type LibrarySource,
@@ -19,6 +21,7 @@ import {
 import { i18n } from "@/lib/i18n";
 import { emitRuntimeEvent } from "@/lib/runtime";
 import { resolveLocale, resolveTheme } from "@/lib/system";
+import { cn } from "@/lib/utils";
 
 export default function App() {
   const { t } = useTranslation();
@@ -34,6 +37,7 @@ export default function App() {
   const [, setReaderChapterTitle] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSourceID, setSelectedSourceID] = useState<string>("all");
+  const [showOffline, setShowOffline] = useState(false);
   const [offlineMangaAlert, setOfflineMangaAlert] = useState<LibraryManga | null>(null);
   const [collectionToToggle, setCollectionToToggle] = useState<LibraryManga | null>(null);
   const [updateNotification, setUpdateNotification] = useState<UpdateCheckResult | null>(null);
@@ -66,6 +70,7 @@ export default function App() {
 
   useEffect(() => {
     const offSettings = appAdapter.subscribe(EVENTS.SETTINGS_UPDATED, () => {
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
       void queryClient.invalidateQueries({ queryKey: ["library"] });
     });
     const offLibrary = appAdapter.subscribe(EVENTS.LIBRARY_UPDATED, () => {
@@ -238,9 +243,39 @@ export default function App() {
     },
   });
 
+  const scanLibraryMutation = useMutation({
+    mutationFn: () => appAdapter.scanLibrary(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["library"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+
   const settings = settingsQuery.data;
   const isMergeMode = settings?.duplicateMergeMode === "merge";
+
+  const prevMergeModeRef = useRef<DuplicateMergeMode | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevMergeModeRef.current;
+    const current = settings?.duplicateMergeMode;
+    if (prev !== undefined && current !== undefined && prev !== current) {
+      if (selectedCollectionPath) {
+        if (current === "separate") {
+          setSelectedCollectionPath(null);
+          setSelectedCollectionSourceID(null);
+        } else if (current === "merge") {
+          setSelectedCollectionSourceID(null);
+        }
+      }
+    }
+    prevMergeModeRef.current = current;
+  }, [settings?.duplicateMergeMode, selectedCollectionPath]);
+
   const library = libraryQuery.data ?? [];
+  const offlineSourcesCount = (settings?.librarySources ?? []).filter(
+    (s) => s.enabled && s.status === "offline"
+  ).length;
+
   const selectedLibrary = library.find((item) => item.id === selectedLibraryID) ?? null;
   const parentCollection = selectedLibrary?.parentPath
     ? library.find(
@@ -253,8 +288,9 @@ export default function App() {
   const currentCollection = selectedCollectionPath
     ? library.find((item) => {
         if (!item.isCollection || item.relativePath !== selectedCollectionPath) return false;
-        if (!isMergeMode && selectedCollectionSourceID) {
-          return (item.sourceID || "default") === selectedCollectionSourceID;
+        if (!isMergeMode) {
+          const targetSource = selectedCollectionSourceID || "default";
+          return (item.sourceID || "default") === targetSource;
         }
         return true;
       })
@@ -271,12 +307,48 @@ export default function App() {
         if (item.parentPath !== selectedCollectionPath) {
           return false;
         }
-        if (!isMergeMode && selectedCollectionSourceID) {
-          return (item.sourceID || "default") === selectedCollectionSourceID;
+        if (!isMergeMode) {
+          const targetSource = selectedCollectionSourceID || "default";
+          if ((item.sourceID || "default") !== targetSource) {
+            return false;
+          }
+        }
+        if (!showOffline && item.isAvailable === false) {
+          return false;
         }
         return true;
       }
-      return !item.parentPath;
+      if (item.parentPath) {
+        return false;
+      }
+
+      if (!showOffline) {
+        if (item.isCollection) {
+          const hasAvailableChild = library.some(
+            (c) =>
+              c.parentPath === item.relativePath &&
+              c.isAvailable !== false &&
+              (isMergeMode || (c.sourceID || "default") === (item.sourceID || "default"))
+          );
+          if (!hasAvailableChild) {
+            return false;
+          }
+        } else if (item.isAvailable === false) {
+          return false;
+        }
+      }
+
+      return true;
+    })
+    .map((item) => {
+      if (!item.isCollection || showOffline) return item;
+      const availableChildrenCount = library.filter(
+        (c) =>
+          c.parentPath === item.relativePath &&
+          c.isAvailable !== false &&
+          (isMergeMode || (c.sourceID || "default") === (item.sourceID || "default"))
+      ).length;
+      return { ...item, mangaCount: availableChildrenCount };
     })
     .sort((a, b) => {
       if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
@@ -471,42 +543,79 @@ export default function App() {
             Loading reader settings…
           </div>
         ) : (
-          <LibraryGrid
-            items={filteredItems}
-            totalItemsCount={displayedItems.length}
-            searchQuery={searchQuery}
-            onClearSearch={() => setSearchQuery("")}
-            loading={libraryQuery.isLoading}
-            emptyLabel={t("library.empty")}
-            onOpenManga={(id) => {
-              const item = library.find((i) => i.id === id);
-              if (item && item.isAvailable === false) {
-                setOfflineMangaAlert(item);
-                return;
-              }
-              setSelectedLibraryID(id);
-            }}
-            onOpenCollection={(collectionPath, sourceID) => {
-              setSelectedCollectionPath(collectionPath);
-              if (isMergeMode && selectedSourceID === "all") {
-                setSelectedCollectionSourceID(null);
-              } else {
-                setSelectedCollectionSourceID(sourceID || null);
-              }
-            }}
-            onOpenSettings={() => openSettingsWithTab("general")}
-            onTogglePin={(id) => togglePinMutation.mutate(id)}
-            onToggleCollection={setCollectionToToggle}
-            onOpenDirectory={(id) => {
-              const item = library.find((i) => i.id === id);
-              if (item && item.isAvailable === false) {
-                setOfflineMangaAlert(item);
-                return;
-              }
-              void appAdapter.openDirectory(id);
-            }}
-            sources={settings?.librarySources}
-          />
+          <div className="flex flex-col h-full w-full overflow-hidden">
+            {offlineSourcesCount > 0 && !selectedCollectionPath && (
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 border-b border-border/60 bg-muted/20 text-xs text-muted-foreground select-none shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                  <span className="text-[11px]">
+                    {offlineSourcesCount === 1
+                      ? t("library.offlineBannerSingle")
+                      : t("library.offlineBannerMultiple", { count: offlineSourcesCount })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] font-medium text-foreground hover:bg-muted/70 gap-1.5 cursor-pointer"
+                    disabled={scanLibraryMutation.isPending}
+                    onClick={() => scanLibraryMutation.mutate()}
+                    title={t("library.rescan")}
+                  >
+                    <RefreshCw className={cn("h-3 w-3", scanLibraryMutation.isPending && "animate-spin")} />
+                    <span>{scanLibraryMutation.isPending ? t("library.rescanning") : t("library.rescan")}</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] font-medium border-border/70 hover:bg-muted/60 cursor-pointer text-foreground"
+                    onClick={() => setShowOffline((prev) => !prev)}
+                  >
+                    {showOffline ? t("library.hideOffline") : t("library.showOffline")}
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <LibraryGrid
+                items={filteredItems}
+                totalItemsCount={displayedItems.length}
+                searchQuery={searchQuery}
+                onClearSearch={() => setSearchQuery("")}
+                loading={libraryQuery.isLoading}
+                emptyLabel={t("library.empty")}
+                onOpenManga={(id) => {
+                  const item = library.find((i) => i.id === id);
+                  if (item && item.isAvailable === false) {
+                    setOfflineMangaAlert(item);
+                    return;
+                  }
+                  setSelectedLibraryID(id);
+                }}
+                onOpenCollection={(collectionPath, sourceID) => {
+                  setSelectedCollectionPath(collectionPath);
+                  if (isMergeMode && selectedSourceID === "all") {
+                    setSelectedCollectionSourceID(null);
+                  } else {
+                    setSelectedCollectionSourceID(sourceID || "default");
+                  }
+                }}
+                onOpenSettings={() => openSettingsWithTab("general")}
+                onTogglePin={(id) => togglePinMutation.mutate(id)}
+                onToggleCollection={setCollectionToToggle}
+                onOpenDirectory={(id) => {
+                  const item = library.find((i) => i.id === id);
+                  if (item && item.isAvailable === false) {
+                    setOfflineMangaAlert(item);
+                    return;
+                  }
+                  void appAdapter.openDirectory(id);
+                }}
+                sources={settings?.librarySources}
+              />
+            </div>
+          </div>
         )}
       </div>
 

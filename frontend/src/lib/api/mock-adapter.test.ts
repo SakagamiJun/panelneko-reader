@@ -188,8 +188,10 @@ describe("MockAdapter Pin Functionality", () => {
     const updated3 = await adapter.relocateLibrarySource("test-src", "/Volumes/new-manga");
     expect(updated3.librarySources?.find((s) => s.id === "test-src")?.path).toBe("/Volumes/new-manga");
 
-    // 4. Rescan source
+    // 4. Rescan source and library
     await expect(adapter.rescanSource("test-src")).resolves.toBeUndefined();
+    const scanned = await adapter.scanLibrary();
+    expect(Array.isArray(scanned)).toBe(true);
 
     // 5. Remove source
     const updated4 = await adapter.removeLibrarySource("test-src");

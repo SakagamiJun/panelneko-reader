@@ -205,6 +205,13 @@ export const ja = {
     filterAllSources: "すべてのディレクトリ",
     sourceFilter: "ディレクトリで絞り込み",
     manageSources: "ディレクトリ管理...",
+    offlineBannerSingle: "1つのディレクトリがオフラインのため、該当する作品を自動で非表示にしました",
+    offlineBannerMultiple: "{{count}}個のディレクトリがオフラインのため、該当する作品を自動で非表示にしました",
+    rescan: "再スキャン",
+    rescanning: "スキャン中…",
+    showOffline: "オフライン作品を表示",
+    hideOffline: "オフライン作品を非表示",
+    offlineTag: "オフライン",
   },
   reader: {
     scrollMode: "スクロールモード",
