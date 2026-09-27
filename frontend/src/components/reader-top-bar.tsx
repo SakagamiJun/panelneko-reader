@@ -27,7 +27,7 @@ import type {
   ReaderSpreadMode,
   ReaderManifest,
 } from "@/lib/contracts";
-import { isMacPlatform } from "@/lib/system";
+import { useFullscreen, useHasTrafficLights } from "@/hooks/use-traffic-lights";
 import { cn } from "@/lib/utils";
 
 interface ReaderTopBarProps {
@@ -92,7 +92,8 @@ export function ReaderTopBar({
   onOpenFullSettings,
 }: ReaderTopBarProps) {
   const { t } = useTranslation();
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const isFullscreen = useFullscreen();
+  const hasTrafficLights = useHasTrafficLights();
   const [chaptersOpen, setChaptersOpen] = useState(false);
   const [jumpOpen, setJumpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -103,29 +104,6 @@ export function ReaderTopBar({
   const settingsRef = useRef<HTMLDivElement>(null);
 
   const currentPage = activePage ? activePage.globalPage : currentIndex + 1;
-  const isMac = isMacPlatform();
-  const hasTrafficLights = isMac && !isFullscreen;
-
-  useEffect(() => {
-    const checkFullscreen = () => {
-      const isDocFs = Boolean(document.fullscreenElement);
-      const isMediaFs = typeof window !== "undefined" && window.matchMedia?.("(display-mode: fullscreen)").matches;
-      const isScreenFs =
-        typeof window !== "undefined" &&
-        window.innerWidth === window.screen.width &&
-        window.innerHeight === window.screen.height;
-      setIsFullscreen(Boolean(isDocFs || isMediaFs || isScreenFs));
-    };
-
-    checkFullscreen();
-    document.addEventListener("fullscreenchange", checkFullscreen);
-    window.addEventListener("resize", checkFullscreen);
-
-    return () => {
-      document.removeEventListener("fullscreenchange", checkFullscreen);
-      window.removeEventListener("resize", checkFullscreen);
-    };
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

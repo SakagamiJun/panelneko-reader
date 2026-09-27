@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Kbd } from "@/components/ui/kbd";
 import type { AppSettings, LibraryManga } from "@/lib/contracts";
 import { isMacPlatform } from "@/lib/system";
+import { useHasTrafficLights } from "@/hooks/use-traffic-lights";
 import { cn } from "@/lib/utils";
 
 interface AppHeaderProps {
@@ -64,6 +65,7 @@ export function AppHeader({
   const sourceMenuRef = useRef<HTMLDivElement>(null);
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false);
   const isMac = isMacPlatform();
+  const hasTrafficLights = useHasTrafficLights();
 
   const isAllSources = !selectedSourceId || selectedSourceId === "all";
   const activeSource = settings?.librarySources?.find((s) => s.id === selectedSourceId);
@@ -138,7 +140,7 @@ export function AppHeader({
     <header
       className={cn(
         "app-window-drag-region sticky top-0 z-20 flex h-12 items-center justify-between gap-3 border-b border-border/70 bg-background/80 px-3 backdrop-blur-xl transition-all select-none",
-        isMac ? "pl-20" : "pl-3"
+        hasTrafficLights ? "pl-20" : "pl-3"
       )}
     >
       {/* Left section: Breadcrumb and collection title */}

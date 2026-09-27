@@ -9,7 +9,7 @@ import {
   clampIndex,
 } from "@/components/reader-shared";
 import { appAdapter } from "@/lib/api";
-import { isMacPlatform } from "@/lib/system";
+import { useHasTrafficLights } from "@/hooks/use-traffic-lights";
 import { cn } from "@/lib/utils";
 import type {
   AppSettings,
@@ -76,6 +76,7 @@ export function ReaderController({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [navigationRequest, setNavigationRequest] = useState<ReaderNavigationRequest | null>(null);
   const [restoreReady, setRestoreReady] = useState(false);
+  const hasTrafficLights = useHasTrafficLights();
 
   // Reader preference state
   const [direction, setDirection] = useState<ReaderDirection>(settings.readerDirection || "rtl");
@@ -513,7 +514,7 @@ export function ReaderController({
         <div
           className={cn(
             "absolute top-0 right-0 h-4 z-20 pointer-events-auto",
-            isMacPlatform() ? "left-20" : "left-0"
+            hasTrafficLights ? "left-20" : "left-0"
           )}
           onMouseEnter={() => {
             setHudVisible(true);

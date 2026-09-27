@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { i18n } from "@/lib/i18n";
+import * as systemModule from "@/lib/system";
 import { AppHeader } from "@/components/app-header";
 import type { AppSettings } from "@/lib/contracts";
 
@@ -142,5 +143,61 @@ describe("AppHeader Component", () => {
 
     expect(handleManageSources).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("applies pl-20 on Mac in windowed mode, and pl-3 in fullscreen mode", () => {
+    const isMacSpy = vi.spyOn(systemModule, "isMacPlatform").mockReturnValue(true);
+
+    const { container, rerender } = render(
+      <AppHeader
+        selectedCollectionPath={null}
+        totalCount={57}
+        onBackToMain={vi.fn()}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+        settings={baseSettings}
+        onCycleTheme={vi.fn()}
+        onCycleLocale={vi.fn()}
+        settingsOpen={false}
+        onToggleSettings={vi.fn()}
+      />
+    );
+
+    const header = container.querySelector("header");
+    expect(header).toHaveClass("pl-20");
+
+    // Enter fullscreen
+    Object.defineProperty(document, "fullscreenElement", {
+      value: document.documentElement,
+      configurable: true,
+      writable: true,
+    });
+    fireEvent(document, new Event("fullscreenchange"));
+
+    rerender(
+      <AppHeader
+        selectedCollectionPath="Series A"
+        totalCount={12}
+        onBackToMain={vi.fn()}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+        settings={baseSettings}
+        onCycleTheme={vi.fn()}
+        onCycleLocale={vi.fn()}
+        settingsOpen={false}
+        onToggleSettings={vi.fn()}
+      />
+    );
+
+    expect(header).toHaveClass("pl-3");
+    expect(header).not.toHaveClass("pl-20");
+
+    // Cleanup
+    Object.defineProperty(document, "fullscreenElement", {
+      value: null,
+      configurable: true,
+      writable: true,
+    });
+    isMacSpy.mockRestore();
   });
 });
