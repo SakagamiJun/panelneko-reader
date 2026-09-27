@@ -1,5 +1,33 @@
 # 更新日志 (Changelog)
 
+## v0.11.0
+
+[![macOS](https://img.shields.io/badge/macOS-Supported-000000?style=flat-square&logo=apple&logoColor=white)](https://apple.com)
+[![Windows](https://img.shields.io/badge/Windows-Supported-0078D6?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com)
+[![Linux](https://img.shields.io/badge/Linux-Supported-FCC624?style=flat-square&logo=linux&logoColor=black)](https://kernel.org)
+[![Version](https://img.shields.io/badge/Release-v0.11.0-10B981?style=flat-square)](https://github.com/SakagamiJun/panelneko-reader/releases)
+
+> 本次更新带来全新的多漫画库源体系架构、多档缩略图画质阶梯与磁盘缓存池、重名合并与离线网络源弹性容错降级，并针对全屏沉浸阅读体验进行了深度优化。
+
+### 更新内容
+
+[新增功能]
+- 多漫画库源架构：支持添加与管理多个本地或外部存储源，实现基于源 ID 的 SQLite 持久化隔离、复合资源 ID 与多源扫描路由机制。
+- 缩略图画质分级与独立缓存：基于 Lanczos 算法实现 High / Medium / Low 三档画质渲染引擎与独立的磁盘持久化缓存池，兼顾画质细腻度与大图库渲染性能。
+- 重名合并与来源消重模式：引入重名合并模式（Duplicate Merge Mode），支持同名漫画与合集跨源合并展示并维持本地文件优先；支持同名源路径自动排重与别名自定义。
+- 扫库解耦与离线韧性容错：将物理磁盘扫描与库内容查询解耦，实现后台异步重扫；针对离线断连的外部或网络源自动隐藏失效项，并提供平滑的占位与重试降级。
+- 离线状态混合通知体系：移除阻挡视线的旧版全局横幅，采用自动退避的浮动 Toast 结合顶栏常驻警告指示器的轻量化设计，兼顾静默防扰与直观状态感知。
+
+[优化改进]
+- 库源切换与设置面板演化：顶栏集成极简风格的多源快速切换下拉菜单；设置面板全面重构多源管理，增加画质分段选择器与弹窗关闭延迟重刷防抖机制。
+- 三端适配器与国际化闭环：对齐前端 Wails 与 Mock 双适配器及底层 RPC 契约，新增中、英、日三语的完整多源与离线状态本地化字典。
+
+[修复问题]
+- 修复 macOS 在沉浸全屏模式下红绿灯按钮间距未动态折叠导致的顶部栏与阅读器左侧留白问题。
+- 修复多源环境下合集封面与子项跨源状态污染，以及切换重名合并开关时卡片孤立状态未即时重置的问题。
+
+---
+
 ## v0.10.0
 
 [![macOS](https://img.shields.io/badge/macOS-Supported-000000?style=flat-square&logo=apple&logoColor=white)](https://apple.com)
