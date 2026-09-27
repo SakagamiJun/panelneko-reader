@@ -9,6 +9,7 @@ import {
   Folders,
   Languages,
   MoonStar,
+  RefreshCw,
   Search,
   Settings2,
   Sparkles,
@@ -40,6 +41,11 @@ interface AppHeaderProps {
   onOpenManageSources?: () => void;
   selectedSourceId?: string;
   onSelectSourceId?: (sourceId: string) => void;
+  offlineSourcesCount?: number;
+  showOffline?: boolean;
+  onToggleShowOffline?: () => void;
+  onRescan?: () => void;
+  isRescanning?: boolean;
 }
 
 export function AppHeader({
@@ -59,11 +65,18 @@ export function AppHeader({
   onOpenManageSources,
   selectedSourceId = "all",
   onSelectSourceId,
+  offlineSourcesCount = 0,
+  showOffline = false,
+  onToggleShowOffline,
+  onRescan,
+  isRescanning = false,
 }: AppHeaderProps) {
   const { t } = useTranslation();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const sourceMenuRef = useRef<HTMLDivElement>(null);
+  const offlineMenuRef = useRef<HTMLDivElement>(null);
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false);
+  const [isOfflineMenuOpen, setIsOfflineMenuOpen] = useState(false);
   const isMac = isMacPlatform();
   const hasTrafficLights = useHasTrafficLights();
 
@@ -135,6 +148,27 @@ export function AppHeader({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isSourceMenuOpen]);
+
+  // Click outside or Escape to dismiss offline dropdown popover
+  useEffect(() => {
+    if (!isOfflineMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (offlineMenuRef.current && !offlineMenuRef.current.contains(e.target as Node)) {
+        setIsOfflineMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOfflineMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOfflineMenuOpen]);
 
   return (
     <header
@@ -342,6 +376,88 @@ export function AppHeader({
                     )}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Offline status indicator pill */}
+        {offlineSourcesCount > 0 && (
+          <div ref={offlineMenuRef} className="relative ml-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsOfflineMenuOpen((prev) => !prev)}
+              className={cn(
+                "flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-medium transition-colors border select-none cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-amber-500/30",
+                isOfflineMenuOpen
+                  ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 shadow-xs"
+                  : "bg-amber-500/10 hover:bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+              )}
+              title={
+                offlineSourcesCount === 1
+                  ? t("library.offlineBannerSingle")
+                  : t("library.offlineBannerMultiple", { count: offlineSourcesCount })
+              }
+              aria-expanded={isOfflineMenuOpen}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+              <span className="whitespace-nowrap">
+                {offlineSourcesCount === 1
+                  ? t("library.offlinePillSingle")
+                  : t("library.offlinePillMultiple", { count: offlineSourcesCount })}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 text-amber-500/70 transition-transform duration-150 shrink-0",
+                  isOfflineMenuOpen && "rotate-180"
+                )}
+              />
+            </button>
+
+            {isOfflineMenuOpen && (
+              <div
+                className="absolute left-0 top-full mt-1.5 w-72 rounded-xl border border-border/80 bg-card shadow-xl p-3 z-50 animate-in fade-in-0 zoom-in-95 origin-top-left space-y-2.5 text-xs select-none"
+                role="dialog"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0 mt-1.5" />
+                  <p className="text-muted-foreground leading-relaxed text-[11px]">
+                    {offlineSourcesCount === 1
+                      ? t("library.offlineBannerSingle")
+                      : t("library.offlineBannerMultiple", { count: offlineSourcesCount })}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-border/40">
+                  {onRescan && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      disabled={isRescanning}
+                      onClick={() => {
+                        onRescan();
+                      }}
+                      className="h-6 px-2 text-[11px] font-medium text-foreground hover:bg-muted/70 gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className={cn("h-3 w-3", isRescanning && "animate-spin")} />
+                      <span>{isRescanning ? t("library.rescanning") : t("library.rescan")}</span>
+                    </Button>
+                  )}
+                  {onToggleShowOffline && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      onClick={() => {
+                        onToggleShowOffline();
+                      }}
+                      className="h-6 px-2 text-[11px] font-medium border-border/70 hover:bg-muted/60 cursor-pointer text-foreground"
+                    >
+                      {showOffline ? t("library.hideOffline") : t("library.showOffline")}
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </div>

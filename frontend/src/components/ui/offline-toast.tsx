@@ -1,23 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUpCircle, ExternalLink, X } from "lucide-react";
+import { HardDrive, RefreshCw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { UpdateCheckResult } from "@/lib/contracts";
+import { cn } from "@/lib/utils";
 
-export interface UpdateToastProps {
-  update: UpdateCheckResult;
+export interface OfflineToastProps {
+  offlineSourcesCount: number;
+  showOffline: boolean;
+  isRescanning?: boolean;
+  onRescan: () => void;
+  onToggleShowOffline: () => void;
   onClose: () => void;
-  onViewUpdate: (url: string) => void;
   durationMs?: number;
 }
 
-export function UpdateToast({
-  update,
+export function OfflineToast({
+  offlineSourcesCount,
+  showOffline,
+  isRescanning = false,
+  onRescan,
+  onToggleShowOffline,
   onClose,
-  onViewUpdate,
   durationMs = 6000,
-}: UpdateToastProps) {
+}: OfflineToastProps) {
   const { t } = useTranslation();
   const [progress, setProgress] = useState(100);
   const [isHovered, setIsHovered] = useState(false);
@@ -63,7 +69,7 @@ export function UpdateToast({
     <div
       role="alert"
       aria-live="polite"
-      className="pointer-events-auto flex w-84 max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-xl border border-border/80 bg-card/95 backdrop-blur-2xl shadow-2xl transition-all duration-200 select-none animate-in fade-in-50 slide-in-from-bottom-4"
+      className="pointer-events-auto flex w-88 max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-xl border border-border/80 bg-card/95 backdrop-blur-2xl shadow-2xl transition-all duration-200 select-none animate-in fade-in-50 slide-in-from-bottom-4"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -71,14 +77,14 @@ export function UpdateToast({
         {/* Header */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-              <ArrowUpCircle className="h-3.5 w-3.5" />
+            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500 shrink-0">
+              <HardDrive className="h-3.5 w-3.5" />
             </div>
             <span className="text-xs font-bold text-foreground truncate">
-              {t("updates.newVersionTitle")}
+              {t("library.offlineToastTitle")}
             </span>
-            <Badge tone="running" className="shrink-0 font-mono text-[10px]">
-              v{update.latestVersion}
+            <Badge tone="default" className="shrink-0 font-mono text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10">
+              {offlineSourcesCount}
             </Badge>
           </div>
 
@@ -87,7 +93,7 @@ export function UpdateToast({
             size="xs"
             variant="ghost"
             onClick={onClose}
-            className="h-6 w-6 p-0 rounded-md text-muted-foreground hover:text-foreground shrink-0"
+            className="h-6 w-6 p-0 rounded-md text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
             title={t("updates.dismiss")}
           >
             <X className="h-3.5 w-3.5" />
@@ -96,10 +102,9 @@ export function UpdateToast({
 
         {/* Content */}
         <p className="text-xs text-muted-foreground leading-relaxed">
-          {t("updates.newVersionDesc", {
-            latest: `v${update.latestVersion}`,
-            current: `v${update.currentVersion}`,
-          })}
+          {offlineSourcesCount === 1
+            ? t("library.offlineBannerSingle")
+            : t("library.offlineBannerMultiple", { count: offlineSourcesCount })}
         </p>
 
         {/* Action buttons */}
@@ -108,20 +113,22 @@ export function UpdateToast({
             type="button"
             size="xs"
             variant="ghost"
-            onClick={onClose}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            disabled={isRescanning}
+            onClick={onRescan}
+            className="h-6 px-2 text-xs font-medium text-foreground hover:bg-muted/70 gap-1.5 cursor-pointer"
+            title={t("library.rescan")}
           >
-            {t("updates.dismiss")}
+            <RefreshCw className={cn("h-3 w-3", isRescanning && "animate-spin")} />
+            <span>{isRescanning ? t("library.rescanning") : t("library.rescan")}</span>
           </Button>
           <Button
             type="button"
             size="xs"
-            variant="primary"
-            onClick={() => onViewUpdate(update.releaseURL)}
-            className="gap-1.5 text-xs font-semibold"
+            variant="outline"
+            onClick={onToggleShowOffline}
+            className="h-6 px-2 text-xs font-semibold border-border/70 hover:bg-muted/60 cursor-pointer text-foreground"
           >
-            <ExternalLink className="h-3 w-3" />
-            <span>{t("updates.viewDetails")}</span>
+            {showOffline ? t("library.hideOffline") : t("library.showOffline")}
           </Button>
         </div>
       </div>
@@ -129,7 +136,7 @@ export function UpdateToast({
       {/* Auto-dismiss progress bar */}
       <div className="h-0.5 w-full bg-border/40 overflow-hidden">
         <div
-          className="h-full bg-primary/60 transition-all duration-75 ease-linear"
+          className="h-full bg-amber-500/80 transition-all duration-75 ease-linear"
           style={{ width: `${progress}%` }}
         />
       </div>

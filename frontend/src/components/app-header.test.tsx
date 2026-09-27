@@ -200,4 +200,54 @@ describe("AppHeader Component", () => {
     });
     isMacSpy.mockRestore();
   });
+
+  it("renders persistent offline indicator pill and toggles action popover", () => {
+    const handleRescan = vi.fn();
+    const handleToggleShowOffline = vi.fn();
+
+    render(
+      <AppHeader
+        selectedCollectionPath={null}
+        totalCount={57}
+        onBackToMain={vi.fn()}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+        settings={baseSettings}
+        onCycleTheme={vi.fn()}
+        onCycleLocale={vi.fn()}
+        settingsOpen={false}
+        onToggleSettings={vi.fn()}
+        offlineSourcesCount={2}
+        showOffline={false}
+        onRescan={handleRescan}
+        onToggleShowOffline={handleToggleShowOffline}
+      />
+    );
+
+    // Pill should be rendered
+    const pill = screen.getByRole("button", { name: /2 个目录离线|2 directories offline|2件のディレクトリがオフライン/i });
+    expect(pill).toBeInTheDocument();
+
+    // Popover is initially closed
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    // Open popover
+    fireEvent.click(pill);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+
+    // Rescan button
+    const rescanBtn = screen.getByRole("button", { name: /重新扫描|rescan/i });
+    fireEvent.click(rescanBtn);
+    expect(handleRescan).toHaveBeenCalledTimes(1);
+
+    // Toggle offline button
+    const toggleBtn = screen.getByRole("button", { name: /显示离线书籍|show offline/i });
+    fireEvent.click(toggleBtn);
+    expect(handleToggleShowOffline).toHaveBeenCalledTimes(1);
+
+    // Escape closes popover
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });

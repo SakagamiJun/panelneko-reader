@@ -212,6 +212,9 @@ export const ja = {
     showOffline: "オフライン作品を表示",
     hideOffline: "オフライン作品を非表示",
     offlineTag: "オフライン",
+    offlinePillSingle: "1件のディレクトリがオフライン",
+    offlinePillMultiple: "{{count}}件のディレクトリがオフライン",
+    offlineToastTitle: "ディレクトリのオフライン通知",
   },
   reader: {
     scrollMode: "スクロールモード",

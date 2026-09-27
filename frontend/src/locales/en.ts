@@ -212,6 +212,9 @@ export const en = {
     showOffline: "Show offline manga",
     hideOffline: "Hide offline manga",
     offlineTag: "Offline",
+    offlinePillSingle: "1 directory offline",
+    offlinePillMultiple: "{{count}} directories offline",
+    offlineToastTitle: "Directory Offline Notice",
   },
   reader: {
     scrollMode: "Scroll Mode",

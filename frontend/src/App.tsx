@@ -9,6 +9,7 @@ import { ReaderController, type ReaderJumpRequest } from "@/components/reader-co
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UpdateToast } from "@/components/ui/update-toast";
+import { OfflineToast } from "@/components/ui/offline-toast";
 import { appAdapter } from "@/lib/api";
 import {
   type AppSettings,
@@ -41,6 +42,8 @@ export default function App() {
   const [offlineMangaAlert, setOfflineMangaAlert] = useState<LibraryManga | null>(null);
   const [collectionToToggle, setCollectionToToggle] = useState<LibraryManga | null>(null);
   const [updateNotification, setUpdateNotification] = useState<UpdateCheckResult | null>(null);
+  const [showOfflineToast, setShowOfflineToast] = useState(false);
+  const prevOfflineSourcesCountRef = useRef<number | null>(null);
   const hasCheckedStartupRef = useRef(false);
 
   const settingsQuery = useQuery({
@@ -276,6 +279,24 @@ export default function App() {
     (s) => s.enabled && s.status === "offline"
   ).length;
 
+  useEffect(() => {
+    if (prevOfflineSourcesCountRef.current === null) {
+      prevOfflineSourcesCountRef.current = offlineSourcesCount;
+      if (offlineSourcesCount > 0) {
+        setShowOfflineToast(true);
+      }
+      return;
+    }
+
+    if (offlineSourcesCount > 0 && prevOfflineSourcesCountRef.current === 0) {
+      setShowOfflineToast(true);
+    } else if (offlineSourcesCount === 0) {
+      setShowOfflineToast(false);
+    }
+
+    prevOfflineSourcesCountRef.current = offlineSourcesCount;
+  }, [offlineSourcesCount]);
+
   const selectedLibrary = library.find((item) => item.id === selectedLibraryID) ?? null;
   const parentCollection = selectedLibrary?.parentPath
     ? library.find(
@@ -507,6 +528,11 @@ export default function App() {
           selectedSourceId={selectedSourceID}
           onSelectSourceId={setSelectedSourceID}
           onOpenManageSources={() => openSettingsWithTab("sources")}
+          offlineSourcesCount={offlineSourcesCount}
+          showOffline={showOffline}
+          onToggleShowOffline={() => setShowOffline((prev) => !prev)}
+          onRescan={() => scanLibraryMutation.mutate()}
+          isRescanning={scanLibraryMutation.isPending}
         />
       )}
 
@@ -544,39 +570,6 @@ export default function App() {
           </div>
         ) : (
           <div className="flex flex-col h-full w-full overflow-hidden">
-            {offlineSourcesCount > 0 && !selectedCollectionPath && (
-              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 border-b border-border/60 bg-muted/20 text-xs text-muted-foreground select-none shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
-                  <span className="text-[11px]">
-                    {offlineSourcesCount === 1
-                      ? t("library.offlineBannerSingle")
-                      : t("library.offlineBannerMultiple", { count: offlineSourcesCount })}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-[11px] font-medium text-foreground hover:bg-muted/70 gap-1.5 cursor-pointer"
-                    disabled={scanLibraryMutation.isPending}
-                    onClick={() => scanLibraryMutation.mutate()}
-                    title={t("library.rescan")}
-                  >
-                    <RefreshCw className={cn("h-3 w-3", scanLibraryMutation.isPending && "animate-spin")} />
-                    <span>{scanLibraryMutation.isPending ? t("library.rescanning") : t("library.rescan")}</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 px-2 text-[11px] font-medium border-border/70 hover:bg-muted/60 cursor-pointer text-foreground"
-                    onClick={() => setShowOffline((prev) => !prev)}
-                  >
-                    {showOffline ? t("library.hideOffline") : t("library.showOffline")}
-                  </Button>
-                </div>
-              </div>
-            )}
             <div className="flex-1 min-h-0 overflow-hidden">
               <LibraryGrid
                 items={filteredItems}
@@ -674,16 +667,32 @@ export default function App() {
         }}
       />
 
-      {/* Startup Update Notification Toast */}
-      {updateNotification && (
-        <UpdateToast
-          update={updateNotification}
-          onClose={() => setUpdateNotification(null)}
-          onViewUpdate={(url) => {
-            void appAdapter.openURL(url);
-            setUpdateNotification(null);
-          }}
-        />
+      {/* Toast Notification Container */}
+      {(updateNotification ||
+        (showOfflineToast && offlineSourcesCount > 0 && !selectedCollectionPath && !selectedLibraryID)) && (
+        <div className="fixed bottom-5 right-5 z-50 flex flex-col-reverse gap-2.5 pointer-events-none items-end max-w-[calc(100vw-2.5rem)]">
+          {updateNotification && (
+            <UpdateToast
+              update={updateNotification}
+              onClose={() => setUpdateNotification(null)}
+              onViewUpdate={(url) => {
+                void appAdapter.openURL(url);
+                setUpdateNotification(null);
+              }}
+            />
+          )}
+
+          {showOfflineToast && offlineSourcesCount > 0 && !selectedCollectionPath && !selectedLibraryID && (
+            <OfflineToast
+              offlineSourcesCount={offlineSourcesCount}
+              showOffline={showOffline}
+              isRescanning={scanLibraryMutation.isPending}
+              onRescan={() => scanLibraryMutation.mutate()}
+              onToggleShowOffline={() => setShowOffline((prev) => !prev)}
+              onClose={() => setShowOfflineToast(false)}
+            />
+          )}
+        </div>
       )}
     </main>
   );

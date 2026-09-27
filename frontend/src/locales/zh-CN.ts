@@ -212,6 +212,9 @@ export const zhCN = {
     showOffline: "显示离线书籍",
     hideOffline: "隐藏离线书籍",
     offlineTag: "离线",
+    offlinePillSingle: "1 个目录离线",
+    offlinePillMultiple: "{{count}} 个目录离线",
+    offlineToastTitle: "目录离线提醒",
   },
   reader: {
     scrollMode: "卷轴模式",
