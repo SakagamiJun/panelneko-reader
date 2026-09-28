@@ -3,7 +3,7 @@
   <h1>PANELNEKO READER</h1>
   <p><strong>A Modern, Minimalist, and High-Performance Offline Manga Reader</strong></p>
   <img alt="Go" src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go" />
-  <img alt="Wails" src="https://img.shields.io/badge/Framework-Wails_v2-ED2024?style=flat-square" />
+  <img alt="Wails" src="https://img.shields.io/badge/Framework-Wails_v3-ED2024?style=flat-square" />
   <img alt="React" src="https://img.shields.io/badge/Frontend-React-61DAFB?style=flat-square&logo=react&logoColor=black" />
   <img alt="i18n" src="https://img.shields.io/badge/i18n-zh--Hans%20%7C%20en%20%7C%20ja-34C759?style=flat-square" />
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" />
@@ -18,7 +18,7 @@
 
 ---
 
-PanelNeko is a cross-platform desktop application engineered exclusively for local manga, comics, and artbooks. Built with Go, Wails v2, and React, it delivers a premium, zero-distraction reading experience wrapped in a cutting-edge glassmorphism aesthetic.
+PanelNeko is a cross-platform desktop application engineered exclusively for local manga, comics, and artbooks. Built with Go, Wails v3, and React, it delivers a premium, zero-distraction reading experience wrapped in a cutting-edge glassmorphism aesthetic.
 
 <div align="center">
   <img src="./Design.webp" alt="Application Interface" width="100%" />
@@ -43,7 +43,7 @@ PanelNeko strips away unnecessary bloat in favor of native speed, extreme focus,
 
 Built on a modern stack designed for speed and maintainability:
 
-* **Core Backend:** [Go](https://go.dev/) + [Wails v2](https://wails.io/)
+* **Core Backend:** [Go](https://go.dev/) + [Wails v3](https://v3.wails.io/)
 * **Database:** [SQLite](https://www.sqlite.org/) (via `go-sqlite3`)
 * **Frontend Framework:** [React](https://reactjs.org/) + [TypeScript](https://www.typescriptlang.org/)
 * **State & Data Fetching:** [TanStack Query](https://tanstack.com/query/latest)
@@ -64,7 +64,7 @@ brew install panelneko
 
 * [Go](https://go.dev/doc/install) (1.21 or later)
 * [Bun](https://bun.sh/)
-* [Wails CLI](https://wails.io/docs/gettingstarted/installation)
+* [Wails v3 CLI](https://v3.wails.io/)
 
 ### Local Setup
 
@@ -73,7 +73,7 @@ Clone the repository and spin up the development server:
 ```bash
 git clone https://github.com/SakagamiJun/panelneko-reader.git
 cd panelneko-reader
-wails dev
+wails3 dev
 ```
 
 ### Production Build
@@ -81,7 +81,7 @@ wails dev
 To compile a highly optimized, standalone executable for your target architecture:
 
 ```bash
-wails build
+wails3 task build
 ```
 
 Compiled binaries will be generated in the `build/bin` directory.

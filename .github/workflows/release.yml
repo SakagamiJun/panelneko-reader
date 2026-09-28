@@ -131,24 +131,20 @@ jobs:
         include:
           - name: linux-amd64
             os: ubuntu-24.04
-            platform: linux/amd64
+            arch: amd64
             archive: panelneko-reader-linux-amd64.tar.gz
-            wails_args: "-tags webkit2_41"
           - name: macos-amd64
             os: macos-latest
-            platform: darwin/amd64
+            arch: amd64
             archive: panelneko-reader-macos-amd64.zip
-            wails_args: ""
           - name: macos-arm64
             os: macos-latest
-            platform: darwin/arm64
+            arch: arm64
             archive: panelneko-reader-macos-arm64.zip
-            wails_args: ""
           - name: windows-amd64
             os: windows-latest
-            platform: windows/amd64
+            arch: amd64
             archive: panelneko-reader-windows-amd64.zip
-            wails_args: ""
 
     steps:
       - name: Checkout
@@ -187,18 +183,21 @@ jobs:
       - name: Install Wails CLI
         shell: bash
         run: |
-          WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
-          go install "github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}"
+          WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}"
 
-      - name: Build application
-        if: runner.os != 'macOS'
-        run: wails build -clean -platform ${{ matrix.platform }} ${{ matrix.wails_args }}
+      - name: Build application (Linux)
+        if: runner.os == 'Linux'
+        run: wails3 task linux:build ARCH=${{ matrix.arch }}
 
       - name: Build application (macOS)
         if: runner.os == 'macOS'
-        env:
-          CGO_LDFLAGS: "-framework UniformTypeIdentifiers -mmacosx-version-min=10.13"
-        run: wails build -clean -platform ${{ matrix.platform }} ${{ matrix.wails_args }}
+        run: wails3 task darwin:package ARCH=${{ matrix.arch }}
+
+      - name: Build application (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: wails3 task windows:build ARCH=${{ matrix.arch }}
 
       - name: Package Linux artifact
         if: runner.os == 'Linux'

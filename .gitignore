@@ -7,8 +7,9 @@
 ehthumbs.db
 Thumbs.db
 
-# Wails
+# Wails & Task
 build/bin/
+.task/
 
 # Frontend (Node.js)
 node_modules/

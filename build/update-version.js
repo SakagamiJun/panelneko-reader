@@ -23,7 +23,21 @@ console.log(`Updating version to: ${version}`);
 
 // Paths relative to project root (assuming script runs from project root)
 const wailsPath = path.join(__dirname, '..', 'wails.json');
+const configYmlPath = path.join(__dirname, 'config.yml');
 const pkgPath = path.join(__dirname, '..', 'frontend', 'package.json');
+
+// Update build/config.yml
+if (fs.existsSync(configYmlPath)) {
+  try {
+    let content = fs.readFileSync(configYmlPath, 'utf8');
+    content = content.replace(/version:\s*["'][^"']+["']/, `version: "${version}"`);
+    fs.writeFileSync(configYmlPath, content, 'utf8');
+    console.log(`Successfully updated build/config.yml to version ${version}`);
+  } catch (err) {
+    console.error(`Error updating build/config.yml: ${err.message}`);
+    process.exit(1);
+  }
+}
 
 // Update wails.json
 if (fs.existsSync(wailsPath)) {
@@ -49,9 +63,6 @@ if (fs.existsSync(wailsPath)) {
     console.error(`Error updating wails.json: ${err.message}`);
     process.exit(1);
   }
-} else {
-  console.error(`wails.json not found at ${wailsPath}`);
-  process.exit(1);
 }
 
 // Update frontend/package.json

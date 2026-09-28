@@ -3,7 +3,7 @@
   <h1>PANELNEKO READER</h1>
   <p><strong>一款极简、现代且高性能的本地漫画阅读器</strong></p>
   <img alt="Go" src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go" />
-  <img alt="Wails" src="https://img.shields.io/badge/Framework-Wails_v2-ED2024?style=flat-square" />
+  <img alt="Wails" src="https://img.shields.io/badge/Framework-Wails_v3-ED2024?style=flat-square" />
   <img alt="React" src="https://img.shields.io/badge/Frontend-React-61DAFB?style=flat-square&logo=react&logoColor=black" />
   <img alt="i18n" src="https://img.shields.io/badge/i18n-zh--Hans%20%7C%20en%20%7C%20ja-34C759?style=flat-square" />
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" />
@@ -18,7 +18,7 @@
 
 ---
 
-PanelNeko 是一款专为本地漫画与画集深度定制的跨平台桌面阅读器。本项目基于 Go、Wails v2 与 React 构建，摒弃了所有繁杂的冗余设计，致力于在极致的性能表现下，为您提供沉浸式的无广告阅读体验以及前沿的磨砂玻璃视觉美学。
+PanelNeko 是一款专为本地漫画与画集深度定制的跨平台桌面阅读器。本项目基于 Go、Wails v3 与 React 构建，摒弃了所有繁杂的冗余设计，致力于在极致的性能表现下，为您提供沉浸式的无广告阅读体验以及前沿的磨砂玻璃视觉美学。
 
 <div align="center">
   <img src="./Design.webp" alt="Application Interface" width="100%" />
@@ -43,7 +43,7 @@ PanelNeko 聚焦于性能优化与视觉表现，将最纯粹的阅读体验交�
 
 建立在旨在提供极速编译与长期可维护性的现代技术栈之上：
 
-* **核心后端:** [Go](https://go.dev/) + [Wails v2](https://wails.io/)
+* **核心后端:** [Go](https://go.dev/) + [Wails v3](https://v3.wails.io/)
 * **本地数据:** [SQLite](https://www.sqlite.org/) (基于 `go-sqlite3`)
 * **前端框架:** [React](https://reactjs.org/) + [TypeScript](https://www.typescriptlang.org/)
 * **状态调度:** [TanStack Query](https://tanstack.com/query/latest)
@@ -64,7 +64,7 @@ brew install panelneko
 
 * [Go](https://go.dev/doc/install) (1.21 或更高版本)
 * [Bun](https://bun.sh/)
-* [Wails CLI](https://wails.io/docs/gettingstarted/installation)
+* [Wails v3 CLI](https://v3.wails.io/)
 
 ### 唤醒本地环境
 
@@ -73,7 +73,7 @@ brew install panelneko
 ```bash
 git clone https://github.com/SakagamiJun/panelneko-reader.git
 cd panelneko-reader
-wails dev
+wails3 dev
 ```
 
 ### 生产级编译
@@ -81,7 +81,7 @@ wails dev
 针对您的目标系统架构，编译并生成经过深度优化的独立可执行程序：
 
 ```bash
-wails build
+wails3 task build
 ```
 
 编译产出物将被统一放置于 `build/bin` 目录中。
