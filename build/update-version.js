@@ -39,6 +39,34 @@ if (fs.existsSync(configYmlPath)) {
   }
 }
 
+// Update build/darwin/Info.plist
+const plistPath = path.join(__dirname, 'darwin', 'Info.plist');
+if (fs.existsSync(plistPath)) {
+  try {
+    let plist = fs.readFileSync(plistPath, 'utf8');
+    plist = plist.replace(/(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]*(<\/string>)/, `$1${version}$2`);
+    plist = plist.replace(/(<key>CFBundleVersion<\/key>\s*<string>)[^<]*(<\/string>)/, `$1${version}$2`);
+    fs.writeFileSync(plistPath, plist, 'utf8');
+    console.log(`Successfully updated build/darwin/Info.plist to version ${version}`);
+  } catch (err) {
+    console.error(`Error updating build/darwin/Info.plist: ${err.message}`);
+  }
+}
+
+// Update build/windows/info.json
+const winInfoPath = path.join(__dirname, 'windows', 'info.json');
+if (fs.existsSync(winInfoPath)) {
+  try {
+    const winInfo = JSON.parse(fs.readFileSync(winInfoPath, 'utf8'));
+    if (winInfo.fixed) winInfo.fixed.file_version = version;
+    if (winInfo.info?.['0409']) winInfo.info['0409'].ProductVersion = version;
+    fs.writeFileSync(winInfoPath, JSON.stringify(winInfo, null, '\t') + '\n');
+    console.log(`Successfully updated build/windows/info.json to version ${version}`);
+  } catch (err) {
+    console.error(`Error updating build/windows/info.json: ${err.message}`);
+  }
+}
+
 // Update wails.json
 if (fs.existsSync(wailsPath)) {
   try {

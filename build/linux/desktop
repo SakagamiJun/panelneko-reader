@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=PanelNeko Reader
+Comment=A modern, high-performance manga and comic reader.
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/panelneko-reader %u
+Terminal=false
+Type=Application
+Icon=panelneko-reader
+Categories=Utility;
+StartupWMClass=panelneko-reader
+
+ 

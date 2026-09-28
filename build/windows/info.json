@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "PanelNeko",
+			"FileDescription": "A modern, high-performance manga and comic reader.",
+			"LegalCopyright": "Copyright © 2026 (MIT License)",
+			"ProductName": "PanelNeko Reader",
+			"Comments": "Built using Wails v3"
+		}
+	}
+}
