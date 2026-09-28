@@ -19,6 +19,9 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "PanelNeko Reader",
 		Description: "A modern, high-performance manga and comic reader.",
+		Flags: map[string]any{
+			"wails": true,
+		},
 		Services: []application.Service{
 			application.NewService(appService),
 		},

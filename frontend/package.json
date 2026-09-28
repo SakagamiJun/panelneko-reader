@@ -12,6 +12,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.101.1",
     "@tanstack/react-virtual": "^3.14.3",
+    "@wailsio/runtime": "3.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "i18next": "^26.3.2",

@@ -1,32 +1,43 @@
-export function getWailsApp() {
-  if (typeof window === "undefined") {
-    return null;
-  }
+import * as AppBindings from "@bindings/github.com/sakagamijun/panelneko-reader/app";
+import { Events } from "@wailsio/runtime";
 
-  return (window as Window & {
-    go?: {
-      main?: {
-        App?: Record<string, (...args: unknown[]) => Promise<unknown>>;
-      };
-    };
-  }).go?.main?.App ?? null;
+export function isWailsEnvironment(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const win = window as any;
+  if (win._wails?.flags?.wails === true) {
+    return true;
+  }
+  if (win.webkit?.messageHandlers?.external?.postMessage || win.chrome?.webview?.postMessage || win.wails?.invoke) {
+    return true;
+  }
+  return false;
+}
+
+export function getWailsApp() {
+  return isWailsEnvironment() ? AppBindings : null;
 }
 
 export function getWailsRuntime() {
-  if (typeof window === "undefined") {
+  if (!isWailsEnvironment()) {
     return null;
   }
-
-  return (window as Window & {
-    runtime?: {
-      EventsOn?: (eventName: string, callback: (payload: unknown) => void) => void | (() => void);
-      EventsOff?: (eventName: string) => void;
-      EventsEmit?: (eventName: string, payload: unknown) => void;
-    };
-  }).runtime ?? null;
+  return {
+    EventsOn: (eventName: string, callback: (payload: unknown) => void) => {
+      return Events.On(eventName as any, (ev: any) => callback(ev.data));
+    },
+    EventsOff: (eventName: string) => {
+      Events.Off(eventName as any);
+    },
+    EventsEmit: (eventName: string, payload: unknown) => {
+      void Events.Emit(eventName as any, payload as any);
+    },
+  };
 }
 
 export function emitRuntimeEvent(eventName: string, payload: unknown) {
-  getWailsRuntime()?.EventsEmit?.(eventName, payload);
+  if (isWailsEnvironment()) {
+    void Events.Emit(eventName as any, payload as any);
+  }
 }
-
