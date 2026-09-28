@@ -1,12 +1,12 @@
 module github.com/sakagamijun/panelneko-reader
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.52
-	github.com/wailsapp/wails/v2 v2.15.0
-	golang.org/x/image v0.41.0
-	golang.org/x/sync v0.21.0
+	github.com/wailsapp/wails/v2 v2.16.0
+	golang.org/x/image v0.46.0
+	golang.org/x/sync v0.23.0
 )
 
 require (
@@ -36,6 +36,6 @@ require (
 	github.com/wailsapp/mimetype v1.4.1 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 )
