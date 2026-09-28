@@ -19,7 +19,7 @@ import (
 	"github.com/sakagamijun/panelneko-reader/internal/library"
 	"github.com/sakagamijun/panelneko-reader/internal/settings"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed wails.json
@@ -162,8 +162,8 @@ func (a *App) OpenURL(targetURL string) error {
 	if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
 		return fmt.Errorf("invalid url scheme: %s", targetURL)
 	}
-	if a.ctx != nil {
-		runtime.BrowserOpenURL(a.ctx, targetURL)
+	if wailsApp := application.Get(); wailsApp != nil {
+		return wailsApp.Browser.OpenURL(targetURL)
 	}
 	return nil
 }
@@ -181,7 +181,7 @@ func NewApp() *App {
 	return &App{}
 }
 
-func (a *App) startup(ctx context.Context) {
+func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	a.ctx = ctx
 	a.bootErr = a.bootstrap()
 	if a.bootErr == nil {
@@ -191,6 +191,11 @@ func (a *App) startup(ctx context.Context) {
 			})
 		}()
 	}
+	return nil
+}
+
+func (a *App) startup(ctx context.Context) {
+	_ = a.ServiceStartup(ctx, application.ServiceOptions{})
 }
 
 func (a *App) bootstrap() error {
@@ -258,9 +263,17 @@ func (a *App) SelectDirectory() (string, error) {
 		return "", err
 	}
 
-	selected, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Manga Library Directory",
-	})
+	wailsApp := application.Get()
+	if wailsApp == nil {
+		return "", fmt.Errorf("wails application instance not available")
+	}
+
+	dialog := wailsApp.Dialog.OpenFile().
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		SetTitle("Select Manga Library Directory")
+
+	selected, err := dialog.PromptForSingleSelection()
 	if err != nil {
 		return "", err
 	}
@@ -870,11 +883,9 @@ func (a *App) assetHandler() http.Handler {
 }
 
 func (a *App) emit(event string, payload any) {
-	if a.ctx == nil {
-		return
+	if wailsApp := application.Get(); wailsApp != nil {
+		wailsApp.Event.Emit(event, payload)
 	}
-
-	runtime.EventsEmit(a.ctx, event, payload)
 }
 
 func (a *App) ensureReady() error {

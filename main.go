@@ -6,28 +6,24 @@ import (
 	"net/http"
 
 	"github.com/sakagamijun/panelneko-reader/internal/library"
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
-	app := NewApp()
-	assetHandler := app.assetHandler()
+	appService := NewApp()
+	assetHandler := appService.assetHandler()
 
-	if err := wails.Run(&options.App{
-		Title:     "PanelNeko Reader",
-		Width:     1440,
-		Height:    960,
-		MinWidth:  1180,
-		MinHeight: 760,
-		AssetServer: &assetserver.Options{
-			Assets:  assets,
-			Handler: assetHandler,
+	app := application.New(application.Options{
+		Name:        "PanelNeko Reader",
+		Description: "A modern, high-performance manga and comic reader.",
+		Services: []application.Service{
+			application.NewService(appService),
+		},
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
 			Middleware: func(next http.Handler) http.Handler {
 				return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 					if library.IsLibraryAssetRequest(request.URL.Path) {
@@ -39,18 +35,25 @@ func main() {
 				})
 			},
 		},
-		BackgroundColour: &options.RGBA{R: 243, G: 247, B: 252, A: 1},
-		Mac: &mac.Options{
-			TitleBar: mac.TitleBarHidden(),
-			Preferences: &mac.Preferences{
-				FullscreenEnabled: mac.Enabled,
-			},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
-		OnStartup: app.startup,
-		Bind: []interface{}{
-			app,
+	})
+
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:            "PanelNeko Reader",
+		Width:            1440,
+		Height:           960,
+		MinWidth:         1180,
+		MinHeight:        760,
+		BackgroundColour: application.NewRGB(243, 247, 252),
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBarHidden,
 		},
-	}); err != nil {
+		URL: "/",
+	})
+
+	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
 }
