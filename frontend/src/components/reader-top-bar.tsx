@@ -29,6 +29,7 @@ import type {
 } from "@/lib/contracts";
 import { useFullscreen, useHasTrafficLights } from "@/hooks/use-traffic-lights";
 import { cn } from "@/lib/utils";
+import { toggleWindowFullscreen } from "@/lib/runtime";
 
 interface ReaderTopBarProps {
   manifest: ReaderManifest;
@@ -138,11 +139,7 @@ export function ReaderTopBar({
   }, [chaptersOpen, jumpOpen, settingsOpen]);
 
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      void document.documentElement.requestFullscreen();
-    } else {
-      void document.exitFullscreen();
-    }
+    void toggleWindowFullscreen();
   };
 
   const handleJumpSubmit = (e: React.FormEvent) => {

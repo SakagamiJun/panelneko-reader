@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { isMacPlatform } from "@/lib/system";
+import { isWailsEnvironment } from "@/lib/runtime";
+import { Window as WailsWindow } from "@wailsio/runtime";
 
 function checkIsFullscreen(): boolean {
   if (typeof window === "undefined") {
@@ -32,15 +34,8 @@ export function useFullscreen(): boolean {
         setIsFullscreen(fs);
       }
 
-      // Check Wails runtime WindowIsFullscreen if available
-      const runtime = (
-        window as unknown as {
-          runtime?: { WindowIsFullscreen?: () => Promise<boolean> };
-        }
-      )?.runtime;
-      if (typeof runtime?.WindowIsFullscreen === "function") {
-        runtime
-          .WindowIsFullscreen()
+      if (isWailsEnvironment()) {
+        WailsWindow.IsFullscreen()
           .then((wailsFs) => {
             if (mounted && typeof wailsFs === "boolean") {
               setIsFullscreen(wailsFs);

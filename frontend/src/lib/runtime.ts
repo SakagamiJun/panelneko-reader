@@ -1,5 +1,5 @@
 import * as AppBindings from "@bindings/github.com/sakagamijun/panelneko-reader/app";
-import { Events } from "@wailsio/runtime";
+import { Events, Window as WailsWindow } from "@wailsio/runtime";
 
 export function isWailsEnvironment(): boolean {
   if (typeof window === "undefined") {
@@ -13,6 +13,45 @@ export function isWailsEnvironment(): boolean {
     return true;
   }
   return false;
+}
+
+export async function toggleWindowFullscreen(): Promise<void> {
+  if (isWailsEnvironment()) {
+    try {
+      await WailsWindow.ToggleFullscreen();
+      return;
+    } catch {
+      // Fallback to DOM fullscreen on failure
+    }
+  }
+
+  if (typeof document !== "undefined") {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+    } else {
+      await document.exitFullscreen();
+    }
+  }
+}
+
+export async function isWindowFullscreen(): Promise<boolean> {
+  if (isWailsEnvironment()) {
+    try {
+      return await WailsWindow.IsFullscreen();
+    } catch {
+      // Fallback
+    }
+  }
+
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  return Boolean(
+    document.fullscreenElement ||
+      (typeof window.matchMedia === "function" &&
+        window.matchMedia("(display-mode: fullscreen)").matches)
+  );
 }
 
 export function getWailsApp() {

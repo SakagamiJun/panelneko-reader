@@ -43,7 +43,10 @@ func main() {
 		},
 	})
 
+	app.Menu.SetApplicationMenu(application.DefaultApplicationMenu())
+
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "main",
 		Title:            "PanelNeko Reader",
 		Width:            1440,
 		Height:           960,
@@ -51,7 +54,8 @@ func main() {
 		MinHeight:        760,
 		BackgroundColour: application.NewRGB(243, 247, 252),
 		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBarHidden,
+			TitleBar:                     application.MacTitleBarHiddenInset,
+			DisableEscapeExitsFullscreen: true,
 		},
 		URL: "/",
 	})

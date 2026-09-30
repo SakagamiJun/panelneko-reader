@@ -2,6 +2,8 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useFullscreen, useHasTrafficLights } from "./use-traffic-lights";
 import * as systemModule from "@/lib/system";
+import * as runtimeModule from "@/lib/runtime";
+import { Window as WailsWindow } from "@wailsio/runtime";
 
 describe("useFullscreen and useHasTrafficLights", () => {
   const originalFullscreenElement = document.fullscreenElement;
@@ -50,11 +52,9 @@ describe("useFullscreen and useHasTrafficLights", () => {
     expect(result.current).toBe(false);
   });
 
-  it("detects fullscreen from Wails runtime WindowIsFullscreen if available", async () => {
-    const windowIsFullscreenMock = vi.fn().mockResolvedValue(true);
-    (window as unknown as { runtime: { WindowIsFullscreen: () => Promise<boolean> } }).runtime = {
-      WindowIsFullscreen: windowIsFullscreenMock,
-    };
+  it("detects fullscreen from Wails runtime Window.IsFullscreen if available", async () => {
+    vi.spyOn(runtimeModule, "isWailsEnvironment").mockReturnValue(true);
+    vi.spyOn(WailsWindow, "IsFullscreen").mockResolvedValue(true);
 
     const { result } = renderHook(() => useFullscreen());
 
@@ -64,7 +64,6 @@ describe("useFullscreen and useHasTrafficLights", () => {
     });
 
     expect(result.current).toBe(true);
-    delete (window as unknown as { runtime?: unknown }).runtime;
   });
 
   it("useHasTrafficLights returns true on Mac when not in fullscreen", () => {
