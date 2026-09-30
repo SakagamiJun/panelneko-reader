@@ -80,9 +80,35 @@ export default function App() {
       void queryClient.invalidateQueries({ queryKey: ["library"] });
     });
 
+    const handleIncomingPaths = async (payload: unknown) => {
+      const paths = Array.isArray(payload) ? (payload as string[]) : [];
+      if (paths.length === 0) return;
+      for (const p of paths) {
+        try {
+          const name = p.split(/[/\\]/).pop() || p;
+          await appAdapter.addLibrarySource({
+            id: `src-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            name,
+            path: p,
+            type: "local",
+            enabled: true,
+          });
+        } catch {
+          // Ignore duplicate or unreadable paths silently
+        }
+      }
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      void queryClient.invalidateQueries({ queryKey: ["library"] });
+    };
+
+    const offFilesDropped = appAdapter.subscribe(EVENTS.FILES_DROPPED, handleIncomingPaths);
+    const offFilesOpened = appAdapter.subscribe(EVENTS.FILES_OPENED, handleIncomingPaths);
+
     return () => {
       offSettings();
       offLibrary();
+      offFilesDropped();
+      offFilesOpened();
     };
   }, [queryClient]);
 
@@ -506,7 +532,10 @@ export default function App() {
   };
 
   return (
-    <main className="h-screen overflow-hidden bg-background text-foreground flex flex-col antialiased select-none">
+    <main
+      className="h-screen overflow-hidden bg-background text-foreground flex flex-col antialiased select-none"
+      data-file-drop-target="true"
+    >
       {!selectedLibraryID && (
         <AppHeader
           selectedCollectionPath={selectedCollectionPath}

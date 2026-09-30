@@ -121,4 +121,6 @@ export const EVENTS = {
   THEME_RESOLVED: "theme:resolved",
   LOCALE_RESOLVED: "locale:resolved",
   LIBRARY_UPDATED: "library:updated",
+  FILES_DROPPED: "files:dropped",
+  FILES_OPENED: "files:opened",
 } as const;

@@ -80,6 +80,11 @@ export enum LocaleMode {
     LocaleModeManual = "manual",
 };
 
+export interface LocaleResolvedPayload {
+    "mode": string;
+    "locale": string;
+}
+
 export interface ReaderChapter {
     "id": string;
     "title": string;
@@ -205,6 +210,11 @@ export enum ThemeMode {
     ThemeModeLight = "light",
     ThemeModeDark = "dark",
 };
+
+export interface ThemeResolvedPayload {
+    "mode": string;
+    "resolved": string;
+}
 
 export enum ThumbnailQuality {
     /**

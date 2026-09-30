@@ -5,12 +5,23 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 	"github.com/sakagamijun/panelneko-reader/internal/library"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+func init() {
+	application.RegisterEvent[contracts.AppSettings](contracts.EventSettingsUpdated)
+	application.RegisterEvent[application.Void](contracts.EventLibraryUpdated)
+	application.RegisterEvent[contracts.ThemeResolvedPayload](contracts.EventThemeResolved)
+	application.RegisterEvent[contracts.LocaleResolvedPayload](contracts.EventLocaleResolved)
+	application.RegisterEvent[[]string](contracts.EventFilesDropped)
+	application.RegisterEvent[[]string](contracts.EventFilesOpened)
+}
 
 func main() {
 	appService := NewApp()
@@ -21,6 +32,17 @@ func main() {
 		Description: "A modern, high-performance manga and comic reader.",
 		Flags: map[string]any{
 			"wails": true,
+		},
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: "com.sakagamijun.panelneko",
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				if win, ok := application.Get().Window.GetByName("main"); ok {
+					win.Focus()
+				}
+				if len(data.Args) > 1 {
+					application.Get().Event.Emit(contracts.EventFilesOpened, data.Args[1:])
+				}
+			},
 		},
 		Services: []application.Service{
 			application.NewService(appService),
@@ -43,9 +65,19 @@ func main() {
 		},
 	})
 
+	app.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(event *application.ApplicationEvent) {
+		opened := event.Context().OpenedFiles()
+		if len(opened) == 0 && event.Context().Filename() != "" {
+			opened = []string{event.Context().Filename()}
+		}
+		if len(opened) > 0 {
+			application.Get().Event.Emit(contracts.EventFilesOpened, opened)
+		}
+	})
+
 	app.Menu.SetApplicationMenu(application.DefaultApplicationMenu())
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
+	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            "PanelNeko Reader",
 		Width:            1440,
@@ -53,11 +85,19 @@ func main() {
 		MinWidth:         1180,
 		MinHeight:        760,
 		BackgroundColour: application.NewRGB(243, 247, 252),
+		EnableFileDrop:   true,
 		Mac: application.MacWindow{
 			TitleBar:                     application.MacTitleBarHiddenInset,
 			DisableEscapeExitsFullscreen: true,
 		},
 		URL: "/",
+	})
+
+	win.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		files := event.Context().DroppedFiles()
+		if len(files) > 0 {
+			application.Get().Event.Emit(contracts.EventFilesDropped, files)
+		}
 	})
 
 	if err := app.Run(); err != nil {

@@ -20,9 +20,11 @@ export type {
     AppVersionInfo,
     LibraryManga,
     LibrarySource,
+    LocaleResolvedPayload,
     ReaderChapter,
     ReaderManifest,
     ReaderPage,
     ReaderProgress,
+    ThemeResolvedPayload,
     UpdateCheckResult
 } from "./models.js";

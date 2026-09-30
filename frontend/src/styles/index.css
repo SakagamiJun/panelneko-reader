@@ -57,6 +57,12 @@ body {
   height: 6px;
 }
 
+/* Wails v3 Native File Drop Target Active State */
+[data-file-drop-target].file-drop-target-active {
+  outline: 2px dashed rgb(var(--primary));
+  outline-offset: -4px;
+}
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
