@@ -194,6 +194,13 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 	return nil
 }
 
+func (a *App) ServiceShutdown() error {
+	if a.store != nil {
+		return a.store.Close()
+	}
+	return nil
+}
+
 func (a *App) bootstrap() error {
 	dataDir, err := os.UserConfigDir()
 	if err != nil {

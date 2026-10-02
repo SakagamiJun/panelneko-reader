@@ -968,3 +968,17 @@ func TestAppDuplicateMergeMode(t *testing.T) {
 		t.Fatalf("expected local chapter Vol 01 to be loaded via fallback, got %v", manifestFallback.Chapters)
 	}
 }
+
+func TestAppServiceShutdown(t *testing.T) {
+	app, cleanup := newAssetTestApp(t, t.TempDir())
+	defer cleanup()
+
+	if err := app.ServiceShutdown(); err != nil {
+		t.Fatalf("ServiceShutdown failed: %v", err)
+	}
+	// Calling shutdown on nil store should also be safe
+	appNil := &App{}
+	if err := appNil.ServiceShutdown(); err != nil {
+		t.Fatalf("ServiceShutdown on nil store failed: %v", err)
+	}
+}
