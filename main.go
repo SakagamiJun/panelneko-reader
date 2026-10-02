@@ -30,9 +30,6 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "PanelNeko Reader",
 		Description: "A modern, high-performance manga and comic reader.",
-		Flags: map[string]any{
-			"wails": true,
-		},
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.panelneko.reader",
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
