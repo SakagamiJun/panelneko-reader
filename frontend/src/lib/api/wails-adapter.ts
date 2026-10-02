@@ -10,7 +10,7 @@ import type {
 import type { AppAdapter } from "@/lib/api/adapter";
 import { isWailsEnvironment } from "@/lib/runtime";
 import * as App from "@bindings/github.com/sakagamijun/panelneko-reader/app";
-import { Events } from "@wailsio/runtime";
+import { Browser, Events } from "@wailsio/runtime";
 
 export class WailsAdapter implements AppAdapter {
   readonly mode = "wails" as const;
@@ -74,10 +74,16 @@ export class WailsAdapter implements AppAdapter {
 
   async openURL(url: string): Promise<void> {
     if (isWailsEnvironment()) {
-      await App.OpenURL(url);
-    } else {
-      window.open(url, "_blank");
+      try {
+        await Browser.OpenURL(url);
+        return;
+      } catch {
+        // Fallback to App.OpenURL if Browser.OpenURL fails
+        await App.OpenURL(url);
+        return;
+      }
     }
+    window.open(url, "_blank");
   }
 
   async getThumbnailCacheSize(): Promise<number> {

@@ -194,10 +194,6 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 	return nil
 }
 
-func (a *App) startup(ctx context.Context) {
-	_ = a.ServiceStartup(ctx, application.ServiceOptions{})
-}
-
 func (a *App) bootstrap() error {
 	dataDir, err := os.UserConfigDir()
 	if err != nil {
@@ -482,6 +478,10 @@ func (a *App) OpenDirectory(mangaID string) error {
 	dirPath, err := library.ResolveDirectoryPathWithSources(a.getActiveSources(), mangaID)
 	if err != nil {
 		return err
+	}
+
+	if wailsApp := application.Get(); wailsApp != nil {
+		return wailsApp.Browser.OpenFile(dirPath)
 	}
 
 	return library.FileOpener(dirPath)

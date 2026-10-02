@@ -34,7 +34,7 @@ func main() {
 			"wails": true,
 		},
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "com.sakagamijun.panelneko",
+			UniqueID: "com.panelneko.reader",
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				if win, ok := application.Get().Window.GetByName("main"); ok {
 					win.Focus()
@@ -44,6 +44,7 @@ func main() {
 				}
 			},
 		},
+		FileAssociations: []string{".cbz", ".cbr", ".zip"},
 		Services: []application.Service{
 			application.NewService(appService),
 		},

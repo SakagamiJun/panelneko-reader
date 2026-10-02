@@ -20,7 +20,8 @@ import {
   type UpdateCheckResult,
 } from "@/lib/contracts";
 import { i18n } from "@/lib/i18n";
-import { emitRuntimeEvent } from "@/lib/runtime";
+import { emitRuntimeEvent, isWailsEnvironment } from "@/lib/runtime";
+import { Events } from "@wailsio/runtime";
 import { resolveLocale, resolveTheme } from "@/lib/system";
 import { cn } from "@/lib/utils";
 
@@ -163,19 +164,41 @@ export default function App() {
     });
 
     applyTheme();
+
+    let offWailsTheme: (() => void) | undefined;
+    if (isWailsEnvironment()) {
+      try {
+        offWailsTheme = Events.On(Events.Types.Common.ThemeChanged as any, applyTheme);
+      } catch {
+        // Fallback silently if not in desktop mode
+      }
+    }
+
     if (!mediaQuery) {
-      return;
+      return () => {
+        if (offWailsTheme) offWailsTheme();
+      };
     }
 
     if (typeof mediaQuery.addEventListener === "function") {
       mediaQuery.addEventListener("change", applyTheme);
-      return () => mediaQuery.removeEventListener("change", applyTheme);
+      return () => {
+        mediaQuery.removeEventListener("change", applyTheme);
+        if (offWailsTheme) offWailsTheme();
+      };
     }
 
     if (typeof mediaQuery.addListener === "function") {
       mediaQuery.addListener(applyTheme);
-      return () => mediaQuery.removeListener(applyTheme);
+      return () => {
+        mediaQuery.removeListener(applyTheme);
+        if (offWailsTheme) offWailsTheme();
+      };
     }
+
+    return () => {
+      if (offWailsTheme) offWailsTheme();
+    };
   }, [settingsQuery.data]);
 
   useEffect(() => {

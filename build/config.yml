@@ -13,6 +13,24 @@ info:
   comments: "Built using Wails v3"
   version: "0.1.0"
 
+# File Associations
+fileAssociations:
+  - ext: cbz
+    name: Comic Book ZIP
+    description: Comic Book Archive
+    iconName: icons
+    role: Viewer
+  - ext: cbr
+    name: Comic Book RAR
+    description: Comic Book RAR Archive
+    iconName: icons
+    role: Viewer
+  - ext: zip
+    name: ZIP Archive
+    description: ZIP Archive
+    iconName: icons
+    role: Viewer
+
 # Dev mode configuration
 dev_mode:
   root_path: .

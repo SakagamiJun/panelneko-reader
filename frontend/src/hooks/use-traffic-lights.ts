@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { isMacPlatform } from "@/lib/system";
 import { isWailsEnvironment } from "@/lib/runtime";
-import { Window as WailsWindow } from "@wailsio/runtime";
+import { Events, Window as WailsWindow } from "@wailsio/runtime";
 
 function checkIsFullscreen(): boolean {
   if (typeof window === "undefined") {
@@ -49,10 +49,28 @@ export function useFullscreen(): boolean {
     document.addEventListener("fullscreenchange", updateFullscreen);
     window.addEventListener("resize", updateFullscreen);
 
+    let offFs: (() => void) | undefined;
+    let offUnFs: (() => void) | undefined;
+
+    if (isWailsEnvironment()) {
+      try {
+        offFs = Events.On(Events.Types.Common.WindowFullscreen as any, () => {
+          if (mounted) setIsFullscreen(true);
+        });
+        offUnFs = Events.On(Events.Types.Common.WindowUnFullscreen as any, () => {
+          if (mounted) setIsFullscreen(false);
+        });
+      } catch {
+        // Fallback silently if Common event types not supported in environment
+      }
+    }
+
     return () => {
       mounted = false;
       document.removeEventListener("fullscreenchange", updateFullscreen);
       window.removeEventListener("resize", updateFullscreen);
+      if (offFs) offFs();
+      if (offUnFs) offUnFs();
     };
   }, []);
 

@@ -229,10 +229,28 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 !macro wails.associateFiles
     ; Create file associations
     
+    !insertmacro APP_ASSOCIATE "cbz" "Comic Book ZIP" "Comic Book Archive" "$INSTDIR\icons.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\icons.ico"
+    
+    !insertmacro APP_ASSOCIATE "cbr" "Comic Book RAR" "Comic Book RAR Archive" "$INSTDIR\icons.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\icons.ico"
+    
+    !insertmacro APP_ASSOCIATE "zip" "ZIP Archive" "ZIP Archive" "$INSTDIR\icons.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\icons.ico"
+    
 !macroend
 
 !macro wails.unassociateFiles
     ; Delete app associations
+    
+    !insertmacro APP_UNASSOCIATE "cbz" "Comic Book ZIP"
+    Delete "$INSTDIR\icons.ico"
+    
+    !insertmacro APP_UNASSOCIATE "cbr" "Comic Book RAR"
+    Delete "$INSTDIR\icons.ico"
+    
+    !insertmacro APP_UNASSOCIATE "zip" "ZIP Archive"
+    Delete "$INSTDIR\icons.ico"
     
 !macroend
 
