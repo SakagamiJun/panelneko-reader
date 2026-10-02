@@ -22,32 +22,49 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-//go:embed wails.json
+//go:embed build/config.yml
 var wailsConfig embed.FS
 
-type wailsProjectConfig struct {
-	Info struct {
-		Version string `json:"version"`
-		Commit  string `json:"commit"`
-	} `json:"info"`
-}
-
 var buildCommit string
+
+func parseConfigInfo(data []byte) (version string, commit string) {
+	inInfo := false
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "info:" {
+			inInfo = true
+			continue
+		}
+		if inInfo {
+			if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && trimmed != "" {
+				inInfo = false
+				continue
+			}
+			if strings.HasPrefix(trimmed, "version:") {
+				val := strings.TrimSpace(strings.TrimPrefix(trimmed, "version:"))
+				version = strings.Trim(val, `"'`)
+			}
+			if strings.HasPrefix(trimmed, "commit:") {
+				val := strings.TrimSpace(strings.TrimPrefix(trimmed, "commit:"))
+				commit = strings.Trim(val, `"'`)
+			}
+		}
+	}
+	return version, commit
+}
 
 func (a *App) GetAppVersion() contracts.AppVersionInfo {
 	version := "0.1.0"
 	commit := buildCommit
 
-	data, err := wailsConfig.ReadFile("wails.json")
+	data, err := wailsConfig.ReadFile("build/config.yml")
 	if err == nil {
-		var cfg wailsProjectConfig
-		if json.Unmarshal(data, &cfg) == nil {
-			if cfg.Info.Version != "" {
-				version = cfg.Info.Version
-			}
-			if commit == "" && cfg.Info.Commit != "" {
-				commit = cfg.Info.Commit
-			}
+		cfgVer, cfgCommit := parseConfigInfo(data)
+		if cfgVer != "" {
+			version = cfgVer
+		}
+		if commit == "" && cfgCommit != "" {
+			commit = cfgCommit
 		}
 	}
 

@@ -22,7 +22,6 @@ const version = tag.startsWith('v') ? tag.slice(1) : tag;
 console.log(`Updating version to: ${version}`);
 
 // Paths relative to project root (assuming script runs from project root)
-const wailsPath = path.join(__dirname, '..', 'wails.json');
 const configYmlPath = path.join(__dirname, 'config.yml');
 const pkgPath = path.join(__dirname, '..', 'frontend', 'package.json');
 
@@ -31,8 +30,23 @@ if (fs.existsSync(configYmlPath)) {
   try {
     let content = fs.readFileSync(configYmlPath, 'utf8');
     content = content.replace(/version:\s*["'][^"']+["']/, `version: "${version}"`);
+    let commit = process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : '';
+    if (!commit) {
+      try {
+        commit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+      } catch {
+        commit = '';
+      }
+    }
+    if (commit) {
+      if (/commit:\s*["'][^"']*["']/.test(content)) {
+        content = content.replace(/commit:\s*["'][^"']*["']/, `commit: "${commit}"`);
+      } else {
+        content = content.replace(/(version:\s*["'][^"']+["'])/, `$1\n  commit: "${commit}"`);
+      }
+    }
     fs.writeFileSync(configYmlPath, content, 'utf8');
-    console.log(`Successfully updated build/config.yml to version ${version}`);
+    console.log(`Successfully updated build/config.yml to version ${version}${commit ? ` (${commit})` : ''}`);
   } catch (err) {
     console.error(`Error updating build/config.yml: ${err.message}`);
     process.exit(1);
@@ -67,31 +81,6 @@ if (fs.existsSync(winInfoPath)) {
   }
 }
 
-// Update wails.json
-if (fs.existsSync(wailsPath)) {
-  try {
-    const wailsConfig = JSON.parse(fs.readFileSync(wailsPath, 'utf8'));
-    if (wailsConfig.info) {
-      wailsConfig.info.version = version;
-      let commit = process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : '';
-      if (!commit) {
-        try {
-          commit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
-        } catch {
-          commit = '';
-        }
-      }
-      if (commit) {
-        wailsConfig.info.commit = commit;
-      }
-      fs.writeFileSync(wailsPath, JSON.stringify(wailsConfig, null, 2) + '\n');
-      console.log(`Successfully updated wails.json to version ${version}${commit ? ` (${commit})` : ''}`);
-    }
-  } catch (err) {
-    console.error(`Error updating wails.json: ${err.message}`);
-    process.exit(1);
-  }
-}
 
 // Update frontend/package.json
 if (fs.existsSync(pkgPath)) {

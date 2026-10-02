@@ -12,6 +12,7 @@ info:
   copyright: "Copyright © 2026 (MIT License)"
   comments: "Built using Wails v3"
   version: "0.1.0"
+  commit: "d40a9d2"
 
 # File Associations
 fileAssociations:
