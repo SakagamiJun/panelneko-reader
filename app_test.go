@@ -425,19 +425,6 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
-func TestAppOpenURLValidation(t *testing.T) {
-	app := &App{}
-	if err := app.OpenURL("javascript:alert(1)"); err == nil {
-		t.Fatal("expected error for non-http url")
-	}
-	if err := app.OpenURL("file:///etc/passwd"); err == nil {
-		t.Fatal("expected error for file url")
-	}
-	if err := app.OpenURL("https://github.com/SakagamiJun/panelneko-reader"); err != nil {
-		t.Fatalf("unexpected error for https url: %v", err)
-	}
-}
-
 func TestAppThumbnailCacheManagement(t *testing.T) {
 	libraryRoot := t.TempDir()
 	app, cleanup := newAssetTestApp(t, libraryRoot)

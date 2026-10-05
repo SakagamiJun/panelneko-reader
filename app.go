@@ -175,16 +175,6 @@ func (a *App) CheckForUpdates() (contracts.UpdateCheckResult, error) {
 	}, nil
 }
 
-func (a *App) OpenURL(targetURL string) error {
-	if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
-		return fmt.Errorf("invalid url scheme: %s", targetURL)
-	}
-	if wailsApp := application.Get(); wailsApp != nil {
-		return wailsApp.Browser.OpenURL(targetURL)
-	}
-	return nil
-}
-
 type App struct {
 	ctx      context.Context
 	bootErr  error
@@ -276,29 +266,6 @@ func (a *App) UpdateSettings(input contracts.AppSettings) (contracts.AppSettings
 	a.emit(contracts.EventSettingsUpdated, updated)
 
 	return updated, nil
-}
-
-func (a *App) SelectDirectory() (string, error) {
-	if err := a.ensureReady(); err != nil {
-		return "", err
-	}
-
-	wailsApp := application.Get()
-	if wailsApp == nil {
-		return "", fmt.Errorf("wails application instance not available")
-	}
-
-	dialog := wailsApp.Dialog.OpenFile().
-		CanChooseDirectories(true).
-		CanChooseFiles(false).
-		SetTitle("Select Manga Library Directory")
-
-	selected, err := dialog.PromptForSingleSelection()
-	if err != nil {
-		return "", err
-	}
-
-	return selected, nil
 }
 
 func (a *App) getActiveSources() []contracts.LibrarySource {

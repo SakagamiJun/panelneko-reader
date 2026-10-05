@@ -10,7 +10,7 @@ import type {
 import type { AppAdapter } from "@/lib/api/adapter";
 import { isWailsEnvironment } from "@/lib/runtime";
 import * as App from "@bindings/github.com/sakagamijun/panelneko-reader/app";
-import { Browser, Events } from "@wailsio/runtime";
+import { Browser, Dialogs, Events } from "@wailsio/runtime";
 
 export class WailsAdapter implements AppAdapter {
   readonly mode = "wails" as const;
@@ -51,8 +51,16 @@ export class WailsAdapter implements AppAdapter {
     };
   }
 
-  async selectDirectory() {
-    return ((await App.SelectDirectory()) ?? "") as string;
+  async selectDirectory(): Promise<string> {
+    if (isWailsEnvironment()) {
+      const selected = await Dialogs.OpenFile({
+        CanChooseDirectories: true,
+        CanChooseFiles: false,
+        Title: "Select Manga Library Directory",
+      });
+      return selected || "";
+    }
+    return "";
   }
 
   async togglePin(mangaID: string) {
@@ -74,14 +82,8 @@ export class WailsAdapter implements AppAdapter {
 
   async openURL(url: string): Promise<void> {
     if (isWailsEnvironment()) {
-      try {
-        await Browser.OpenURL(url);
-        return;
-      } catch {
-        // Fallback to App.OpenURL if Browser.OpenURL fails
-        await App.OpenURL(url);
-        return;
-      }
+      await Browser.OpenURL(url);
+      return;
     }
     window.open(url, "_blank");
   }

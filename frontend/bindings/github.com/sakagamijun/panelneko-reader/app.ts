@@ -49,10 +49,6 @@ export function OpenDirectory(mangaID: string): $CancellablePromise<void> {
     return $Call.ByID(4113378380, mangaID);
 }
 
-export function OpenURL(targetURL: string): $CancellablePromise<void> {
-    return $Call.ByID(3584934946, targetURL);
-}
-
 export function RelocateLibrarySource(sourceID: string, newPath: string): $CancellablePromise<contracts$0.AppSettings> {
     return $Call.ByID(3057094592, sourceID, newPath);
 }
@@ -67,10 +63,6 @@ export function RescanSource(sourceID: string): $CancellablePromise<void> {
 
 export function ScanLibrary(): $CancellablePromise<contracts$0.LibraryManga[] | null> {
     return $Call.ByID(1313264123);
-}
-
-export function SelectDirectory(): $CancellablePromise<string> {
-    return $Call.ByID(1735672136);
 }
 
 export function ToggleCollection(mangaID: string): $CancellablePromise<boolean> {
