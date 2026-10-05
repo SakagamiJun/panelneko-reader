@@ -87,6 +87,7 @@ body {
 
 .app-window-drag-region {
   --wails-draggable: drag;
+  --wails-non-client-region: caption;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -99,4 +100,5 @@ body {
 .app-window-drag-region [role="button"],
 .app-window-no-drag {
   --wails-draggable: no-drag;
+  --wails-non-client-region: none;
 }
