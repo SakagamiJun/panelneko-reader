@@ -60,4 +60,18 @@ describe("isMacPlatform", () => {
   it("returns boolean value without throwing", () => {
     expect(typeof isMacPlatform()).toBe("boolean");
   });
+
+  it("delegates to System.IsMac when in Wails environment", () => {
+    const win = window as any;
+    const originalWails = win._wails;
+    try {
+      win._wails = { environment: { OS: "darwin" } };
+      expect(isMacPlatform()).toBe(true);
+
+      win._wails = { environment: { OS: "windows" } };
+      expect(isMacPlatform()).toBe(false);
+    } finally {
+      win._wails = originalWails;
+    }
+  });
 });

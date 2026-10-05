@@ -1,4 +1,6 @@
 import type { AppSettings, Locale, ThemeMode } from "@/lib/contracts";
+import { isWailsEnvironment } from "@/lib/runtime";
+import { System } from "@wailsio/runtime";
 
 export function resolveLocale(settings: AppSettings, candidates?: ReadonlyArray<string>): Locale {
   if (settings.localeMode === "manual") {
@@ -27,6 +29,9 @@ export function resolveTheme(mode: ThemeMode, prefersDark: boolean) {
 }
 
 export function isMacPlatform(): boolean {
+  if (isWailsEnvironment()) {
+    return System.IsMac();
+  }
   if (typeof navigator === "undefined") {
     return false;
   }
