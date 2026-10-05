@@ -107,6 +107,8 @@ export interface AppVersionInfo {
   commit?: string;
 }
 
+import * as BindingsEvents from "@bindings/events";
+
 export interface UpdateCheckResult {
   hasUpdate: boolean;
   currentVersion: string;
@@ -117,10 +119,10 @@ export interface UpdateCheckResult {
 }
 
 export const EVENTS = {
-  SETTINGS_UPDATED: "settings:updated",
-  THEME_RESOLVED: "theme:resolved",
-  LOCALE_RESOLVED: "locale:resolved",
-  LIBRARY_UPDATED: "library:updated",
-  FILES_DROPPED: "files:dropped",
-  FILES_OPENED: "files:opened",
+  SETTINGS_UPDATED: BindingsEvents.SettingsUpdated,
+  THEME_RESOLVED: BindingsEvents.ThemeResolved,
+  LOCALE_RESOLVED: BindingsEvents.LocaleResolved,
+  LIBRARY_UPDATED: BindingsEvents.LibraryUpdated,
+  FILES_DROPPED: BindingsEvents.FilesDropped,
+  FILES_OPENED: BindingsEvents.FilesOpened,
 } as const;
