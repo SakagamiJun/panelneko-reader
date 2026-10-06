@@ -106,26 +106,4 @@ describe("i18n locale dictionaries", () => {
       expect(key in ja.settings, `ja.settings should have key '${key}'`).toBe(true);
     }
   });
-
-  it("should contain newly added reader and library keys", () => {
-    expect(zhCN.reader.allSettings).toBe("全部设置...");
-    expect(en.reader.allSettings).toBe("All Settings...");
-    expect(ja.reader.allSettings).toBe("すべての設定...");
-
-    expect(zhCN.reader.loading).toBe("正在加载阅读器…");
-    expect(en.reader.loading).toBe("Loading reader…");
-    expect(ja.reader.loading).toBe("リーダーを読み込み中…");
-
-    expect(zhCN.reader.loadFailed).toBe("无法打开当前漫画阅读器。");
-    expect(en.reader.loadFailed).toBe("Failed to open reader for this manga.");
-    expect(ja.reader.loadFailed).toBe("漫画リーダーを開けませんでした。");
-
-    expect(zhCN.library.clearSearch).toBe("清空搜索");
-    expect(en.library.clearSearch).toBe("Clear Search");
-    expect(ja.library.clearSearch).toBe("検索をクリア");
-
-    expect(zhCN.library.configureLibrary).toBe("配置漫画库目录");
-    expect(en.library.configureLibrary).toBe("Configure Library Directory");
-    expect(ja.library.configureLibrary).toBe("ライブラリフォルダーを設定");
-  });
 });

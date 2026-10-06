@@ -48,3 +48,15 @@ Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
   configurable: true,
   value: 1000,
 });
+
+if (typeof window !== "undefined") {
+  window.open = () => null;
+}
+
+const originalWarn = console.warn;
+console.warn = (...args: unknown[]) => {
+  if (typeof args[0] === "string" && args[0].includes("Browser Environment Detected")) {
+    return;
+  }
+  originalWarn(...args);
+};

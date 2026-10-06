@@ -641,11 +641,13 @@ func TestAppExportedMethodsWailsCompliance(t *testing.T) {
 	errType := reflect.TypeOf((*error)(nil)).Elem()
 
 	prohibitedExported := map[string]bool{
-		"AssetHandler": true,
-		"Bootstrap":    true,
-		"EnsureReady":  true,
-		"Emit":         true,
-		"Startup":      true,
+		"AssetHandler":    true,
+		"Bootstrap":       true,
+		"EnsureReady":     true,
+		"Emit":            true,
+		"Startup":         true,
+		"OpenURL":         true,
+		"SelectDirectory": true,
 	}
 
 	for i := 0; i < appType.NumMethod(); i++ {

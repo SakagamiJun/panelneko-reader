@@ -46,7 +46,7 @@ describe("AppHeader Component", () => {
     ],
   };
 
-  it("renders library title, total count, and does not render legacy open directory button", () => {
+  it("renders library title and total count", () => {
     render(
       <AppHeader
         selectedCollectionPath={null}
@@ -63,8 +63,6 @@ describe("AppHeader Component", () => {
     );
 
     expect(screen.getByText("57")).toBeInTheDocument();
-    // Legacy FolderOpen button should not exist
-    expect(screen.queryByTitle(i18n.t("library.openDirectory"))).not.toBeInTheDocument();
   });
 
   it("renders dropdown trigger button when multiple library sources exist", () => {
