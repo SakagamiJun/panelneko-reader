@@ -1,22 +1,12 @@
 import * as AppBindings from "@bindings/github.com/sakagamijun/panelneko-reader/app";
-import { Events, Window as WailsWindow } from "@wailsio/runtime";
+import { Clipboard, Events, Window as WailsWindow } from "@wailsio/runtime";
 
 export function isWailsEnvironment(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
   const win = window as any;
-  if (Boolean(win._wails?.environment?.OS)) {
-    return true;
-  }
-  if (
-    win.webkit?.messageHandlers?.external?.postMessage ||
-    win.chrome?.webview?.postMessage ||
-    win.wails?.invoke
-  ) {
-    return true;
-  }
-  return false;
+  return Boolean(win._wails?.environment?.OS);
 }
 
 export async function toggleWindowFullscreen(): Promise<void> {
@@ -65,5 +55,20 @@ export function getWailsApp() {
 export function emitRuntimeEvent(eventName: string, payload: unknown) {
   if (isWailsEnvironment()) {
     void Events.Emit(eventName as any, payload as any);
+  }
+}
+
+export async function copyToClipboard(text: string): Promise<void> {
+  if (isWailsEnvironment()) {
+    try {
+      await Clipboard.SetText(text);
+      return;
+    } catch {
+      // Fallback
+    }
+  }
+
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    await navigator.clipboard.writeText(text);
   }
 }

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act, cleanup } from "@testing-library/react"
 import "@/lib/i18n";
 import { UpdateToast } from "@/components/ui/update-toast";
 import type { UpdateCheckResult } from "@/lib/contracts";
+import * as runtimeModule from "@/lib/runtime";
 
 describe("UpdateToast Component", () => {
   const mockUpdate: UpdateCheckResult = {
@@ -104,6 +105,33 @@ describe("UpdateToast Component", () => {
     const copyBtn = screen.getByRole("button", { name: /复制命令|copy command/i });
     fireEvent.click(copyBtn);
     expect(writeTextMock).toHaveBeenCalledWith("brew upgrade panelneko");
+  });
+
+  it("calls copyToClipboard when copy button is clicked", async () => {
+    const handleClose = vi.fn();
+    const handleView = vi.fn();
+    const copySpy = vi.spyOn(runtimeModule, "copyToClipboard").mockResolvedValue(undefined);
+
+    try {
+      const homebrewUpdate: UpdateCheckResult = {
+        ...mockUpdate,
+        isHomebrew: true,
+      };
+
+      render(
+        <UpdateToast
+          update={homebrewUpdate}
+          onClose={handleClose}
+          onViewUpdate={handleView}
+        />
+      );
+
+      const copyBtn = screen.getByRole("button", { name: /复制命令|copy command/i });
+      fireEvent.click(copyBtn);
+      expect(copySpy).toHaveBeenCalledWith("brew upgrade panelneko");
+    } finally {
+      copySpy.mockRestore();
+    }
   });
 
   it("does not render Homebrew upgrade command when isHomebrew is false", () => {

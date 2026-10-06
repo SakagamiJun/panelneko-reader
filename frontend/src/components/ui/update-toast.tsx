@@ -4,6 +4,7 @@ import { ArrowUpCircle, Check, Copy, ExternalLink, Terminal, X } from "lucide-re
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { UpdateCheckResult } from "@/lib/contracts";
+import { copyToClipboard } from "@/lib/runtime";
 
 export interface UpdateToastProps {
   update: UpdateCheckResult;
@@ -28,7 +29,7 @@ export function UpdateToast({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText("brew upgrade panelneko");
+      await copyToClipboard("brew upgrade panelneko");
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveLocale, resolveTheme, isMacPlatform } from "@/lib/system";
+import { isWailsEnvironment, copyToClipboard } from "@/lib/runtime";
 
 describe("resolveLocale", () => {
   it("maps zh locales to zh-CN", () => {
@@ -73,5 +74,36 @@ describe("isMacPlatform", () => {
     } finally {
       win._wails = originalWails;
     }
+  });
+});
+
+describe("isWailsEnvironment", () => {
+  it("returns true only when window._wails.environment.OS is present", () => {
+    const win = window as any;
+    const orig = win._wails;
+    try {
+      win._wails = { environment: { OS: "darwin" } };
+      expect(isWailsEnvironment()).toBe(true);
+      win._wails = {};
+      expect(isWailsEnvironment()).toBe(false);
+      delete win._wails;
+      expect(isWailsEnvironment()).toBe(false);
+    } finally {
+      win._wails = orig;
+    }
+  });
+});
+
+describe("copyToClipboard", () => {
+  it("falls back to navigator.clipboard in browser environment", async () => {
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
+
+    await copyToClipboard("test text");
+    expect(writeTextMock).toHaveBeenCalledWith("test text");
   });
 });
