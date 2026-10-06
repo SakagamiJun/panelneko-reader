@@ -323,7 +323,6 @@ func (a *App) CheckForUpdates() (contracts.UpdateCheckResult, error) {
 }
 
 type App struct {
-	ctx             context.Context
 	bootErr         error
 	store           *store.SQLiteStore
 	settings        *settings.Service
@@ -339,7 +338,6 @@ func NewApp() *App {
 }
 
 func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
-	a.ctx = ctx
 	a.bootErr = a.bootstrap()
 	if a.bootErr == nil {
 		go func() {
@@ -621,8 +619,8 @@ func (a *App) OpenDirectory(mangaID string) error {
 		return err
 	}
 
-	if wailsApp := application.Get(); wailsApp != nil {
-		return wailsApp.Browser.OpenFile(dirPath)
+	if wailsApp := application.Get(); wailsApp != nil && wailsApp.Env != nil {
+		return wailsApp.Env.OpenFileManager(dirPath, false)
 	}
 
 	return library.FileOpener(dirPath)
