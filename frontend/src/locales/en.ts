@@ -53,6 +53,7 @@ export const en = {
     upToDate: "PanelNeko is up to date",
     updateAvailable: "New Version Available",
     updateAvailableHint: "New version {{version}} available (current: {{current}})",
+    updateAvailableHomebrewHint: "New version {{version}} available (current: {{current}}). Managed by Homebrew, run: brew upgrade panelneko",
     viewRelease: "View Release",
     checkUpdateFailed: "Failed to check for updates",
     headerDesc: "PanelNeko system preferences and configuration",
@@ -274,5 +275,8 @@ export const en = {
     newVersionDesc: "PanelNeko Reader {{latest}} is now available (current: {{current}}).",
     viewDetails: "View Update",
     dismiss: "Later",
+    homebrewDesc: "This app is managed by Homebrew. Run this command in terminal to upgrade:",
+    copyCommand: "Copy Command",
+    copied: "Copied",
   },
 };

@@ -2,7 +2,9 @@ package main
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +18,8 @@ import (
 	"github.com/sakagamijun/panelneko-reader/internal/library"
 	"github.com/sakagamijun/panelneko-reader/internal/settings"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
+	"github.com/wailsapp/wails/v3/pkg/updater"
+	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
 func TestAssetHandlerStreamsArchiveAssets(t *testing.T) {
@@ -400,7 +404,7 @@ func TestAppGetAppVersion(t *testing.T) {
 	}
 }
 
-func TestCompareVersions(t *testing.T) {
+func TestCompareSemver(t *testing.T) {
 	tests := []struct {
 		v1   string
 		v2   string
@@ -412,16 +416,181 @@ func TestCompareVersions(t *testing.T) {
 		{"v0.1.0", "0.9.0", -1},
 		{"v1.0.0", "v0.9.0", 1},
 		{"0.1.0", "0.1.1", -1},
-		{"0.1", "0.1.0", 0},
-		{"0.2", "0.1.5", 1},
-		{"v1.0.0-rc1", "v1.0.0", 0},
+		{"v1.0.0-rc1", "v1.0.0", -1},
+		{"v1.0.0", "v1.0.0-rc1", 1},
+		{"v1.0.0", "1.0.0", 0},
 	}
 
 	for _, tc := range tests {
-		got := compareVersions(tc.v1, tc.v2)
+		got := compareSemver(tc.v1, tc.v2)
 		if got != tc.want {
-			t.Errorf("compareVersions(%q, %q) = %d; want %d", tc.v1, tc.v2, got, tc.want)
+			t.Errorf("compareSemver(%q, %q) = %d; want %d", tc.v1, tc.v2, got, tc.want)
 		}
+	}
+}
+
+func TestMatchPanelNekoAsset(t *testing.T) {
+	assets := []github.ReleaseAsset{
+		{Name: "panelneko-reader-macos-arm64.zip"},
+		{Name: "panelneko-reader-macos-amd64.zip"},
+		{Name: "panelneko-reader-windows-amd64.zip"},
+		{Name: "panelneko-reader-linux-amd64.zip"},
+		{Name: "checksums.txt"},
+	}
+
+	tests := []struct {
+		name     string
+		req      updater.CheckRequest
+		expected int
+	}{
+		{
+			name:     "macOS arm64",
+			req:      updater.CheckRequest{Platform: "darwin", Arch: "arm64"},
+			expected: 0,
+		},
+		{
+			name:     "macOS amd64",
+			req:      updater.CheckRequest{Platform: "darwin", Arch: "amd64"},
+			expected: 1,
+		},
+		{
+			name:     "Windows amd64",
+			req:      updater.CheckRequest{Platform: "windows", Arch: "amd64"},
+			expected: 2,
+		},
+		{
+			name:     "Linux amd64",
+			req:      updater.CheckRequest{Platform: "linux", Arch: "amd64"},
+			expected: 3,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := matchPanelNekoAsset(tc.req, assets)
+			if got != tc.expected {
+				t.Errorf("matchPanelNekoAsset(%+v) = %d; want %d", tc.req, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestIsHomebrewExecutable(t *testing.T) {
+	// 1. Direct path tests
+	if !isHomebrewExecutable("/opt/homebrew/bin/panelneko-reader", "") {
+		t.Error("expected /opt/homebrew/bin/panelneko-reader to be detected as Homebrew")
+	}
+	if !isHomebrewExecutable("/usr/local/Cellar/panelneko/0.11.0/bin/panelneko-reader", "") {
+		t.Error("expected Cellar path to be detected as Homebrew")
+	}
+	if !isHomebrewExecutable("/opt/homebrew/Caskroom/panelneko/0.11.0/panelneko-reader.app/Contents/MacOS/panelneko-reader", "") {
+		t.Error("expected Caskroom path to be detected as Homebrew")
+	}
+	if isHomebrewExecutable("/Users/developer/git/PanelNeko/build/bin/panelneko-reader", "") {
+		t.Error("expected dev binary NOT to be detected as Homebrew")
+	}
+
+	// 2. Caskroom symlink test
+	tempPrefix := t.TempDir()
+	caskDir := filepath.Join(tempPrefix, "Caskroom", "panelneko", "0.11.0")
+	if err := os.MkdirAll(caskDir, 0o755); err != nil {
+		t.Fatalf("mkdir caskDir: %v", err)
+	}
+
+	appDir := filepath.Join(tempPrefix, "Applications", "panelneko-reader.app")
+	macOSDir := filepath.Join(appDir, "Contents", "MacOS")
+	if err := os.MkdirAll(macOSDir, 0o755); err != nil {
+		t.Fatalf("mkdir macOSDir: %v", err)
+	}
+	execInApp := filepath.Join(macOSDir, "panelneko-reader")
+
+	symlinkPath := filepath.Join(caskDir, "panelneko-reader.app")
+	if err := os.Symlink(appDir, symlinkPath); err != nil {
+		t.Fatalf("symlink appDir: %v", err)
+	}
+
+	if !isHomebrewExecutable(execInApp, tempPrefix) {
+		t.Errorf("expected exec inside linked .app to be detected as Homebrew")
+	}
+
+	unlinkedApp := filepath.Join(tempPrefix, "Applications", "other.app", "Contents", "MacOS", "other")
+	if isHomebrewExecutable(unlinkedApp, tempPrefix) {
+		t.Errorf("expected unlinked app NOT to be detected as Homebrew")
+	}
+}
+
+type mockUpdaterProvider struct {
+	release *updater.Release
+	err     error
+}
+
+func (m *mockUpdaterProvider) Name() string { return "mock" }
+func (m *mockUpdaterProvider) Check(_ context.Context, _ updater.CheckRequest) (*updater.Release, error) {
+	return m.release, m.err
+}
+func (m *mockUpdaterProvider) Download(_ context.Context, _ *updater.Release, _ io.Writer, _ func(int64, int64)) error {
+	return nil
+}
+
+func TestAppCheckForUpdates(t *testing.T) {
+	// Case 1: Update available, not Homebrew
+	app := NewApp()
+	app.isHomebrewFn = func() bool { return false }
+	app.updaterProvider = &mockUpdaterProvider{
+		release: &updater.Release{
+			Version: "1.0.0",
+			Notes:   "Test release notes",
+			Metadata: map[string]any{
+				"github.release.htmlURL": "https://github.com/SakagamiJun/panelneko-reader/releases/tag/v1.0.0",
+			},
+		},
+	}
+
+	res, err := app.CheckForUpdates()
+	if err != nil {
+		t.Fatalf("CheckForUpdates failed: %v", err)
+	}
+	if !res.HasUpdate {
+		t.Error("expected HasUpdate to be true")
+	}
+	if res.LatestVersion != "1.0.0" {
+		t.Errorf("expected LatestVersion 1.0.0, got %q", res.LatestVersion)
+	}
+	if res.IsHomebrew {
+		t.Error("expected IsHomebrew to be false")
+	}
+	if res.ReleaseURL != "https://github.com/SakagamiJun/panelneko-reader/releases/tag/v1.0.0" {
+		t.Errorf("unexpected ReleaseURL: %q", res.ReleaseURL)
+	}
+
+	// Case 2: Update available, Homebrew managed
+	app.isHomebrewFn = func() bool { return true }
+	resHomebrew, err := app.CheckForUpdates()
+	if err != nil {
+		t.Fatalf("CheckForUpdates failed: %v", err)
+	}
+	if !resHomebrew.IsHomebrew {
+		t.Error("expected IsHomebrew to be true")
+	}
+	if !resHomebrew.HasUpdate {
+		t.Error("expected HasUpdate to be true")
+	}
+
+	// Case 3: Up to date (provider returns nil, nil)
+	app.updaterProvider = &mockUpdaterProvider{release: nil, err: nil}
+	resUpToDate, err := app.CheckForUpdates()
+	if err != nil {
+		t.Fatalf("CheckForUpdates failed: %v", err)
+	}
+	if resUpToDate.HasUpdate {
+		t.Error("expected HasUpdate to be false")
+	}
+
+	// Case 4: Provider error
+	app.updaterProvider = &mockUpdaterProvider{err: fmt.Errorf("network failure")}
+	_, err = app.CheckForUpdates()
+	if err == nil {
+		t.Error("expected error from CheckForUpdates when provider fails")
 	}
 }
 

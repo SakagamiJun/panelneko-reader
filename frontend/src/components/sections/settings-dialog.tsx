@@ -1226,16 +1226,26 @@ export function SettingsDialog({
                         : updateError
                         ? updateError
                         : updateResult?.hasUpdate
-                        ? t("settings.updateAvailableHint", {
-                            version: `v${updateResult.latestVersion}`,
-                            current: `v${updateResult.currentVersion}`,
-                          })
+                        ? updateResult.isHomebrew
+                          ? t("settings.updateAvailableHomebrewHint", {
+                              version: `v${updateResult.latestVersion}`,
+                              current: `v${updateResult.currentVersion}`,
+                            })
+                          : t("settings.updateAvailableHint", {
+                              version: `v${updateResult.latestVersion}`,
+                              current: `v${updateResult.currentVersion}`,
+                            })
                         : updateResult && !updateResult.hasUpdate
                         ? t("settings.upToDate")
                         : t("settings.currentVersionPrefix", { version: version || "0.1.0" })
                     }
                     control={
                       <div className="flex items-center gap-2">
+                        {updateResult?.hasUpdate && updateResult.isHomebrew && (
+                          <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1 border border-border/40 font-mono text-[11px] text-muted-foreground select-all">
+                            <code>brew upgrade panelneko</code>
+                          </div>
+                        )}
                         {updateResult?.hasUpdate && (
                           <Button
                             type="button"

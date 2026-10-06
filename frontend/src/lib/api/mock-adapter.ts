@@ -359,6 +359,7 @@ export class MockAdapter implements AppAdapter {
       releaseURL: "https://github.com/SakagamiJun/panelneko-reader/releases/tag/v0.9.0",
       releaseNotes: "New features and bug fixes",
       publishedAt: new Date().toISOString(),
+      isHomebrew: false,
     };
   }
 

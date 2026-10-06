@@ -9,6 +9,8 @@ import (
 	"github.com/sakagamijun/panelneko-reader/internal/library"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/updater"
+	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
 //go:embed all:frontend/dist
@@ -62,6 +64,17 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 	})
+
+	ghProvider, err := github.New(github.Config{
+		Repository:   "SakagamiJun/panelneko-reader",
+		AssetMatcher: matchPanelNekoAsset,
+	})
+	if err == nil {
+		_ = app.Updater.Init(updater.Config{
+			CurrentVersion: appService.GetAppVersion().Version,
+			Providers:      []updater.Provider{ghProvider},
+		})
+	}
 
 	app.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(event *application.ApplicationEvent) {
 		opened := event.Context().OpenedFiles()

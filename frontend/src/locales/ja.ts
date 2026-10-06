@@ -53,6 +53,7 @@ export const ja = {
     upToDate: "最新のバージョンです",
     updateAvailable: "新しいバージョンが見つかりました",
     updateAvailableHint: "新しいバージョン {{version}} が利用可能です（現在: {{current}}）",
+    updateAvailableHomebrewHint: "新バージョン {{version}} が利用可能です（現在: {{current}}）。Homebrew 管理のため brew upgrade panelneko を実行してください",
     viewRelease: "詳細を見る",
     checkUpdateFailed: "更新の確認に失敗しました",
     headerDesc: "PanelNeko システム設定とカスタマイズ",
@@ -274,5 +275,8 @@ export const ja = {
     newVersionDesc: "PanelNeko Reader {{latest}} がリリースされました（現在: {{current}}）。",
     viewDetails: "詳細を見る",
     dismiss: "あとで",
+    homebrewDesc: "このアプリは Homebrew で管理されています。端末で次のコマンドを実行してアップグレードしてください：",
+    copyCommand: "コマンドをコピー",
+    copied: "コピー完了",
   },
 };

@@ -53,6 +53,7 @@ export const zhCN = {
     upToDate: "当前已是最新版本",
     updateAvailable: "发现新版本",
     updateAvailableHint: "发现新版本 {{version}}，当前版本为 {{current}}",
+    updateAvailableHomebrewHint: "发现新版本 {{version}}（当前 {{current}}）。已由 Homebrew 管理，请运行 brew upgrade panelneko 更新",
     viewRelease: "查看新版本",
     checkUpdateFailed: "检查更新失败，请重试",
     headerDesc: "PanelNeko 系统参数与个性化偏好",
@@ -274,5 +275,8 @@ export const zhCN = {
     newVersionDesc: "PanelNeko Reader {{latest}} 现已发布，当前版本为 {{current}}。",
     viewDetails: "查看更新",
     dismiss: "稍后",
+    homebrewDesc: "当前应用由 Homebrew 管理，请在终端执行升级命令：",
+    copyCommand: "复制命令",
+    copied: "已复制",
   },
 };

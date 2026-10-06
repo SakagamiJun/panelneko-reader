@@ -116,6 +116,7 @@ export interface UpdateCheckResult {
   releaseURL: string;
   releaseNotes?: string;
   publishedAt?: string;
+  isHomebrew?: boolean;
 }
 
 export const EVENTS = {

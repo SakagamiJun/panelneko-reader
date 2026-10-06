@@ -75,4 +75,49 @@ describe("UpdateToast Component", () => {
 
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
+
+  it("renders Homebrew upgrade command and copy button when isHomebrew is true", async () => {
+    const handleClose = vi.fn();
+    const handleView = vi.fn();
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
+
+    const homebrewUpdate: UpdateCheckResult = {
+      ...mockUpdate,
+      isHomebrew: true,
+    };
+
+    render(
+      <UpdateToast
+        update={homebrewUpdate}
+        onClose={handleClose}
+        onViewUpdate={handleView}
+      />
+    );
+
+    expect(screen.getByText("brew upgrade panelneko")).toBeInTheDocument();
+
+    const copyBtn = screen.getByRole("button", { name: /复制命令|copy command/i });
+    fireEvent.click(copyBtn);
+    expect(writeTextMock).toHaveBeenCalledWith("brew upgrade panelneko");
+  });
+
+  it("does not render Homebrew upgrade command when isHomebrew is false", () => {
+    const handleClose = vi.fn();
+    const handleView = vi.fn();
+
+    render(
+      <UpdateToast
+        update={{ ...mockUpdate, isHomebrew: false }}
+        onClose={handleClose}
+        onViewUpdate={handleView}
+      />
+    );
+
+    expect(screen.queryByText("brew upgrade panelneko")).not.toBeInTheDocument();
+  });
 });

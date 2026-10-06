@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"embed"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +18,9 @@ import (
 	"github.com/sakagamijun/panelneko-reader/internal/settings"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/updater"
+	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
+	"golang.org/x/mod/semver"
 )
 
 //go:embed build/config.yml
@@ -90,98 +91,247 @@ func (a *App) GetAppVersion() contracts.AppVersionInfo {
 	}
 }
 
-type githubReleaseResponse struct {
-	TagName     string `json:"tag_name"`
-	Name        string `json:"name"`
-	HTMLURL     string `json:"html_url"`
-	Body        string `json:"body"`
-	PublishedAt string `json:"published_at"`
-	Draft       bool   `json:"draft"`
-	Prerelease  bool   `json:"prerelease"`
+func compareSemver(v1, v2 string) int {
+	s1 := strings.TrimSpace(v1)
+	if !strings.HasPrefix(s1, "v") && !strings.HasPrefix(s1, "V") {
+		s1 = "v" + s1
+	}
+	s2 := strings.TrimSpace(v2)
+	if !strings.HasPrefix(s2, "v") && !strings.HasPrefix(s2, "V") {
+		s2 = "v" + s2
+	}
+	if semver.IsValid(s1) && semver.IsValid(s2) {
+		return semver.Compare(s1, s2)
+	}
+	return strings.Compare(s1, s2)
 }
 
-func compareVersions(v1, v2 string) int {
-	clean1 := strings.TrimPrefix(strings.TrimSpace(v1), "v")
-	clean2 := strings.TrimPrefix(strings.TrimSpace(v2), "v")
+func matchPanelNekoAsset(req updater.CheckRequest, assets []github.ReleaseAsset) int {
+	plat := strings.ToLower(req.Platform)
+	arch := strings.ToLower(req.Arch)
 
-	parts1 := strings.Split(clean1, ".")
-	parts2 := strings.Split(clean2, ".")
+	for i, a := range assets {
+		name := strings.ToLower(a.Name)
+		if strings.HasSuffix(name, ".sig") || strings.HasSuffix(name, ".asc") || strings.HasSuffix(name, ".sha256") || strings.HasSuffix(name, ".md") {
+			continue
+		}
 
-	maxLen := len(parts1)
-	if len(parts2) > maxLen {
-		maxLen = len(parts2)
+		platMatch := false
+		switch plat {
+		case "darwin":
+			platMatch = strings.Contains(name, "macos") || strings.Contains(name, "darwin") || strings.Contains(name, "mac") || strings.Contains(name, "osx")
+		case "windows":
+			platMatch = strings.Contains(name, "windows") || strings.Contains(name, "win")
+		case "linux":
+			platMatch = strings.Contains(name, "linux")
+		default:
+			platMatch = strings.Contains(name, plat)
+		}
+		if !platMatch {
+			continue
+		}
+
+		archMatch := false
+		switch arch {
+		case "arm64":
+			archMatch = strings.Contains(name, "arm64") || strings.Contains(name, "aarch64")
+		case "amd64":
+			archMatch = strings.Contains(name, "amd64") || strings.Contains(name, "x86_64") || strings.Contains(name, "x64")
+		default:
+			archMatch = strings.Contains(name, arch)
+		}
+		if !archMatch {
+			continue
+		}
+
+		return i
 	}
 
-	for i := 0; i < maxLen; i++ {
-		var n1, n2 int
-		if i < len(parts1) {
-			sub := strings.SplitN(parts1[i], "-", 2)[0]
-			n1, _ = strconv.Atoi(sub)
+	for i, a := range assets {
+		name := strings.ToLower(a.Name)
+		if strings.HasSuffix(name, ".sig") || strings.HasSuffix(name, ".asc") || strings.HasSuffix(name, ".sha256") || strings.HasSuffix(name, ".md") {
+			continue
 		}
-		if i < len(parts2) {
-			sub := strings.SplitN(parts2[i], "-", 2)[0]
-			n2, _ = strconv.Atoi(sub)
-		}
-		if n1 < n2 {
-			return -1
-		}
-		if n1 > n2 {
-			return 1
+		return i
+	}
+
+	return -1
+}
+
+func isHomebrewInstallation() bool {
+	return isHomebrewExecutable("", "")
+}
+
+func isHomebrewExecutable(execPath string, customPrefix string) bool {
+	if execPath == "" {
+		var err error
+		execPath, err = os.Executable()
+		if err != nil {
+			return false
 		}
 	}
-	return 0
+	execPath = filepath.Clean(execPath)
+	lowerExec := strings.ToLower(execPath)
+
+	if strings.Contains(lowerExec, "/cellar/") ||
+		strings.Contains(lowerExec, "/caskroom/") ||
+		strings.Contains(lowerExec, "/opt/homebrew/") {
+		return true
+	}
+
+	if runtime.GOOS == "darwin" {
+		prefixes := []string{
+			customPrefix,
+			os.Getenv("HOMEBREW_PREFIX"),
+			"/opt/homebrew",
+			"/usr/local",
+		}
+
+		bundleDir := findAppBundleDir(execPath)
+
+		for _, p := range prefixes {
+			if p == "" {
+				continue
+			}
+			caskDir := filepath.Join(p, "Caskroom", "panelneko")
+			entries, err := os.ReadDir(caskDir)
+			if err != nil {
+				continue
+			}
+
+			for _, entry := range entries {
+				if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+					continue
+				}
+				versionDir := filepath.Join(caskDir, entry.Name())
+				subEntries, err := os.ReadDir(versionDir)
+				if err != nil {
+					continue
+				}
+				for _, sub := range subEntries {
+					linkPath := filepath.Join(versionDir, sub.Name())
+					target, err := os.Readlink(linkPath)
+					if err == nil {
+						cleanTarget := filepath.Clean(target)
+						if bundleDir != "" && cleanTarget == bundleDir {
+							return true
+						}
+						if strings.HasPrefix(execPath, cleanTarget) {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func findAppBundleDir(path string) string {
+	cur := filepath.Clean(path)
+	for {
+		if strings.HasSuffix(cur, ".app") {
+			return cur
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur || parent == "." || parent == "/" {
+			break
+		}
+		cur = parent
+	}
+	return ""
 }
 
 func (a *App) CheckForUpdates() (contracts.UpdateCheckResult, error) {
 	currentInfo := a.GetAppVersion()
-	currentVer := currentInfo.Version
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/SakagamiJun/panelneko-reader/releases/latest", nil)
-	if err != nil {
-		return contracts.UpdateCheckResult{}, fmt.Errorf("create request: %w", err)
+	currentVer := strings.TrimPrefix(strings.TrimSpace(currentInfo.Version), "v")
+	if currentVer == "" {
+		currentVer = "0.1.0"
 	}
 
-	req.Header.Set("User-Agent", "PanelNeko-Reader/"+currentVer)
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	isHomebrew := false
+	if a.isHomebrewFn != nil {
+		isHomebrew = a.isHomebrewFn()
+	} else {
+		isHomebrew = isHomebrewInstallation()
+	}
 
-	resp, err := http.DefaultClient.Do(req)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var rel *updater.Release
+	var err error
+
+	if a.updater != nil && a.updater.State() != updater.StateUnconfigured {
+		rel, err = a.updater.Check(ctx)
+	} else if app := application.Get(); app != nil && app.Updater != nil && app.Updater.State() != updater.StateUnconfigured {
+		rel, err = app.Updater.Check(ctx)
+	} else {
+		provider := a.updaterProvider
+		if provider == nil {
+			provider, err = github.New(github.Config{
+				Repository:   "SakagamiJun/panelneko-reader",
+				AssetMatcher: matchPanelNekoAsset,
+			})
+			if err != nil {
+				return contracts.UpdateCheckResult{}, fmt.Errorf("init github provider: %w", err)
+			}
+		}
+		rel, err = provider.Check(ctx, updater.CheckRequest{
+			CurrentVersion: currentVer,
+			Platform:       runtime.GOOS,
+			Arch:           runtime.GOARCH,
+		})
+	}
+
 	if err != nil {
 		return contracts.UpdateCheckResult{}, fmt.Errorf("check update: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return contracts.UpdateCheckResult{}, fmt.Errorf("github api returned status %d", resp.StatusCode)
+	if rel == nil {
+		return contracts.UpdateCheckResult{
+			HasUpdate:      false,
+			CurrentVersion: currentVer,
+			LatestVersion:  currentVer,
+			IsHomebrew:     isHomebrew,
+		}, nil
 	}
 
-	var rel githubReleaseResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&rel); err != nil {
-		return contracts.UpdateCheckResult{}, fmt.Errorf("decode release: %w", err)
+	releaseURL := ""
+	if url, ok := rel.Metadata["github.release.htmlURL"].(string); ok {
+		releaseURL = url
+	}
+	if releaseURL == "" {
+		releaseURL = fmt.Sprintf("https://github.com/SakagamiJun/panelneko-reader/releases/tag/v%s", rel.Version)
 	}
 
-	latestVer := strings.TrimPrefix(rel.TagName, "v")
-	hasUpdate := compareVersions(currentVer, latestVer) < 0
+	publishedAt := ""
+	if !rel.PublishedAt.IsZero() {
+		publishedAt = rel.PublishedAt.Format(time.RFC3339)
+	}
 
 	return contracts.UpdateCheckResult{
-		HasUpdate:      hasUpdate,
+		HasUpdate:      true,
 		CurrentVersion: currentVer,
-		LatestVersion:  latestVer,
-		ReleaseURL:     rel.HTMLURL,
-		ReleaseNotes:   rel.Body,
-		PublishedAt:    rel.PublishedAt,
+		LatestVersion:  rel.Version,
+		ReleaseURL:     releaseURL,
+		ReleaseNotes:   rel.Notes,
+		PublishedAt:    publishedAt,
+		IsHomebrew:     isHomebrew,
 	}, nil
 }
 
 type App struct {
-	ctx      context.Context
-	bootErr  error
-	store    *store.SQLiteStore
-	settings *settings.Service
-	scanMu   sync.Mutex
-	scanOnce sync.Once
+	ctx             context.Context
+	bootErr         error
+	store           *store.SQLiteStore
+	settings        *settings.Service
+	scanMu          sync.Mutex
+	scanOnce        sync.Once
+	updater         *updater.Updater
+	updaterProvider updater.Provider
+	isHomebrewFn    func() bool
 }
 
 func NewApp() *App {

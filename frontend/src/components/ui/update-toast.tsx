@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUpCircle, ExternalLink, X } from "lucide-react";
+import { ArrowUpCircle, Check, Copy, ExternalLink, Terminal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { UpdateCheckResult } from "@/lib/contracts";
@@ -16,14 +16,25 @@ export function UpdateToast({
   update,
   onClose,
   onViewUpdate,
-  durationMs = 6000,
+  durationMs = 8000,
 }: UpdateToastProps) {
   const { t } = useTranslation();
   const [progress, setProgress] = useState(100);
   const [isHovered, setIsHovered] = useState(false);
+  const [copied, setCopied] = useState(false);
   const timerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(Date.now());
   const remainingTimeRef = useRef<number>(durationMs);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText("brew upgrade panelneko");
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore clipboard error
+    }
+  };
 
   useEffect(() => {
     if (isHovered) {
@@ -63,7 +74,7 @@ export function UpdateToast({
     <div
       role="alert"
       aria-live="polite"
-      className="pointer-events-auto flex w-84 max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-xl border border-border/80 bg-card/95 backdrop-blur-2xl shadow-2xl transition-all duration-200 select-none animate-in fade-in-50 slide-in-from-bottom-4"
+      className="pointer-events-auto flex w-92 max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-xl border border-border/80 bg-card/95 backdrop-blur-2xl shadow-2xl transition-all duration-200 select-none animate-in fade-in-50 slide-in-from-bottom-4"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -101,6 +112,41 @@ export function UpdateToast({
             current: `v${update.currentVersion}`,
           })}
         </p>
+
+        {/* Homebrew notice */}
+        {update.isHomebrew && (
+          <div className="space-y-1.5 rounded-lg border border-border/60 bg-muted/40 p-2.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+              <Terminal className="h-3 w-3 text-muted-foreground" />
+              <span>{t("updates.homebrewDesc")}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2 rounded bg-background/80 px-2 py-1 border border-border/50">
+              <code className="font-mono text-[11px] text-foreground select-all">
+                brew upgrade panelneko
+              </code>
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                onClick={handleCopy}
+                className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                title={t("updates.copyCommand")}
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-3 w-3 text-success" />
+                    <span className="text-success">{t("updates.copied")}</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3" />
+                    <span>{t("updates.copyCommand")}</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Action buttons */}
         <div className="flex items-center justify-end gap-2 pt-1">

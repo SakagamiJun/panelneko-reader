@@ -191,4 +191,5 @@ type UpdateCheckResult struct {
 	ReleaseURL     string `json:"releaseURL"`
 	ReleaseNotes   string `json:"releaseNotes,omitempty"`
 	PublishedAt    string `json:"publishedAt,omitempty"`
+	IsHomebrew     bool   `json:"isHomebrew"`
 }

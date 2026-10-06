@@ -235,4 +235,5 @@ export interface UpdateCheckResult {
     "releaseURL": string;
     "releaseNotes"?: string;
     "publishedAt"?: string;
+    "isHomebrew": boolean;
 }
