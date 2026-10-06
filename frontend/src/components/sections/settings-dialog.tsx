@@ -170,7 +170,9 @@ export function SettingsDialog({
 
   const handleBrowseNewSource = async () => {
     try {
-      const selected = await appAdapter.selectDirectory();
+      const selected = await appAdapter.selectDirectory({
+        title: t("settings.selectMangaDirectory"),
+      });
       if (selected) {
         setNewSourcePath(selected);
         if (!newSourceName) {
@@ -236,7 +238,10 @@ export function SettingsDialog({
 
   const handleRelocateSource = async (source: LibrarySource) => {
     try {
-      const selected = await appAdapter.selectDirectory();
+      const selected = await appAdapter.selectDirectory({
+        title: t("settings.selectMangaDirectory"),
+        defaultDirectory: source.path,
+      });
       if (selected && selected !== source.path) {
         const updated = await appAdapter.relocateLibrarySource(source.id, selected);
         setForm(updated);

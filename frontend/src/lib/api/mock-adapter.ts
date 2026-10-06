@@ -7,7 +7,7 @@ import {
   type ReaderProgress,
   type UpdateCheckResult,
 } from "@/lib/contracts";
-import type { AppAdapter } from "@/lib/api/adapter";
+import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 
 const STORAGE_KEY = "panelneko-reader-settings";
 const READER_PROGRESS_STORAGE_KEY = "panelneko-reader-progress";
@@ -343,8 +343,8 @@ export class MockAdapter implements AppAdapter {
     };
   }
 
-  async selectDirectory() {
-    return "/Users/example/Downloads/MangaLibrary";
+  async selectDirectory(options?: SelectDirectoryOptions) {
+    return options?.defaultDirectory || "/Users/example/Downloads/MangaLibrary";
   }
 
   async openDirectory(_mangaID: string) {

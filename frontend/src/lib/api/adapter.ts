@@ -8,6 +8,11 @@ import type {
   UpdateCheckResult,
 } from "@/lib/contracts";
 
+export interface SelectDirectoryOptions {
+  title?: string;
+  defaultDirectory?: string;
+}
+
 export interface AppAdapter {
   readonly mode: "mock" | "wails";
   getSettings(): Promise<AppSettings>;
@@ -17,7 +22,7 @@ export interface AppAdapter {
   getReaderProgress(mangaID: string): Promise<ReaderProgress>;
   updateReaderProgress(input: ReaderProgress): Promise<ReaderProgress>;
   getAppVersion(): Promise<AppVersionInfo>;
-  selectDirectory(): Promise<string>;
+  selectDirectory(options?: SelectDirectoryOptions): Promise<string>;
   togglePin(mangaID: string): Promise<boolean>;
   toggleCollection(mangaID: string): Promise<boolean>;
   openDirectory(mangaID: string): Promise<void>;

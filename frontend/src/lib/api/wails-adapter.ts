@@ -7,7 +7,7 @@ import type {
   ReaderProgress,
   UpdateCheckResult,
 } from "@/lib/contracts";
-import type { AppAdapter } from "@/lib/api/adapter";
+import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 import { isWailsEnvironment } from "@/lib/runtime";
 import * as App from "@bindings/github.com/sakagamijun/panelneko-reader/app";
 import { Browser, Dialogs, Events } from "@wailsio/runtime";
@@ -51,12 +51,14 @@ export class WailsAdapter implements AppAdapter {
     };
   }
 
-  async selectDirectory(): Promise<string> {
+  async selectDirectory(options?: SelectDirectoryOptions): Promise<string> {
     if (isWailsEnvironment()) {
       const selected = await Dialogs.OpenFile({
         CanChooseDirectories: true,
         CanChooseFiles: false,
-        Title: "Select Manga Library Directory",
+        CanCreateDirectories: true,
+        Title: options?.title || "Select Manga Library Directory",
+        Directory: options?.defaultDirectory || undefined,
       });
       return selected || "";
     }

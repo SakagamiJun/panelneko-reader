@@ -28,6 +28,7 @@ export const zhCN = {
     dark: "深色",
     railHint: "语言和主题改为从左侧导航条直接切换。",
     browse: "选择…",
+    selectMangaDirectory: "选择漫画库目录",
     save: "保存设置",
     readerPreferences: "漫画阅读偏好",
     readerPreferencesSubtitle: "设置打开漫画时的默认阅读方向、排版模式与滤镜等",

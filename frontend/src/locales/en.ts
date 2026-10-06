@@ -28,6 +28,7 @@ export const en = {
     dark: "Dark",
     railHint: "Language and theme are now switched directly from the left rail.",
     browse: "Browse...",
+    selectMangaDirectory: "Select Manga Library Directory",
     save: "Save settings",
     readerPreferences: "Reader Preferences",
     readerPreferencesSubtitle: "Default reading direction, spread layout, and filters when opening manga",

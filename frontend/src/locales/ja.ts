@@ -28,6 +28,7 @@ export const ja = {
     dark: "ダーク",
     railHint: "言語とテーマは左側のナビゲーションから直接切り替えられるようになりました。",
     browse: "選択...",
+    selectMangaDirectory: "マンガライブラリのディレクトリを選択",
     save: "設定を保存",
     readerPreferences: "読書環境設定",
     readerPreferencesSubtitle: "マンガを開く際のデフォルトの開き方向、見開き、フィルターなどの設定",

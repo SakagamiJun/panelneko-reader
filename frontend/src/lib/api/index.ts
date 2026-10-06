@@ -35,8 +35,8 @@ export const appAdapter: AppAdapter = {
   getAppVersion() {
     return currentAdapter().getAppVersion();
   },
-  selectDirectory() {
-    return currentAdapter().selectDirectory();
+  selectDirectory(options) {
+    return currentAdapter().selectDirectory(options);
   },
   togglePin(mangaID) {
     return currentAdapter().togglePin(mangaID);

@@ -88,6 +88,11 @@ func main() {
 
 	app.Menu.SetApplicationMenu(application.DefaultApplicationMenu())
 
+	initBg := application.NewRGB(243, 247, 252)
+	if app.Env != nil && app.Env.IsDarkMode() {
+		initBg = application.NewRGB(13, 15, 18)
+	}
+
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            "PanelNeko Reader",
@@ -95,13 +100,27 @@ func main() {
 		Height:           960,
 		MinWidth:         1180,
 		MinHeight:        760,
-		BackgroundColour: application.NewRGB(243, 247, 252),
+		BackgroundColour: initBg,
 		EnableFileDrop:   true,
 		Mac: application.MacWindow{
 			TitleBar:                     application.MacTitleBarHiddenInset,
 			DisableEscapeExitsFullscreen: true,
 		},
 		URL: "/",
+	})
+
+	app.Event.On(contracts.EventThemeResolved, func(event *application.CustomEvent) {
+		payload, ok := event.Data.(contracts.ThemeResolvedPayload)
+		if !ok {
+			return
+		}
+		if w, ok := application.Get().Window.GetByName("main"); ok {
+			if payload.Resolved == "dark" {
+				w.SetBackgroundColour(application.NewRGB(13, 15, 18))
+			} else {
+				w.SetBackgroundColour(application.NewRGB(243, 247, 252))
+			}
+		}
 	})
 
 	win.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
