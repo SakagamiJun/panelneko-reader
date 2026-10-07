@@ -57,6 +57,18 @@ func (s *SQLiteStore) DataDir() string {
 }
 
 func (s *SQLiteStore) init() error {
+	pragmas := []string{
+		`PRAGMA journal_mode = WAL;`,
+		`PRAGMA busy_timeout = 5000;`,
+		`PRAGMA synchronous = NORMAL;`,
+		`PRAGMA cache_size = -2000;`,
+	}
+	for _, pragma := range pragmas {
+		if _, err := s.db.Exec(pragma); err != nil {
+			return fmt.Errorf("execute pragma %s: %w", pragma, err)
+		}
+	}
+
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS settings (
 			key TEXT PRIMARY KEY,
