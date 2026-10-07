@@ -1,7 +1,6 @@
 package library
 
 import (
-	"archive/zip"
 	"encoding/xml"
 	"io"
 	"os"
@@ -33,9 +32,9 @@ func readComicInfoFromDir(dir string) (ComicInfo, bool) {
 	return info, err == nil
 }
 
-func readComicInfoFromArchive(archiveReader *zip.ReadCloser) (ComicInfo, bool) {
-	for _, file := range archiveReader.File {
-		if strings.EqualFold(file.Name, "ComicInfo.xml") {
+func readComicInfoFromArchive(files []archiveFile) (ComicInfo, bool) {
+	for _, file := range files {
+		if strings.EqualFold(file.Name(), "ComicInfo.xml") {
 			rc, err := file.Open()
 			if err != nil {
 				return ComicInfo{}, false

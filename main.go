@@ -43,7 +43,7 @@ func main() {
 				}
 			},
 		},
-		FileAssociations: []string{".cbz", ".cbr", ".zip"},
+		FileAssociations: []string{".cbz", ".cbr", ".zip", ".rar"},
 		Services: []application.Service{
 			application.NewService(appService),
 		},

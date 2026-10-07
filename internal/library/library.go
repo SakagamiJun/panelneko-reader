@@ -1,7 +1,6 @@
 package library
 
 import (
-	"archive/zip"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -78,7 +77,7 @@ type chapterMetadata struct {
 }
 
 type archiveEntry struct {
-	file           *zip.File
+	file           archiveFile
 	normalizedPath string
 }
 
@@ -901,10 +900,7 @@ func OpenMultiSourceArchiveAsset(sourcesMap map[string]string, defaultRoot strin
 		return nil, "", -1, fmt.Errorf("open archive entry: %w", err)
 	}
 
-	size := int64(entry.file.UncompressedSize64)
-	if uint64(size) != entry.file.UncompressedSize64 {
-		size = -1
-	}
+	size := entry.file.Size()
 
 	contentType := contentTypeForImagePath(entry.normalizedPath)
 	return &archiveAssetReadCloser{
@@ -1186,9 +1182,9 @@ func loadArchiveChapterSource(outputRoot string, sourceID string, descriptor cha
 		return chapterSource{}, fmt.Errorf("open chapter archive: %w", err)
 	}
 	defer releaseArchive(cacheEntry)
-	archiveReader := cacheEntry.archive
+	files := cacheEntry.handle.Files()
 
-	info, hasInfo := readComicInfoFromArchive(archiveReader)
+	info, hasInfo := readComicInfoFromArchive(files)
 	baseName := strings.TrimSuffix(filepath.Base(archivePath), filepath.Ext(archivePath))
 	metadata := resolveChapterMetadata(baseName, info, hasInfo)
 	if descriptor.mangaPath != "" {
@@ -1201,7 +1197,7 @@ func loadArchiveChapterSource(outputRoot string, sourceID string, descriptor cha
 			metadata.id = strings.TrimSuffix(parts[1], filepath.Ext(parts[1]))
 		}
 	}
-	pages, err := readArchivePages(outputRoot, sourceID, archivePath, archiveReader, metadata)
+	pages, err := readArchivePages(outputRoot, sourceID, archivePath, files, metadata)
 	if err != nil {
 		return chapterSource{}, err
 	}
@@ -1227,8 +1223,8 @@ func loadArchiveChapterSource(outputRoot string, sourceID string, descriptor cha
 
 type archiveCacheEntry struct {
 	path     string
-	archive  *zip.ReadCloser
-	indexMap map[string]*zip.File
+	handle   archiveHandle
+	indexMap map[string]archiveFile
 	refs     int
 	lastUse  time.Time
 	modTime  time.Time
@@ -1257,7 +1253,7 @@ func acquireArchive(archivePath string) (*archiveCacheEntry, error) {
 		}
 		// File modified: remove stale entry from cache map
 		if entry.refs == 0 {
-			entry.archive.Close()
+			entry.handle.Close()
 		}
 		delete(acEntries, archivePath)
 	}
@@ -1274,31 +1270,32 @@ func acquireArchive(archivePath string) (*archiveCacheEntry, error) {
 			}
 		}
 		if oldestPath != "" {
-			acEntries[oldestPath].archive.Close()
+			acEntries[oldestPath].handle.Close()
 			delete(acEntries, oldestPath)
 		} else {
 			break
 		}
 	}
 
-	archiveReader, err := zip.OpenReader(archivePath)
+	handle, err := openArchiveHandle(archivePath)
 	if err != nil {
 		return nil, err
 	}
 
-	indexMap := make(map[string]*zip.File, len(archiveReader.File))
-	for _, file := range archiveReader.File {
-		if file.FileInfo().IsDir() {
+	files := handle.Files()
+	indexMap := make(map[string]archiveFile, len(files))
+	for _, file := range files {
+		if file.IsDir() {
 			continue
 		}
-		if normalized, err := normalizeArchiveEntryPath(file.Name); err == nil {
+		if normalized, err := normalizeArchiveEntryPath(file.Name()); err == nil {
 			indexMap[normalized] = file
 		}
 	}
 
 	entry := &archiveCacheEntry{
 		path:     archivePath,
-		archive:  archiveReader,
+		handle:   handle,
 		indexMap: indexMap,
 		refs:     1,
 		lastUse:  time.Now(),
@@ -1316,7 +1313,7 @@ func releaseArchive(entry *archiveCacheEntry) {
 	if entry.refs == 0 {
 		if current, ok := acEntries[entry.path]; !ok || current != entry {
 			// It was evicted or replaced while in use; close it now.
-			entry.archive.Close()
+			entry.handle.Close()
 		} else {
 			for len(acEntries) > 3 {
 				var oldestPath string
@@ -1330,7 +1327,7 @@ func releaseArchive(entry *archiveCacheEntry) {
 					}
 				}
 				if oldestPath != "" {
-					acEntries[oldestPath].archive.Close()
+					acEntries[oldestPath].handle.Close()
 					delete(acEntries, oldestPath)
 				} else {
 					break
@@ -1382,8 +1379,8 @@ func readDirectoryPages(outputRoot string, sourceID string, chapterDir string, m
 	return pages, nil
 }
 
-func readArchivePages(outputRoot string, sourceID string, archivePath string, archiveReader *zip.ReadCloser, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
-	entries, err := collectArchiveImageEntries(archiveReader)
+func readArchivePages(outputRoot string, sourceID string, archivePath string, files []archiveFile, metadata chapterMetadata) ([]contracts.ReaderPage, error) {
+	entries, err := collectArchiveImageEntries(files)
 	if err != nil {
 		return nil, err
 	}
@@ -1553,16 +1550,16 @@ func findArchiveImageEntryFromCache(cacheEntry *archiveCacheEntry, entryPath str
 			}, nil
 		}
 	}
-	return findArchiveImageEntry(cacheEntry.archive, entryPath)
+	return findArchiveImageEntry(cacheEntry.handle.Files(), entryPath)
 }
 
-func findArchiveImageEntry(archiveReader *zip.ReadCloser, entryPath string) (archiveEntry, error) {
-	for _, file := range archiveReader.File {
-		if file.FileInfo().IsDir() {
+func findArchiveImageEntry(files []archiveFile, entryPath string) (archiveEntry, error) {
+	for _, file := range files {
+		if file.IsDir() {
 			continue
 		}
 
-		normalizedEntryPath, err := normalizeArchiveEntryPath(file.Name)
+		normalizedEntryPath, err := normalizeArchiveEntryPath(file.Name())
 		if err != nil {
 			return archiveEntry{}, fmt.Errorf("normalize archive entry path: %w", err)
 		}
@@ -1589,14 +1586,14 @@ func findArchiveImageEntry(archiveReader *zip.ReadCloser, entryPath string) (arc
 	}
 }
 
-func collectArchiveImageEntries(archiveReader *zip.ReadCloser) ([]archiveEntry, error) {
-	entries := make([]archiveEntry, 0, len(archiveReader.File))
-	for _, file := range archiveReader.File {
-		if file.FileInfo().IsDir() {
+func collectArchiveImageEntries(files []archiveFile) ([]archiveEntry, error) {
+	entries := make([]archiveEntry, 0, len(files))
+	for _, file := range files {
+		if file.IsDir() {
 			continue
 		}
 
-		normalizedEntryPath, err := normalizeArchiveEntryPath(file.Name)
+		normalizedEntryPath, err := normalizeArchiveEntryPath(file.Name())
 		if err != nil {
 			return nil, fmt.Errorf("normalize archive entry path: %w", err)
 		}
@@ -1976,7 +1973,7 @@ func isASCIIDigit(value byte) bool {
 
 func isSupportedArchivePath(filePath string) bool {
 	switch strings.ToLower(path.Ext(filepath.ToSlash(filePath))) {
-	case ".zip", ".cbz":
+	case ".zip", ".cbz", ".cbr", ".rar":
 		return true
 	default:
 		return false

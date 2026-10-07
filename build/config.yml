@@ -31,6 +31,11 @@ fileAssociations:
     description: ZIP Archive
     iconName: icons
     role: Viewer
+  - ext: rar
+    name: RAR Archive
+    description: RAR Archive
+    iconName: icons
+    role: Viewer
 
 # Dev mode configuration
 dev_mode:
