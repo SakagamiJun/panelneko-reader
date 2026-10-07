@@ -155,23 +155,50 @@ export function PagedReader({
     }
   }, [currentSpread, currentSpreadIndex, requestMetric, spreads]);
 
-  // Silent prefetch for smooth flipping
+  // Offscreen prefetch & predecode for smooth flipping and dimension discovery
   useEffect(() => {
+    let isAborted = false;
+    const createdImages: HTMLImageElement[] = [];
+
     const prefetchIndices = [
       currentSpreadIndex + 1,
       currentSpreadIndex + 2,
       currentSpreadIndex - 1,
     ];
+
     for (const idx of prefetchIndices) {
       const s = spreads[idx];
-      if (s) {
-        for (const p of s.pages) {
-          const img = new Image();
-          img.src = p.sourceURL;
+      if (!s) continue;
+
+      for (const p of s.pages) {
+        const img = new Image();
+        createdImages.push(img);
+
+        img.onload = () => {
+          if (!isAborted && img.naturalWidth && img.naturalHeight) {
+            onMetricMeasured(p.id, img.naturalWidth, img.naturalHeight);
+          }
+        };
+
+        img.src = p.sourceURL;
+
+        if (typeof img.decode === "function") {
+          img.decode().catch(() => {
+            // Ignore decode aborts/errors gracefully
+          });
         }
       }
     }
-  }, [currentSpreadIndex, spreads]);
+
+    return () => {
+      isAborted = true;
+      for (const img of createdImages) {
+        img.onload = null;
+        img.onerror = null;
+        img.src = "";
+      }
+    };
+  }, [currentSpreadIndex, onMetricMeasured, spreads]);
 
   // Reset zoom and pan on spread change
   useEffect(() => {
