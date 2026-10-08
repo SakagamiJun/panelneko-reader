@@ -36,7 +36,6 @@ export default function App() {
   const [selectedLibraryID, setSelectedLibraryID] = useState<string | null>(null);
   const [readerMode, setReaderMode] = useState<"scroll" | "paged">("paged");
   const [readerJumpRequest, setReaderJumpRequest] = useState<ReaderJumpRequest | null>(null);
-  const [, setReaderChapterTitle] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSourceID, setSelectedSourceID] = useState<string>("all");
   const [showOffline, setShowOffline] = useState(false);
@@ -67,10 +66,6 @@ export default function App() {
     enabled: Boolean(selectedLibraryID),
     queryFn: () => appAdapter.getReaderManifest(selectedLibraryID!),
   });
-
-  useEffect(() => {
-    setReaderChapterTitle(null);
-  }, [selectedLibraryID]);
 
   useEffect(() => {
     const offSettings = appAdapter.subscribe(EVENTS.SETTINGS_UPDATED, () => {
@@ -612,7 +607,6 @@ export default function App() {
                 settingsMutation.mutate({ ...settings, ...patch });
               }
             }}
-            onChapterChange={(_, title) => setReaderChapterTitle(title)}
             onExitReader={handleExitReader}
             onOpenFullSettings={() => openSettingsWithTab("reader")}
           />
