@@ -1,4 +1,4 @@
-import type { ReaderDirection, ReaderPage, ReaderSideClickMode } from "@/lib/contracts";
+import type { ReaderDirection, ReaderFilter, ReaderPage, ReaderSideClickMode } from "@/lib/contracts";
 
 export interface PageMetric {
   width: number;
@@ -26,6 +26,19 @@ export function clampIndex(index: number, total: number) {
   }
 
   return Math.max(0, Math.min(total - 1, index));
+}
+
+export function getFilterCSS(filter: ReaderFilter = "none") {
+  switch (filter) {
+    case "invert":
+      return "invert(1) hue-rotate(180deg) contrast(1.1)";
+    case "sepia":
+      return "sepia(0.35) contrast(1.08) brightness(0.96)";
+    case "high-contrast":
+      return "contrast(1.35) brightness(0.98)";
+    default:
+      return "none";
+  }
 }
 
 export function findPageIndexAtPosition(offsets: number[], heights: number[], position: number) {

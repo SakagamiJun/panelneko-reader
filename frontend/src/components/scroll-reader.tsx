@@ -1,5 +1,15 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { type FlatReaderPage, type PageMetric, type ReaderNavigationRequest, DEFAULT_ASPECT_RATIO, PAGE_GAP, PAGE_PADDING, clampIndex, findPageIndexAtPosition } from "@/components/reader-shared";
+import {
+  type FlatReaderPage,
+  type PageMetric,
+  type ReaderNavigationRequest,
+  DEFAULT_ASPECT_RATIO,
+  PAGE_GAP,
+  PAGE_PADDING,
+  clampIndex,
+  findPageIndexAtPosition,
+  getFilterCSS,
+} from "@/components/reader-shared";
 import type { ReaderFilter } from "@/lib/contracts";
 
 interface ScrollReaderProps {
@@ -15,19 +25,6 @@ interface ScrollReaderProps {
   filter?: ReaderFilter;
   rotation?: number;
   onToggleHUD?: () => void;
-}
-
-function getFilterCSS(filter: ReaderFilter) {
-  switch (filter) {
-    case "invert":
-      return "invert(1) hue-rotate(180deg) contrast(1.1)";
-    case "sepia":
-      return "sepia(0.35) contrast(1.08) brightness(0.96)";
-    case "high-contrast":
-      return "contrast(1.35) brightness(0.98)";
-    default:
-      return "none";
-  }
 }
 
 export function ScrollReader({

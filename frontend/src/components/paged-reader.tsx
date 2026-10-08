@@ -13,6 +13,7 @@ import {
   DEFAULT_ASPECT_RATIO,
   PAGE_PADDING,
   buildReaderSpreads,
+  getFilterCSS,
   isNextSpreadOnLeft,
 } from "@/components/reader-shared";
 import type {
@@ -43,19 +44,6 @@ interface PagedReaderProps {
   onToggleHUD?: () => void;
   clickCenterZoom?: boolean;
   doubleClickZoom?: boolean;
-}
-
-function getFilterCSS(filter: ReaderFilter) {
-  switch (filter) {
-    case "invert":
-      return "invert(1) hue-rotate(180deg) contrast(1.1)";
-    case "sepia":
-      return "sepia(0.35) contrast(1.08) brightness(0.96)";
-    case "high-contrast":
-      return "contrast(1.35) brightness(0.98)";
-    default:
-      return "none";
-  }
 }
 
 export function PagedReader({
