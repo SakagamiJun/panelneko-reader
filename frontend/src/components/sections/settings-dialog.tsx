@@ -19,7 +19,6 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import appIcon from "@/assets/appicon.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
@@ -1121,7 +1120,7 @@ export function SettingsDialog({
                   <div className="p-5 space-y-4">
                     <div className="flex items-center gap-3.5">
                       <img
-                        src={appIcon}
+                        src="/appicon.png"
                         alt="PanelNeko Reader"
                         className="h-11 w-11 rounded-xl shadow-xs object-cover border border-border/40 shrink-0 select-none pointer-events-none"
                       />
