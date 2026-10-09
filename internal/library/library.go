@@ -27,7 +27,6 @@ const (
 	LibraryAssetPrefix        = "/library-files/"
 	LibraryArchiveAssetPrefix = "/library-archive/"
 	LibrarySourceAssetPrefix  = "_src/"
-	archiveSidecarSuffix      = ".panelneko-chapter.json"
 )
 
 func IsLibraryAssetRequest(requestPath string) bool {
@@ -913,10 +912,6 @@ func OpenArchiveAsset(outputRoot string, requestPath string) (io.ReadCloser, str
 	return OpenMultiSourceArchiveAsset(map[string]string{"default": outputRoot}, outputRoot, requestPath)
 }
 
-func AssetURLForPath(outputRoot string, filePath string) (string, error) {
-	return AssetURLForSourcePath(outputRoot, "default", filePath)
-}
-
 func AssetURLForSourcePath(outputRoot string, sourceID string, filePath string) (string, error) {
 	relativePath, err := relativePathWithinRoot(outputRoot, filePath)
 	if err != nil {
@@ -971,14 +966,6 @@ func ArchiveAssetURLForSource(outputRoot string, sourceID string, archivePath st
 		encodePathToken(relativeArchivePath) +
 		"/" +
 		encodePathToken(normalizedEntryPath), nil
-}
-
-func ArchiveSidecarPath(archivePath string) string {
-	return strings.TrimSuffix(archivePath, filepath.Ext(archivePath)) + archiveSidecarSuffix
-}
-
-func loadMangaManifest(outputRoot string, mangaPath string, relativePath string) (mangaManifest, error) {
-	return loadMangaManifestWithSource(outputRoot, "default", mangaPath, relativePath)
 }
 
 func loadMangaManifestWithSource(outputRoot string, sourceID string, mangaPath string, relativePath string) (mangaManifest, error) {
@@ -1444,10 +1431,6 @@ func resolveChapterMetadata(baseName string, info ComicInfo, hasInfo bool) chapt
 	return metadata
 }
 
-func resolveArchiveAssetRequest(outputRoot string, requestPath string) (string, string, error) {
-	return resolveMultiSourceArchiveAssetRequest(map[string]string{"default": outputRoot}, outputRoot, requestPath)
-}
-
 func resolveMultiSourceArchiveAssetRequest(sourcesMap map[string]string, defaultRoot string, requestPath string) (string, string, error) {
 	if !strings.HasPrefix(requestPath, LibraryArchiveAssetPrefix) {
 		return "", "", fmt.Errorf("unsupported archive asset path: %s", requestPath)
@@ -1763,11 +1746,6 @@ func DecodeMangaIDWithSource(identifier string) (string, string, error) {
 
 func encodeMangaID(relativePath string) string {
 	return EncodeMangaIDWithSource("default", relativePath)
-}
-
-func decodeMangaID(identifier string) (string, error) {
-	_, relPath, err := DecodeMangaIDWithSource(identifier)
-	return relPath, err
 }
 
 func inferChapterNumber(chapterDirName string) float64 {

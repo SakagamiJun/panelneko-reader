@@ -150,14 +150,6 @@ func ServeThumbnail(outputRoot string, cacheDir string, requestPath string, w ht
 	return ServeMultiSourceThumbnailWithQuality(map[string]string{"default": outputRoot}, outputRoot, cacheDir, requestPath, w, r, quality)
 }
 
-func ServeMultiSourceThumbnail(sourcesMap map[string]string, defaultRoot string, cacheDir string, requestPath string, w http.ResponseWriter, r *http.Request, enabled bool) error {
-	quality := contracts.ThumbnailQualityMedium
-	if !enabled {
-		quality = contracts.ThumbnailQualityOff
-	}
-	return ServeMultiSourceThumbnailWithQuality(sourcesMap, defaultRoot, cacheDir, requestPath, w, r, quality)
-}
-
 func ServeMultiSourceThumbnailWithQuality(sourcesMap map[string]string, defaultRoot string, cacheDir string, requestPath string, w http.ResponseWriter, r *http.Request, quality contracts.ThumbnailQuality) error {
 	if r != nil && r.URL != nil {
 		if qParam := r.URL.Query().Get("q"); qParam != "" {
@@ -338,10 +330,6 @@ func serveCachedThumbnail(cachedFilePath string, cacheKey string, w http.Respons
 	}
 
 	http.ServeFile(w, r, cachedFilePath)
-}
-
-func serveFallbackAsset(outputRoot string, subPath string, w http.ResponseWriter, r *http.Request) error {
-	return serveMultiSourceFallbackAsset(map[string]string{"default": outputRoot}, outputRoot, subPath, w, r)
 }
 
 func serveMultiSourceFallbackAsset(sourcesMap map[string]string, defaultRoot string, subPath string, w http.ResponseWriter, r *http.Request) error {
