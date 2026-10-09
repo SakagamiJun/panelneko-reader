@@ -198,46 +198,7 @@ func (s *SQLiteStore) GetReaderProgress(mangaID string) (contracts.ReaderProgres
 }
 
 func (s *SQLiteStore) SaveLibraryManga(mangas []contracts.LibraryManga, modTimes map[string]int64) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	_, err = tx.Exec(`DELETE FROM library_manga`)
-	if err != nil {
-		return err
-	}
-
-	stmt, err := tx.Prepare(`
-		INSERT INTO library_manga (id, source_id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time, is_available)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	for _, m := range mangas {
-		modTime := modTimes[m.ID]
-		isColl := 0
-		if m.IsCollection {
-			isColl = 1
-		}
-		sourceID := m.SourceID
-		if sourceID == "" {
-			sourceID = "default"
-		}
-		isAvail := 1
-		if !m.IsAvailable {
-			isAvail = 0
-		}
-		if _, err := stmt.Exec(m.ID, sourceID, m.Title, m.SourceURL, m.RelativePath, m.ParentPath, isColl, m.MangaCount, m.CoverImageURL, m.ChapterCount, m.PageCount, m.LastUpdated, modTime, isAvail); err != nil {
-			return err
-		}
-	}
-
-	return tx.Commit()
+	return s.SaveLibraryMangaForSource("default", mangas, modTimes)
 }
 
 func (s *SQLiteStore) SaveLibraryMangaForSource(sourceID string, mangas []contracts.LibraryManga, modTimes map[string]int64) error {

@@ -3,7 +3,6 @@ package contracts
 type ErrorCode string
 
 const (
-	ErrCodeStoreFailure     ErrorCode = "STORE_FAILURE"
 	ErrCodeSettingsInvalid  ErrorCode = "SETTINGS_INVALID"
 	ErrCodeBootstrapFailure ErrorCode = "BOOTSTRAP_FAILURE"
 )
