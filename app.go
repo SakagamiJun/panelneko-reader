@@ -20,7 +20,6 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
-	"golang.org/x/mod/semver"
 )
 
 //go:embed build/config.yml
@@ -91,19 +90,15 @@ func (a *App) GetAppVersion() contracts.AppVersionInfo {
 	}
 }
 
-func compareSemver(v1, v2 string) int {
-	s1 := strings.TrimSpace(v1)
-	if !strings.HasPrefix(s1, "v") && !strings.HasPrefix(s1, "V") {
-		s1 = "v" + s1
+func resolveThumbnailQuality(st contracts.AppSettings) contracts.ThumbnailQuality {
+	quality := st.ThumbnailQuality
+	if quality == "" {
+		if st.EnableThumbnailCache != nil && !*st.EnableThumbnailCache {
+			return contracts.ThumbnailQualityOff
+		}
+		return contracts.ThumbnailQualityMedium
 	}
-	s2 := strings.TrimSpace(v2)
-	if !strings.HasPrefix(s2, "v") && !strings.HasPrefix(s2, "V") {
-		s2 = "v" + s2
-	}
-	if semver.IsValid(s1) && semver.IsValid(s2) {
-		return semver.Compare(s1, s2)
-	}
-	return strings.Compare(s1, s2)
+	return quality
 }
 
 func matchPanelNekoAsset(req updater.CheckRequest, assets []github.ReleaseAsset) int {
@@ -559,14 +554,7 @@ func (a *App) getCachedLibraryManga() ([]contracts.LibraryManga, error) {
 
 	items = library.ApplyPinsAndSort(items, pins, currentSettings.DuplicateMergeMode)
 
-	quality := currentSettings.ThumbnailQuality
-	if quality == "" {
-		if currentSettings.EnableThumbnailCache != nil && !*currentSettings.EnableThumbnailCache {
-			quality = contracts.ThumbnailQualityOff
-		} else {
-			quality = contracts.ThumbnailQualityMedium
-		}
-	}
+	quality := resolveThumbnailQuality(currentSettings)
 
 	for i := range items {
 		if quality == contracts.ThumbnailQualityOff {
@@ -957,14 +945,7 @@ func (a *App) assetHandler() http.Handler {
 		}
 
 		if strings.HasPrefix(request.URL.Path, library.LibraryThumbnailPrefix) {
-			quality := a.settings.Get().ThumbnailQuality
-			if quality == "" {
-				if a.settings.Get().EnableThumbnailCache != nil && !*a.settings.Get().EnableThumbnailCache {
-					quality = contracts.ThumbnailQualityOff
-				} else {
-					quality = contracts.ThumbnailQualityMedium
-				}
-			}
+			quality := resolveThumbnailQuality(a.settings.Get())
 			cacheDir := filepath.Join(a.store.DataDir(), "cache", "thumbnails")
 			if err := library.ServeMultiSourceThumbnailWithQuality(sourcesMap, defaultRoot, cacheDir, request.URL.Path, writer, request, quality); err != nil {
 				if os.IsNotExist(err) {

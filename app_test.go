@@ -404,28 +404,24 @@ func TestAppGetAppVersion(t *testing.T) {
 	}
 }
 
-func TestCompareSemver(t *testing.T) {
-	tests := []struct {
-		v1   string
-		v2   string
-		want int
-	}{
-		{"0.1.0", "0.9.0", -1},
-		{"0.9.0", "0.1.0", 1},
-		{"0.1.0", "0.1.0", 0},
-		{"v0.1.0", "0.9.0", -1},
-		{"v1.0.0", "v0.9.0", 1},
-		{"0.1.0", "0.1.1", -1},
-		{"v1.0.0-rc1", "v1.0.0", -1},
-		{"v1.0.0", "v1.0.0-rc1", 1},
-		{"v1.0.0", "1.0.0", 0},
+func TestResolveThumbnailQuality(t *testing.T) {
+	off := false
+	on := true
+
+	if got := resolveThumbnailQuality(contracts.AppSettings{ThumbnailQuality: contracts.ThumbnailQualityHigh}); got != contracts.ThumbnailQualityHigh {
+		t.Errorf("got %v, want high", got)
 	}
 
-	for _, tc := range tests {
-		got := compareSemver(tc.v1, tc.v2)
-		if got != tc.want {
-			t.Errorf("compareSemver(%q, %q) = %d; want %d", tc.v1, tc.v2, got, tc.want)
-		}
+	if got := resolveThumbnailQuality(contracts.AppSettings{EnableThumbnailCache: &off}); got != contracts.ThumbnailQualityOff {
+		t.Errorf("got %v, want off", got)
+	}
+
+	if got := resolveThumbnailQuality(contracts.AppSettings{EnableThumbnailCache: &on}); got != contracts.ThumbnailQualityMedium {
+		t.Errorf("got %v, want medium", got)
+	}
+
+	if got := resolveThumbnailQuality(contracts.AppSettings{}); got != contracts.ThumbnailQualityMedium {
+		t.Errorf("got %v, want medium", got)
 	}
 }
 
