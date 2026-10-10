@@ -47,6 +47,86 @@ export interface AppSettings {
   enableThumbnailCache?: boolean;
   thumbnailQuality?: ThumbnailQuality;
   duplicateMergeMode?: DuplicateMergeMode;
+  downloader?: DownloaderSettings;
+}
+
+export interface DownloaderSettings {
+  enableCopyManga: boolean;
+  copyMangaApiDomain?: string;
+  copyMangaToken?: string;
+  enableRawManga: boolean;
+  rawMangaBaseUrl?: string;
+  downloadDir?: string;
+  downloadFormat?: "cbz" | "folder";
+  maxConcurrentDownloads?: number;
+  maxImageConcurrency?: number;
+}
+
+export interface OnlineMangaItem {
+  id: string;
+  source: "copymanga" | "klz9" | string;
+  title: string;
+  author: string;
+  coverURL: string;
+  status: "ongoing" | "completed" | string;
+  description?: string;
+  updateTime?: string;
+  totalChapters?: number;
+}
+
+export interface OnlineMangaChapter {
+  id: string;
+  mangaID: string;
+  source: string;
+  title: string;
+  number: number;
+  releaseDate?: string;
+}
+
+export interface OnlineSearchResult {
+  items: OnlineMangaItem[];
+  totalItems: number;
+  page: number;
+  totalPages: number;
+}
+
+export type DownloadTaskStatus = "pending" | "downloading" | "paused" | "completed" | "failed";
+
+export interface DownloadTask {
+  id: string;
+  source: string;
+  mangaID: string;
+  mangaTitle: string;
+  mangaCoverURL?: string;
+  chapterID: string;
+  chapterTitle: string;
+  chapterNumber: number;
+  status: DownloadTaskStatus;
+  totalPages: number;
+  downloadedPages: number;
+  speed?: string;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DownloadProgress {
+  activeTasks: number;
+  totalTasks: number;
+  downloadedPages: number;
+  totalPages: number;
+  speedFormatted: string;
+  bytesPerSec: number;
+}
+
+export interface CreateDownloadTaskInput {
+  source: string;
+  mangaID: string;
+  mangaTitle: string;
+  mangaCoverURL?: string;
+  chapterID: string;
+  chapterTitle: string;
+  chapterNumber: number;
 }
 
 export interface LibraryManga {
@@ -126,4 +206,6 @@ export const EVENTS = {
   LIBRARY_UPDATED: BindingsEvents.LibraryUpdated,
   FILES_DROPPED: BindingsEvents.FilesDropped,
   FILES_OPENED: BindingsEvents.FilesOpened,
+  DOWNLOAD_PROGRESS: (BindingsEvents as any).DownloadProgress ?? "download:progress",
+  DOWNLOAD_TASKS_UPDATED: (BindingsEvents as any).DownloadTasksUpdated ?? "download:tasks_updated",
 } as const;

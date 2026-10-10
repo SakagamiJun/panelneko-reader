@@ -95,6 +95,17 @@ func DefaultSettings() contracts.AppSettings {
 		EnableThumbnailCache: boolPtr(true),
 		ThumbnailQuality:     contracts.ThumbnailQualityMedium,
 		DuplicateMergeMode:   contracts.DuplicateMergeModeSeparate,
+		Downloader: contracts.DownloaderSettings{
+			EnableCopyManga:        false,
+			CopyMangaAPIDomain:     "api.copy202601.com",
+			CopyMangaToken:         "",
+			EnableRawManga:         false,
+			RawMangaBaseURL:        "https://klz9.com",
+			DownloadDir:            filepath.Join(defaultRoot, "Downloads"),
+			DownloadFormat:         "cbz",
+			MaxConcurrentDownloads: 3,
+			MaxImageConcurrency:    10,
+		},
 	}
 }
 
@@ -380,6 +391,42 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 			Message: fmt.Sprintf("unsupported duplicate merge mode: %s", input.DuplicateMergeMode),
 		}
 	}
+
+	dl := input.Downloader
+	if strings.TrimSpace(dl.CopyMangaAPIDomain) == "" {
+		dl.CopyMangaAPIDomain = "api.copy202601.com"
+	}
+	dl.CopyMangaAPIDomain = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(dl.CopyMangaAPIDomain), "https://"), "http://")
+	dl.CopyMangaAPIDomain = strings.TrimRight(dl.CopyMangaAPIDomain, "/")
+
+	if strings.TrimSpace(dl.RawMangaBaseURL) == "" {
+		dl.RawMangaBaseURL = "https://klz9.com"
+	}
+	dl.RawMangaBaseURL = strings.TrimRight(strings.TrimSpace(dl.RawMangaBaseURL), "/")
+
+	if strings.TrimSpace(dl.DownloadFormat) != "folder" {
+		dl.DownloadFormat = "cbz"
+	}
+
+	if dl.MaxConcurrentDownloads <= 0 {
+		dl.MaxConcurrentDownloads = 3
+	} else if dl.MaxConcurrentDownloads > 10 {
+		dl.MaxConcurrentDownloads = 10
+	}
+
+	if dl.MaxImageConcurrency <= 0 {
+		dl.MaxImageConcurrency = 10
+	} else if dl.MaxImageConcurrency > 30 {
+		dl.MaxImageConcurrency = 30
+	}
+
+	dlDir := strings.TrimSpace(dl.DownloadDir)
+	if dlDir == "" {
+		dlDir = filepath.Join(settings.LibraryRoot, "Downloads")
+	}
+	dl.DownloadDir = filepath.Clean(dlDir)
+
+	settings.Downloader = dl
 
 	return settings, nil
 }

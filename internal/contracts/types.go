@@ -124,6 +124,94 @@ type AppSettings struct {
 	EnableThumbnailCache      *bool               `json:"enableThumbnailCache,omitempty"`
 	ThumbnailQuality          ThumbnailQuality    `json:"thumbnailQuality,omitempty"`
 	DuplicateMergeMode        DuplicateMergeMode  `json:"duplicateMergeMode,omitempty"`
+	Downloader                DownloaderSettings  `json:"downloader"`
+}
+
+type DownloaderSettings struct {
+	EnableCopyManga        bool   `json:"enableCopyManga"`
+	CopyMangaAPIDomain     string `json:"copyMangaApiDomain,omitempty"`
+	CopyMangaToken         string `json:"copyMangaToken,omitempty"`
+	EnableRawManga         bool   `json:"enableRawManga"`
+	RawMangaBaseURL        string `json:"rawMangaBaseUrl,omitempty"`
+	DownloadDir            string `json:"downloadDir,omitempty"`
+	DownloadFormat         string `json:"downloadFormat,omitempty"` // "cbz" or "folder"
+	MaxConcurrentDownloads int    `json:"maxConcurrentDownloads,omitempty"`
+	MaxImageConcurrency    int    `json:"maxImageConcurrency,omitempty"`
+}
+
+type OnlineMangaItem struct {
+	ID            string `json:"id"`
+	Source        string `json:"source"` // "copymanga" | "klz9"
+	Title         string `json:"title"`
+	Author        string `json:"author"`
+	CoverURL      string `json:"coverURL"`
+	Status        string `json:"status"` // "ongoing" | "completed" | ""
+	Description   string `json:"description,omitempty"`
+	UpdateTime    string `json:"updateTime,omitempty"`
+	TotalChapters int    `json:"totalChapters,omitempty"`
+}
+
+type OnlineMangaChapter struct {
+	ID          string  `json:"id"`
+	MangaID     string  `json:"mangaID"`
+	Source      string  `json:"source"`
+	Title       string  `json:"title"`
+	Number      float64 `json:"number"`
+	ReleaseDate string  `json:"releaseDate,omitempty"`
+}
+
+type OnlineSearchResult struct {
+	Items      []OnlineMangaItem `json:"items"`
+	TotalItems int               `json:"totalItems"`
+	Page       int               `json:"page"`
+	TotalPages int               `json:"totalPages"`
+}
+
+type DownloadTaskStatus string
+
+const (
+	DownloadStatusPending     DownloadTaskStatus = "pending"
+	DownloadStatusDownloading DownloadTaskStatus = "downloading"
+	DownloadStatusPaused      DownloadTaskStatus = "paused"
+	DownloadStatusCompleted   DownloadTaskStatus = "completed"
+	DownloadStatusFailed      DownloadTaskStatus = "failed"
+)
+
+type DownloadTask struct {
+	ID              string             `json:"id"`
+	Source          string             `json:"source"`
+	MangaID         string             `json:"mangaID"`
+	MangaTitle      string             `json:"mangaTitle"`
+	MangaCoverURL   string             `json:"mangaCoverURL,omitempty"`
+	ChapterID       string             `json:"chapterID"`
+	ChapterTitle    string             `json:"chapterTitle"`
+	ChapterNumber   float64            `json:"chapterNumber"`
+	Status          DownloadTaskStatus `json:"status"`
+	TotalPages      int                `json:"totalPages"`
+	DownloadedPages int                `json:"downloadedPages"`
+	Speed           string             `json:"speed,omitempty"`
+	ErrorMessage    string             `json:"errorMessage,omitempty"`
+	CreatedAt       string             `json:"createdAt"`
+	UpdatedAt       string             `json:"updatedAt"`
+}
+
+type DownloadProgress struct {
+	ActiveTasks     int     `json:"activeTasks"`
+	TotalTasks      int     `json:"totalTasks"`
+	DownloadedPages int     `json:"downloadedPages"`
+	TotalPages      int     `json:"totalPages"`
+	SpeedFormatted  string  `json:"speedFormatted"`
+	BytesPerSec     float64 `json:"bytesPerSec"`
+}
+
+type CreateDownloadTaskInput struct {
+	Source        string  `json:"source"`
+	MangaID       string  `json:"mangaID"`
+	MangaTitle    string  `json:"mangaTitle"`
+	MangaCoverURL string  `json:"mangaCoverURL,omitempty"`
+	ChapterID     string  `json:"chapterID"`
+	ChapterTitle  string  `json:"chapterTitle"`
+	ChapterNumber float64 `json:"chapterNumber"`
 }
 
 type LibraryManga struct {

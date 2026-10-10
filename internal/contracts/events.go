@@ -11,10 +11,12 @@ type LocaleResolvedPayload struct {
 }
 
 const (
-	EventSettingsUpdated = "settings:updated"
-	EventThemeResolved   = "theme:resolved"
-	EventLocaleResolved  = "locale:resolved"
-	EventLibraryUpdated  = "library:updated"
-	EventFilesDropped    = "files:dropped"
-	EventFilesOpened     = "files:opened"
+	EventSettingsUpdated      = "settings:updated"
+	EventThemeResolved        = "theme:resolved"
+	EventLocaleResolved       = "locale:resolved"
+	EventLibraryUpdated       = "library:updated"
+	EventFilesDropped         = "files:dropped"
+	EventFilesOpened          = "files:opened"
+	EventDownloadProgress     = "download:progress"
+	EventDownloadTasksUpdated = "download:tasks_updated"
 )
