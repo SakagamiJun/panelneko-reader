@@ -214,6 +214,18 @@ type CreateDownloadTaskInput struct {
 	ChapterNumber float64 `json:"chapterNumber"`
 }
 
+type SiteProfile struct {
+	Site             string            `json:"site"`
+	BundleURL        string            `json:"bundleURL"`
+	BundleHash       string            `json:"bundleHash"`
+	APIBase          string            `json:"apiBase"`
+	SignatureSecret  string            `json:"signatureSecret"`
+	SignatureMode    string            `json:"signatureMode"`
+	ImageHostRewrite map[string]string `json:"imageHostRewrite"`
+	IgnorePageURLs   []string          `json:"ignorePageURLs"`
+	ExtractedAt      string            `json:"extractedAt"`
+}
+
 type LibraryManga struct {
 	ID            string `json:"id"`
 	SourceID      string `json:"sourceID,omitempty"`

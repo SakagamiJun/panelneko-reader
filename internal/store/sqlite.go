@@ -98,6 +98,30 @@ func (s *SQLiteStore) init() error {
 			id TEXT PRIMARY KEY,
 			pinned_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS site_profiles (
+			site TEXT NOT NULL,
+			bundle_hash TEXT PRIMARY KEY,
+			bundle_url TEXT NOT NULL,
+			profile_json TEXT NOT NULL,
+			extracted_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS download_tasks (
+			id TEXT PRIMARY KEY,
+			source TEXT NOT NULL,
+			manga_id TEXT NOT NULL,
+			manga_title TEXT NOT NULL,
+			manga_cover_url TEXT NOT NULL DEFAULT '',
+			chapter_id TEXT NOT NULL,
+			chapter_title TEXT NOT NULL,
+			chapter_number REAL NOT NULL DEFAULT 0,
+			status TEXT NOT NULL,
+			total_pages INTEGER NOT NULL DEFAULT 0,
+			downloaded_pages INTEGER NOT NULL DEFAULT 0,
+			speed TEXT NOT NULL DEFAULT '',
+			error_message TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
 	}
 
 	for _, statement := range statements {
@@ -398,5 +422,150 @@ func (s *SQLiteStore) SetPin(id string, isPinned bool, pinnedAt string) error {
 	}
 
 	_, err := s.db.Exec(`DELETE FROM pinned_items WHERE id = ?`, id)
+	return err
+}
+
+func (s *SQLiteStore) SaveSiteProfile(profile contracts.SiteProfile) error {
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		return fmt.Errorf("encode site profile: %w", err)
+	}
+
+	const query = `
+		INSERT INTO site_profiles (
+			site, bundle_hash, bundle_url, profile_json, extracted_at
+		) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(bundle_hash) DO UPDATE SET
+			site = excluded.site,
+			bundle_url = excluded.bundle_url,
+			profile_json = excluded.profile_json,
+			extracted_at = excluded.extracted_at
+	`
+	_, err = s.db.Exec(query, profile.Site, profile.BundleHash, profile.BundleURL, string(raw), profile.ExtractedAt)
+	if err != nil {
+		return fmt.Errorf("upsert site profile: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) GetSiteProfile(bundleHash string) (contracts.SiteProfile, bool, error) {
+	const query = `SELECT profile_json FROM site_profiles WHERE bundle_hash = ?`
+	var raw string
+	if err := s.db.QueryRow(query, bundleHash).Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return contracts.SiteProfile{}, false, nil
+		}
+		return contracts.SiteProfile{}, false, fmt.Errorf("select site profile: %w", err)
+	}
+
+	var profile contracts.SiteProfile
+	if err := json.Unmarshal([]byte(raw), &profile); err != nil {
+		return contracts.SiteProfile{}, false, fmt.Errorf("decode site profile: %w", err)
+	}
+	return profile, true, nil
+}
+
+func (s *SQLiteStore) GetLatestSiteProfile(site string) (contracts.SiteProfile, bool, error) {
+	const query = `SELECT profile_json FROM site_profiles WHERE site = ? ORDER BY extracted_at DESC LIMIT 1`
+	var raw string
+	if err := s.db.QueryRow(query, site).Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return contracts.SiteProfile{}, false, nil
+		}
+		return contracts.SiteProfile{}, false, fmt.Errorf("select latest site profile: %w", err)
+	}
+
+	var profile contracts.SiteProfile
+	if err := json.Unmarshal([]byte(raw), &profile); err != nil {
+		return contracts.SiteProfile{}, false, fmt.Errorf("decode latest site profile: %w", err)
+	}
+	return profile, true, nil
+}
+
+func (s *SQLiteStore) SaveDownloadTask(task contracts.DownloadTask) error {
+	const query = `
+		INSERT INTO download_tasks (
+			id, source, manga_id, manga_title, manga_cover_url,
+			chapter_id, chapter_title, chapter_number, status,
+			total_pages, downloaded_pages, speed, error_message,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			status = excluded.status,
+			total_pages = excluded.total_pages,
+			downloaded_pages = excluded.downloaded_pages,
+			speed = excluded.speed,
+			error_message = excluded.error_message,
+			updated_at = excluded.updated_at
+	`
+	_, err := s.db.Exec(query,
+		task.ID, task.Source, task.MangaID, task.MangaTitle, task.MangaCoverURL,
+		task.ChapterID, task.ChapterTitle, task.ChapterNumber, string(task.Status),
+		task.TotalPages, task.DownloadedPages, task.Speed, task.ErrorMessage,
+		task.CreatedAt, task.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("save download task: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) GetDownloadTasks() ([]contracts.DownloadTask, error) {
+	const query = `
+		SELECT id, source, manga_id, manga_title, manga_cover_url,
+		       chapter_id, chapter_title, chapter_number, status,
+		       total_pages, downloaded_pages, speed, error_message,
+		       created_at, updated_at
+		FROM download_tasks
+		ORDER BY created_at DESC
+	`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query download tasks: %w", err)
+	}
+	defer rows.Close()
+
+	var tasks []contracts.DownloadTask
+	for rows.Next() {
+		var t contracts.DownloadTask
+		var statusStr string
+		err := rows.Scan(
+			&t.ID, &t.Source, &t.MangaID, &t.MangaTitle, &t.MangaCoverURL,
+			&t.ChapterID, &t.ChapterTitle, &t.ChapterNumber, &statusStr,
+			&t.TotalPages, &t.DownloadedPages, &t.Speed, &t.ErrorMessage,
+			&t.CreatedAt, &t.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan download task: %w", err)
+		}
+		t.Status = contracts.DownloadTaskStatus(statusStr)
+		tasks = append(tasks, t)
+	}
+	return tasks, rows.Err()
+}
+
+func (s *SQLiteStore) UpdateDownloadTaskStatus(id string, status contracts.DownloadTaskStatus, errorMsg string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	const query = `UPDATE download_tasks SET status = ?, error_message = ?, updated_at = ? WHERE id = ?`
+	_, err := s.db.Exec(query, string(status), errorMsg, now, id)
+	return err
+}
+
+func (s *SQLiteStore) UpdateDownloadTaskProgress(id string, downloadedPages int, totalPages int, speed string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	const query = `UPDATE download_tasks SET downloaded_pages = ?, total_pages = ?, speed = ?, updated_at = ? WHERE id = ?`
+	_, err := s.db.Exec(query, downloadedPages, totalPages, speed, now, id)
+	return err
+}
+
+func (s *SQLiteStore) DeleteDownloadTask(id string) error {
+	const query = `DELETE FROM download_tasks WHERE id = ?`
+	_, err := s.db.Exec(query, id)
+	return err
+}
+
+func (s *SQLiteStore) ClearCompletedDownloadTasks() error {
+	const query = `DELETE FROM download_tasks WHERE status IN ('completed', 'failed')`
+	_, err := s.db.Exec(query)
 	return err
 }
