@@ -1,0 +1,433 @@
+package downloader
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
+	"github.com/sakagamijun/panelneko-reader/internal/downloader/copymanga"
+	"github.com/sakagamijun/panelneko-reader/internal/downloader/klz9"
+	"github.com/sakagamijun/panelneko-reader/internal/settings"
+	"github.com/sakagamijun/panelneko-reader/internal/store"
+)
+
+var sanitizeFilenameRe = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 64*1024)
+		return &b
+	},
+}
+
+func SanitizeFilename(name string) string {
+	clean := sanitizeFilenameRe.ReplaceAllString(name, "_")
+	clean = strings.TrimSpace(clean)
+	if clean == "" {
+		return "Untitled"
+	}
+	return clean
+}
+
+type runningTask struct {
+	cancel context.CancelFunc
+}
+
+type Manager struct {
+	store              *store.SQLiteStore
+	settings           *settings.Service
+	copyManga          *copymanga.Client
+	klz9               *klz9.Client
+	chapterSem         chan struct{}
+	imgSem             chan struct{}
+	running            map[string]*runningTask
+	mu                 sync.RWMutex
+	emitter            func(eventName string, payload any)
+	onDownloadFinished func(outputPath string)
+	totalBytesSec      atomic.Uint64
+}
+
+func NewManager(
+	storeValue *store.SQLiteStore,
+	settingsService *settings.Service,
+	copyClient *copymanga.Client,
+	klz9Client *klz9.Client,
+) *Manager {
+	st := settingsService.Get()
+	maxChapter := st.Downloader.MaxConcurrentDownloads
+	if maxChapter <= 0 {
+		maxChapter = 3
+	}
+	maxImg := st.Downloader.MaxImageConcurrency
+	if maxImg <= 0 {
+		maxImg = 10
+	}
+
+	mgr := &Manager{
+		store:      storeValue,
+		settings:   settingsService,
+		copyManga:  copyClient,
+		klz9:       klz9Client,
+		chapterSem: make(chan struct{}, maxChapter),
+		imgSem:     make(chan struct{}, maxImg),
+		running:    make(map[string]*runningTask),
+	}
+
+	return mgr
+}
+
+func (m *Manager) SetEmitter(fn func(eventName string, payload any)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.emitter = fn
+}
+
+func (m *Manager) SetOnDownloadFinished(fn func(outputPath string)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onDownloadFinished = fn
+}
+
+func (m *Manager) emit(event string, payload any) {
+	m.mu.RLock()
+	fn := m.emitter
+	m.mu.RUnlock()
+	if fn != nil {
+		fn(event, payload)
+	}
+}
+
+func (m *Manager) GetTasks() ([]contracts.DownloadTask, error) {
+	return m.store.GetDownloadTasks()
+}
+
+func (m *Manager) CreateTasks(inputs []contracts.CreateDownloadTaskInput) ([]contracts.DownloadTask, error) {
+	existing, err := m.store.GetDownloadTasks()
+	if err != nil {
+		return nil, err
+	}
+	existMap := make(map[string]contracts.DownloadTask)
+	for _, t := range existing {
+		existMap[t.ChapterID] = t
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	var created []contracts.DownloadTask
+
+	for _, in := range inputs {
+		taskID := fmt.Sprintf("%s-%s", in.Source, in.ChapterID)
+		if old, ok := existMap[in.ChapterID]; ok {
+			if old.Status == contracts.DownloadStatusDownloading || old.Status == contracts.DownloadStatusPending {
+				continue
+			}
+		}
+
+		task := contracts.DownloadTask{
+			ID:              taskID,
+			Source:          in.Source,
+			MangaID:         in.MangaID,
+			MangaTitle:      in.MangaTitle,
+			MangaCoverURL:   in.MangaCoverURL,
+			ChapterID:       in.ChapterID,
+			ChapterTitle:    in.ChapterTitle,
+			ChapterNumber:   in.ChapterNumber,
+			Status:          contracts.DownloadStatusPending,
+			TotalPages:      0,
+			DownloadedPages: 0,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+
+		if err := m.store.SaveDownloadTask(task); err != nil {
+			return nil, err
+		}
+		created = append(created, task)
+		go m.startWorker(task)
+	}
+
+	m.emit(contracts.EventDownloadTasksUpdated, nil)
+	m.emitProgress()
+	return created, nil
+}
+
+func (m *Manager) startWorker(task contracts.DownloadTask) {
+	m.mu.Lock()
+	if _, isRunning := m.running[task.ID]; isRunning {
+		m.mu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.running[task.ID] = &runningTask{cancel: cancel}
+	m.mu.Unlock()
+
+	defer func() {
+		m.mu.Lock()
+		delete(m.running, task.ID)
+		m.mu.Unlock()
+		m.emit(contracts.EventDownloadTasksUpdated, nil)
+		m.emitProgress()
+	}()
+
+	select {
+	case m.chapterSem <- struct{}{}:
+		defer func() { <-m.chapterSem }()
+	case <-ctx.Done():
+		return
+	}
+
+	_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusDownloading, "")
+	m.emit(contracts.EventDownloadTasksUpdated, nil)
+	m.emitProgress()
+
+	err := m.executeDownload(ctx, task)
+	if err != nil {
+		if ctx.Err() != nil {
+			_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusPaused, "")
+		} else {
+			_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusFailed, err.Error())
+		}
+	} else {
+		_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusCompleted, "")
+	}
+}
+
+func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTask) error {
+	st := m.settings.Get()
+	downloadBaseDir := st.Downloader.DownloadDir
+	if strings.TrimSpace(downloadBaseDir) == "" {
+		downloadBaseDir = filepath.Join(st.LibraryRoot, "Downloads")
+	}
+
+	safeManga := SanitizeFilename(task.MangaTitle)
+	safeChapter := SanitizeFilename(task.ChapterTitle)
+	var finalFilePath string
+	format := st.Downloader.DownloadFormat
+	if format == "folder" {
+		finalFilePath = filepath.Join(downloadBaseDir, safeManga, fmt.Sprintf("%03.0f - %s", task.ChapterNumber, safeChapter))
+	} else {
+		finalFilePath = filepath.Join(downloadBaseDir, safeManga, fmt.Sprintf("%03.0f - %s.cbz", task.ChapterNumber, safeChapter))
+	}
+
+	var pageURLs []string
+	var err error
+
+	if task.Source == copymanga.SiteName {
+		pageURLs, err = m.copyManga.GetChapterImageURLs(ctx, task.MangaID, task.ChapterID)
+	} else if task.Source == klz9.SiteName {
+		pageURLs, err = m.klz9.GetChapterPages(ctx, task.ChapterID)
+	} else {
+		return fmt.Errorf("unknown downloader source: %s", task.Source)
+	}
+
+	if err != nil {
+		return fmt.Errorf("fetch chapter pages: %w", err)
+	}
+
+	totalPages := len(pageURLs)
+	if totalPages == 0 {
+		return fmt.Errorf("no pages found for chapter")
+	}
+
+	_ = m.store.UpdateDownloadTaskProgress(task.ID, 0, totalPages, "")
+	m.emitProgress()
+
+	// Download images stream directly into CBZ
+	var xmlMetadata []byte
+	if task.Source == copymanga.SiteName {
+		xmlMetadata, _ = m.copyManga.BuildComicInfoXML(task.MangaTitle, task.ChapterTitle, "", "", task.ChapterNumber, totalPages)
+	}
+
+	downloadedCount := atomic.Int32{}
+	startTime := time.Now()
+	var totalBytes atomic.Uint64
+
+	fetchImage := func(pCtx context.Context, pageIndex int, writer io.Writer) error {
+		select {
+		case m.imgSem <- struct{}{}:
+			defer func() { <-m.imgSem }()
+		case <-pCtx.Done():
+			return pCtx.Err()
+		}
+
+		rawURL := pageURLs[pageIndex]
+		var dlErr error
+		countWriter := &countingWriter{w: writer, written: &totalBytes}
+
+		if task.Source == copymanga.SiteName {
+			stripedURL := m.copyManga.GetStripedCDNURL(rawURL, pageIndex)
+			dlErr = m.copyManga.DownloadImageStream(pCtx, stripedURL, countWriter)
+		} else {
+			// KLZ9 direct image download
+			dlErr = downloadDirectImage(pCtx, rawURL, countWriter)
+		}
+
+		if dlErr != nil {
+			return dlErr
+		}
+
+		curr := int(downloadedCount.Add(1))
+		elapsed := time.Since(startTime).Seconds()
+		var speedStr string
+		if elapsed > 0 {
+			speedMB := (float64(totalBytes.Load()) / 1024.0 / 1024.0) / elapsed
+			speedStr = fmt.Sprintf("%.2f MB/s", speedMB)
+		}
+
+		_ = m.store.UpdateDownloadTaskProgress(task.ID, curr, totalPages, speedStr)
+		m.emitProgress()
+		return nil
+	}
+
+	if format == "folder" {
+		if err := os.MkdirAll(finalFilePath, 0o755); err != nil {
+			return fmt.Errorf("create chapter dir: %w", err)
+		}
+		for i := 0; i < totalPages; i++ {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			imgFile := filepath.Join(finalFilePath, fmt.Sprintf("%03d.webp", i+1))
+			f, fErr := os.Create(imgFile)
+			if fErr != nil {
+				return fErr
+			}
+			dlErr := fetchImage(ctx, i, f)
+			_ = f.Close()
+			if dlErr != nil {
+				return dlErr
+			}
+		}
+	} else {
+		if err := copymanga.StreamSaveCBZ(finalFilePath, xmlMetadata, totalPages, fetchImage); err != nil {
+			return err
+		}
+	}
+
+	m.mu.RLock()
+	hook := m.onDownloadFinished
+	m.mu.RUnlock()
+	if hook != nil {
+		hook(finalFilePath)
+	}
+
+	return nil
+}
+
+type countingWriter struct {
+	w       io.Writer
+	written *atomic.Uint64
+}
+
+func (c *countingWriter) Write(p []byte) (n int, err error) {
+	n, err = c.w.Write(p)
+	if n > 0 && c.written != nil {
+		c.written.Add(uint64(n))
+	}
+	return n, err
+}
+
+func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 PanelNeko/1.0")
+	req.Header.Set("Referer", "https://klz9.com/")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("direct image status %d", resp.StatusCode)
+	}
+
+	buf := bufferPool.Get().(*[]byte)
+	defer bufferPool.Put(buf)
+	_, err = io.CopyBuffer(w, resp.Body, *buf)
+	return err
+}
+
+func (m *Manager) PauseTask(taskID string) error {
+	m.mu.Lock()
+	if rt, ok := m.running[taskID]; ok {
+		rt.cancel()
+		delete(m.running, taskID)
+	}
+	m.mu.Unlock()
+
+	_ = m.store.UpdateDownloadTaskStatus(taskID, contracts.DownloadStatusPaused, "")
+	m.emit(contracts.EventDownloadTasksUpdated, nil)
+	m.emitProgress()
+	return nil
+}
+
+func (m *Manager) ResumeTask(taskID string) error {
+	t, found, err := m.store.GetDownloadTask(taskID)
+	if err != nil || !found {
+		return fmt.Errorf("task not found: %s", taskID)
+	}
+
+	_ = m.store.UpdateDownloadTaskStatus(taskID, contracts.DownloadStatusPending, "")
+	go m.startWorker(t)
+	m.emit(contracts.EventDownloadTasksUpdated, nil)
+	m.emitProgress()
+	return nil
+}
+
+func (m *Manager) CancelTask(taskID string) error {
+	_ = m.PauseTask(taskID)
+	err := m.store.DeleteDownloadTask(taskID)
+	m.emit(contracts.EventDownloadTasksUpdated, nil)
+	m.emitProgress()
+	return err
+}
+
+func (m *Manager) ClearCompletedTasks() error {
+	err := m.store.ClearCompletedDownloadTasks()
+	m.emit(contracts.EventDownloadTasksUpdated, nil)
+	m.emitProgress()
+	return err
+}
+
+func (m *Manager) GetProgress() contracts.DownloadProgress {
+	tasks, err := m.store.GetDownloadTasks()
+	if err != nil {
+		return contracts.DownloadProgress{}
+	}
+
+	activeCount := 0
+	downloadedPages := 0
+	totalPages := 0
+
+	for _, t := range tasks {
+		if t.Status == contracts.DownloadStatusDownloading || t.Status == contracts.DownloadStatusPending {
+			activeCount++
+			downloadedPages += t.DownloadedPages
+			totalPages += t.TotalPages
+		}
+	}
+
+	return contracts.DownloadProgress{
+		ActiveTasks:     activeCount,
+		TotalTasks:      len(tasks),
+		DownloadedPages: downloadedPages,
+		TotalPages:      totalPages,
+	}
+}
+
+func (m *Manager) emitProgress() {
+	p := m.GetProgress()
+	m.emit(contracts.EventDownloadProgress, p)
+}

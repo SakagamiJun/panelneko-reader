@@ -482,6 +482,33 @@ func (s *SQLiteStore) GetLatestSiteProfile(site string) (contracts.SiteProfile, 
 	return profile, true, nil
 }
 
+func (s *SQLiteStore) GetDownloadTask(id string) (contracts.DownloadTask, bool, error) {
+	const query = `
+		SELECT id, source, manga_id, manga_title, manga_cover_url,
+		       chapter_id, chapter_title, chapter_number, status,
+		       total_pages, downloaded_pages, speed, error_message,
+		       created_at, updated_at
+		FROM download_tasks
+		WHERE id = ?
+	`
+	var t contracts.DownloadTask
+	var statusStr string
+	err := s.db.QueryRow(query, id).Scan(
+		&t.ID, &t.Source, &t.MangaID, &t.MangaTitle, &t.MangaCoverURL,
+		&t.ChapterID, &t.ChapterTitle, &t.ChapterNumber, &statusStr,
+		&t.TotalPages, &t.DownloadedPages, &t.Speed, &t.ErrorMessage,
+		&t.CreatedAt, &t.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return contracts.DownloadTask{}, false, nil
+		}
+		return contracts.DownloadTask{}, false, fmt.Errorf("select download task: %w", err)
+	}
+	t.Status = contracts.DownloadTaskStatus(statusStr)
+	return t, true, nil
+}
+
 func (s *SQLiteStore) SaveDownloadTask(task contracts.DownloadTask) error {
 	const query = `
 		INSERT INTO download_tasks (
