@@ -14,6 +14,9 @@ import (
 	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
+	"github.com/sakagamijun/panelneko-reader/internal/downloader"
+	"github.com/sakagamijun/panelneko-reader/internal/downloader/copymanga"
+	"github.com/sakagamijun/panelneko-reader/internal/downloader/klz9"
 	"github.com/sakagamijun/panelneko-reader/internal/library"
 	"github.com/sakagamijun/panelneko-reader/internal/settings"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
@@ -321,6 +324,9 @@ type App struct {
 	bootErr         error
 	store           *store.SQLiteStore
 	settings        *settings.Service
+	copyManga       *copymanga.Client
+	klz9            *klz9.Client
+	downloads       *downloader.Manager
 	scanMu          sync.Mutex
 	scanOnce        sync.Once
 	updater         *updater.Updater
@@ -380,6 +386,21 @@ func (a *App) bootstrap() error {
 	a.store = storeValue
 	a.settings = settingsService
 
+	st := settingsService.Get()
+	copyClient := copymanga.NewClient(st.Downloader.CopyMangaAPIDomain, st.Downloader.CopyMangaToken, 15)
+	klzClient := klz9.NewClient(storeValue, st.Downloader.RawMangaBaseURL, 20)
+	downloadMgr := downloader.NewManager(storeValue, settingsService, copyClient, klzClient)
+	downloadMgr.SetEmitter(a.emit)
+	downloadMgr.SetOnDownloadFinished(func(outputPath string) {
+		go func() {
+			_, _ = a.performSourcesScan()
+		}()
+	})
+
+	a.copyManga = copyClient
+	a.klz9 = klzClient
+	a.downloads = downloadMgr
+
 	cacheDir := filepath.Join(appDataDir, "cache", "thumbnails")
 	_ = os.MkdirAll(cacheDir, 0o755)
 
@@ -404,6 +425,14 @@ func (a *App) UpdateSettings(input contracts.AppSettings) (contracts.AppSettings
 	updated, err := a.settings.Update(input)
 	if err != nil {
 		return contracts.AppSettings{}, err
+	}
+
+	if a.copyManga != nil {
+		a.copyManga.SetAPIDomain(updated.Downloader.CopyMangaAPIDomain)
+		a.copyManga.SetToken(updated.Downloader.CopyMangaToken)
+	}
+	if a.klz9 != nil {
+		a.klz9.SetBaseURL(updated.Downloader.RawMangaBaseURL)
 	}
 
 	a.emit(contracts.EventSettingsUpdated, updated)
@@ -1021,4 +1050,117 @@ func (a *App) ensureReady() error {
 	}
 
 	return nil
+}
+
+func (a *App) SearchOnlineManga(source string, query string, page int, limit int) (contracts.OnlineSearchResult, error) {
+	if err := a.ensureReady(); err != nil {
+		return contracts.OnlineSearchResult{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	switch source {
+	case copymanga.SiteName:
+		if a.copyManga == nil {
+			return contracts.OnlineSearchResult{}, fmt.Errorf("copymanga client not initialized")
+		}
+		return a.copyManga.SearchManga(ctx, query, page, limit)
+	case klz9.SiteName:
+		if a.klz9 == nil {
+			return contracts.OnlineSearchResult{}, fmt.Errorf("klz9 client not initialized")
+		}
+		return a.klz9.SearchManga(ctx, query, page, limit)
+	default:
+		return contracts.OnlineSearchResult{}, fmt.Errorf("unknown source: %s", source)
+	}
+}
+
+func (a *App) GetOnlineMangaChapters(source string, mangaID string) ([]contracts.OnlineMangaChapter, error) {
+	if err := a.ensureReady(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	switch source {
+	case copymanga.SiteName:
+		if a.copyManga == nil {
+			return nil, fmt.Errorf("copymanga client not initialized")
+		}
+		return a.copyManga.GetMangaChapters(ctx, mangaID)
+	case klz9.SiteName:
+		if a.klz9 == nil {
+			return nil, fmt.Errorf("klz9 client not initialized")
+		}
+		return a.klz9.GetMangaChapters(ctx, mangaID)
+	default:
+		return nil, fmt.Errorf("unknown source: %s", source)
+	}
+}
+
+func (a *App) CreateDownloadTasks(inputs []contracts.CreateDownloadTaskInput) ([]contracts.DownloadTask, error) {
+	if err := a.ensureReady(); err != nil {
+		return nil, err
+	}
+	if a.downloads == nil {
+		return nil, fmt.Errorf("download manager not initialized")
+	}
+	return a.downloads.CreateTasks(inputs)
+}
+
+func (a *App) PauseDownloadTask(taskID string) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	if a.downloads == nil {
+		return fmt.Errorf("download manager not initialized")
+	}
+	return a.downloads.PauseTask(taskID)
+}
+
+func (a *App) ResumeDownloadTask(taskID string) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	if a.downloads == nil {
+		return fmt.Errorf("download manager not initialized")
+	}
+	return a.downloads.ResumeTask(taskID)
+}
+
+func (a *App) CancelDownloadTask(taskID string) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	if a.downloads == nil {
+		return fmt.Errorf("download manager not initialized")
+	}
+	return a.downloads.CancelTask(taskID)
+}
+
+func (a *App) GetDownloadTasks() ([]contracts.DownloadTask, error) {
+	if err := a.ensureReady(); err != nil {
+		return nil, err
+	}
+	if a.downloads == nil {
+		return nil, fmt.Errorf("download manager not initialized")
+	}
+	return a.downloads.GetTasks()
+}
+
+func (a *App) ClearCompletedDownloadTasks() error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	if a.downloads == nil {
+		return fmt.Errorf("download manager not initialized")
+	}
+	return a.downloads.ClearCompletedTasks()
+}
+
+func (a *App) GetDownloadProgress() contracts.DownloadProgress {
+	if a.downloads == nil {
+		return contracts.DownloadProgress{}
+	}
+	return a.downloads.GetProgress()
 }
