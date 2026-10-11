@@ -80,4 +80,31 @@ export const appAdapter: AppAdapter = {
   scanLibrary() {
     return currentAdapter().scanLibrary();
   },
+  searchOnlineManga(source, query, page, limit) {
+    return currentAdapter().searchOnlineManga(source, query, page, limit);
+  },
+  getOnlineMangaChapters(source, mangaID) {
+    return currentAdapter().getOnlineMangaChapters(source, mangaID);
+  },
+  createDownloadTasks(inputs) {
+    return currentAdapter().createDownloadTasks(inputs);
+  },
+  pauseDownloadTask(taskID) {
+    return currentAdapter().pauseDownloadTask(taskID);
+  },
+  resumeDownloadTask(taskID) {
+    return currentAdapter().resumeDownloadTask(taskID);
+  },
+  cancelDownloadTask(taskID) {
+    return currentAdapter().cancelDownloadTask(taskID);
+  },
+  getDownloadTasks() {
+    return currentAdapter().getDownloadTasks();
+  },
+  clearCompletedDownloadTasks() {
+    return currentAdapter().clearCompletedDownloadTasks();
+  },
+  getDownloadProgress() {
+    return currentAdapter().getDownloadProgress();
+  },
 };

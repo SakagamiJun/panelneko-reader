@@ -1,8 +1,13 @@
 import {
   type AppSettings,
+  type CreateDownloadTaskInput,
+  type DownloadProgress,
+  type DownloadTask,
   EVENTS,
   type LibraryManga,
   type LibrarySource,
+  type OnlineMangaChapter,
+  type OnlineSearchResult,
   type ReaderManifest,
   type ReaderProgress,
   type UpdateCheckResult,
@@ -167,6 +172,7 @@ export class MockAdapter implements AppAdapter {
 
   private listeners = new Map<string, Set<Listener>>();
   private collectionOverrides = new Map<string, boolean>();
+  private mockTasks: DownloadTask[] = [];
 
   async getSettings() {
     return this.readSettings();
@@ -469,6 +475,146 @@ export class MockAdapter implements AppAdapter {
   async scanLibrary(): Promise<LibraryManga[]> {
     this.emit(EVENTS.LIBRARY_UPDATED, {});
     return this.listLibraryManga();
+  }
+
+  async searchOnlineManga(source: string, query: string, page = 1, limit = 20): Promise<OnlineSearchResult> {
+    const q = query.toLowerCase().trim();
+    const items = [
+      {
+        id: "mock-online-1",
+        source,
+        title: `${query || "Mock"} Online Chronicle`,
+        author: "Author A",
+        coverURL: "https://picsum.photos/seed/online1/300/400",
+        status: "ongoing",
+        description: "An exciting online manga adventure.",
+        updateTime: new Date().toISOString(),
+        totalChapters: 24,
+      },
+      {
+        id: "mock-online-2",
+        source,
+        title: `${query || "Mock"} Fantasy Journey`,
+        author: "Author B",
+        coverURL: "https://picsum.photos/seed/online2/300/400",
+        status: "completed",
+        description: "A finished epic masterpiece.",
+        updateTime: new Date(Date.now() - 86400000).toISOString(),
+        totalChapters: 12,
+      },
+    ].filter((it) => !q || it.title.toLowerCase().includes(q) || it.author.toLowerCase().includes(q));
+
+    return {
+      items,
+      totalItems: items.length,
+      page,
+      totalPages: 1,
+    };
+  }
+
+  async getOnlineMangaChapters(source: string, mangaID: string): Promise<OnlineMangaChapter[]> {
+    return Array.from({ length: 6 }, (_, i) => ({
+      id: `${mangaID}-ch-${i + 1}`,
+      mangaID,
+      source,
+      title: `Chapter ${i + 1}`,
+      number: i + 1,
+      releaseDate: new Date(Date.now() - (6 - i) * 86400000).toISOString().split("T")[0],
+    })).reverse();
+  }
+
+  async createDownloadTasks(inputs: CreateDownloadTaskInput[]): Promise<DownloadTask[]> {
+    const now = new Date().toISOString();
+    const created: DownloadTask[] = inputs.map((inTask) => ({
+      id: `${inTask.source}-${inTask.chapterID}`,
+      source: inTask.source,
+      mangaID: inTask.mangaID,
+      mangaTitle: inTask.mangaTitle,
+      mangaCoverURL: inTask.mangaCoverURL,
+      chapterID: inTask.chapterID,
+      chapterTitle: inTask.chapterTitle,
+      chapterNumber: inTask.chapterNumber,
+      status: "downloading",
+      totalPages: 15,
+      downloadedPages: 1,
+      speed: "2.4 MB/s",
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+    for (const t of created) {
+      const idx = this.mockTasks.findIndex((it) => it.id === t.id);
+      if (idx >= 0) {
+        this.mockTasks[idx] = t;
+      } else {
+        this.mockTasks.push(t);
+      }
+    }
+
+    this.emit(EVENTS.DOWNLOAD_TASKS_UPDATED, this.mockTasks);
+    this.emit(EVENTS.DOWNLOAD_PROGRESS, this.getDownloadProgressSync());
+    return created;
+  }
+
+  async pauseDownloadTask(taskID: string): Promise<void> {
+    const t = this.mockTasks.find((it) => it.id === taskID);
+    if (t) {
+      t.status = "paused";
+      t.speed = "";
+      this.emit(EVENTS.DOWNLOAD_TASKS_UPDATED, this.mockTasks);
+      this.emit(EVENTS.DOWNLOAD_PROGRESS, this.getDownloadProgressSync());
+    }
+  }
+
+  async resumeDownloadTask(taskID: string): Promise<void> {
+    const t = this.mockTasks.find((it) => it.id === taskID);
+    if (t) {
+      t.status = "downloading";
+      t.speed = "3.1 MB/s";
+      this.emit(EVENTS.DOWNLOAD_TASKS_UPDATED, this.mockTasks);
+      this.emit(EVENTS.DOWNLOAD_PROGRESS, this.getDownloadProgressSync());
+    }
+  }
+
+  async cancelDownloadTask(taskID: string): Promise<void> {
+    this.mockTasks = this.mockTasks.filter((it) => it.id !== taskID);
+    this.emit(EVENTS.DOWNLOAD_TASKS_UPDATED, this.mockTasks);
+    this.emit(EVENTS.DOWNLOAD_PROGRESS, this.getDownloadProgressSync());
+  }
+
+  async getDownloadTasks(): Promise<DownloadTask[]> {
+    return [...this.mockTasks];
+  }
+
+  async clearCompletedDownloadTasks(): Promise<void> {
+    this.mockTasks = this.mockTasks.filter((it) => it.status !== "completed" && it.status !== "failed");
+    this.emit(EVENTS.DOWNLOAD_TASKS_UPDATED, this.mockTasks);
+    this.emit(EVENTS.DOWNLOAD_PROGRESS, this.getDownloadProgressSync());
+  }
+
+  async getDownloadProgress(): Promise<DownloadProgress> {
+    return this.getDownloadProgressSync();
+  }
+
+  private getDownloadProgressSync(): DownloadProgress {
+    let active = 0;
+    let dlPages = 0;
+    let totPages = 0;
+    for (const t of this.mockTasks) {
+      if (t.status === "downloading" || t.status === "pending") {
+        active++;
+        dlPages += t.downloadedPages;
+        totPages += t.totalPages;
+      }
+    }
+    return {
+      activeTasks: active,
+      totalTasks: this.mockTasks.length,
+      downloadedPages: dlPages,
+      totalPages: totPages,
+      speedFormatted: active > 0 ? "2.8 MB/s" : "",
+      bytesPerSec: active > 0 ? 2.8 * 1024 * 1024 : 0,
+    };
   }
 
   subscribe(eventName: string, callback: Listener) {

@@ -1,8 +1,13 @@
 import type {
   AppSettings,
   AppVersionInfo,
+  CreateDownloadTaskInput,
+  DownloadProgress,
+  DownloadTask,
   LibraryManga,
   LibrarySource,
+  OnlineMangaChapter,
+  OnlineSearchResult,
   ReaderManifest,
   ReaderProgress,
   UpdateCheckResult,
@@ -120,6 +125,81 @@ export class WailsAdapter implements AppAdapter {
 
   async scanLibrary(): Promise<LibraryManga[]> {
     return ((await App.ScanLibrary()) ?? []) as LibraryManga[];
+  }
+
+  async searchOnlineManga(source: string, query: string, page = 1, limit = 20): Promise<OnlineSearchResult> {
+    const fn = (App as any).SearchOnlineManga;
+    if (typeof fn === "function") {
+      return (await fn(source, query, page, limit)) as OnlineSearchResult;
+    }
+    return { items: [], totalItems: 0, page, totalPages: 1 };
+  }
+
+  async getOnlineMangaChapters(source: string, mangaID: string): Promise<OnlineMangaChapter[]> {
+    const fn = (App as any).GetOnlineMangaChapters;
+    if (typeof fn === "function") {
+      return ((await fn(source, mangaID)) ?? []) as OnlineMangaChapter[];
+    }
+    return [];
+  }
+
+  async createDownloadTasks(inputs: CreateDownloadTaskInput[]): Promise<DownloadTask[]> {
+    const fn = (App as any).CreateDownloadTasks;
+    if (typeof fn === "function") {
+      return ((await fn(inputs as any)) ?? []) as DownloadTask[];
+    }
+    return [];
+  }
+
+  async pauseDownloadTask(taskID: string): Promise<void> {
+    const fn = (App as any).PauseDownloadTask;
+    if (typeof fn === "function") {
+      await fn(taskID);
+    }
+  }
+
+  async resumeDownloadTask(taskID: string): Promise<void> {
+    const fn = (App as any).ResumeDownloadTask;
+    if (typeof fn === "function") {
+      await fn(taskID);
+    }
+  }
+
+  async cancelDownloadTask(taskID: string): Promise<void> {
+    const fn = (App as any).CancelDownloadTask;
+    if (typeof fn === "function") {
+      await fn(taskID);
+    }
+  }
+
+  async getDownloadTasks(): Promise<DownloadTask[]> {
+    const fn = (App as any).GetDownloadTasks;
+    if (typeof fn === "function") {
+      return ((await fn()) ?? []) as DownloadTask[];
+    }
+    return [];
+  }
+
+  async clearCompletedDownloadTasks(): Promise<void> {
+    const fn = (App as any).ClearCompletedDownloadTasks;
+    if (typeof fn === "function") {
+      await fn();
+    }
+  }
+
+  async getDownloadProgress(): Promise<DownloadProgress> {
+    const fn = (App as any).GetDownloadProgress;
+    if (typeof fn === "function") {
+      return (await fn()) as DownloadProgress;
+    }
+    return {
+      activeTasks: 0,
+      totalTasks: 0,
+      downloadedPages: 0,
+      totalPages: 0,
+      speedFormatted: "",
+      bytesPerSec: 0,
+    };
   }
 
   subscribe(eventName: string, callback: (payload: unknown) => void) {

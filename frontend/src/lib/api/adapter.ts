@@ -1,8 +1,13 @@
 import type {
   AppSettings,
   AppVersionInfo,
+  CreateDownloadTaskInput,
+  DownloadProgress,
+  DownloadTask,
   LibraryManga,
   LibrarySource,
+  OnlineMangaChapter,
+  OnlineSearchResult,
   ReaderManifest,
   ReaderProgress,
   UpdateCheckResult,
@@ -37,4 +42,15 @@ export interface AppAdapter {
   relocateLibrarySource(sourceID: string, newPath: string): Promise<AppSettings>;
   rescanSource(sourceID: string): Promise<void>;
   scanLibrary(): Promise<LibraryManga[]>;
+
+  // Online Downloader & Search
+  searchOnlineManga(source: string, query: string, page?: number, limit?: number): Promise<OnlineSearchResult>;
+  getOnlineMangaChapters(source: string, mangaID: string): Promise<OnlineMangaChapter[]>;
+  createDownloadTasks(inputs: CreateDownloadTaskInput[]): Promise<DownloadTask[]>;
+  pauseDownloadTask(taskID: string): Promise<void>;
+  resumeDownloadTask(taskID: string): Promise<void>;
+  cancelDownloadTask(taskID: string): Promise<void>;
+  getDownloadTasks(): Promise<DownloadTask[]>;
+  clearCompletedDownloadTasks(): Promise<void>;
+  getDownloadProgress(): Promise<DownloadProgress>;
 }

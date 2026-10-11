@@ -29,6 +29,15 @@ const requiredAdapterMethods: AdapterMethod[] = [
   "relocateLibrarySource",
   "rescanSource",
   "scanLibrary",
+  "searchOnlineManga",
+  "getOnlineMangaChapters",
+  "createDownloadTasks",
+  "pauseDownloadTask",
+  "resumeDownloadTask",
+  "cancelDownloadTask",
+  "getDownloadTasks",
+  "clearCompletedDownloadTasks",
+  "getDownloadProgress",
 ];
 
 describe("AppAdapter Interface Completeness Guard", () => {

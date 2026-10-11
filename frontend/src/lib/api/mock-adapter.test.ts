@@ -197,5 +197,49 @@ describe("MockAdapter Pin Functionality", () => {
     const updated4 = await adapter.removeLibrarySource("test-src");
     expect(updated4.librarySources?.some((s) => s.id === "test-src")).toBe(false);
   });
+
+  it("handles online search and download lifecycle in mock mode", async () => {
+    // 1. Online search
+    const searchRes = await adapter.searchOnlineManga("copymanga", "Chronicle");
+    expect(searchRes.items.length).toBeGreaterThan(0);
+    expect(searchRes.items[0].source).toBe("copymanga");
+
+    // 2. Fetch chapters
+    const chapters = await adapter.getOnlineMangaChapters("copymanga", searchRes.items[0].id);
+    expect(chapters.length).toBe(6);
+
+    // 3. Create download tasks
+    const created = await adapter.createDownloadTasks([
+      {
+        source: "copymanga",
+        mangaID: searchRes.items[0].id,
+        mangaTitle: searchRes.items[0].title,
+        chapterID: chapters[0].id,
+        chapterTitle: chapters[0].title,
+        chapterNumber: chapters[0].number,
+      },
+    ]);
+    expect(created.length).toBe(1);
+    expect(created[0].status).toBe("downloading");
+
+    // 4. Progress check
+    let prog = await adapter.getDownloadProgress();
+    expect(prog.activeTasks).toBe(1);
+    expect(prog.totalTasks).toBe(1);
+
+    // 5. Pause & Resume
+    await adapter.pauseDownloadTask(created[0].id);
+    let tasks = await adapter.getDownloadTasks();
+    expect(tasks[0].status).toBe("paused");
+
+    await adapter.resumeDownloadTask(created[0].id);
+    tasks = await adapter.getDownloadTasks();
+    expect(tasks[0].status).toBe("downloading");
+
+    // 6. Cancel
+    await adapter.cancelDownloadTask(created[0].id);
+    tasks = await adapter.getDownloadTasks();
+    expect(tasks.length).toBe(0);
+  });
 });
 
