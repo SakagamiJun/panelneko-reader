@@ -1,0 +1,645 @@
+package copymanga
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/xml"
+	"fmt"
+	"io"
+	"math/rand"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
+)
+
+const (
+	SiteName           = "copymanga"
+	DefaultAPIDomain   = "api.copy202601.com"
+	UserAgent          = "COPY/3.0.0"
+	DefaultTimeoutSecs = 15
+	Salt               = 1729
+)
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 64*1024) // 64KB chunk buffer
+		return &b
+	},
+}
+
+type CDNNode struct {
+	Host         string
+	Failures     atomic.Int32
+	CoolingUntil atomic.Int64 // Unix timestamp in seconds
+}
+
+func (n *CDNNode) IsHealthy() bool {
+	coolUntil := n.CoolingUntil.Load()
+	if coolUntil > 0 {
+		if time.Now().Unix() < coolUntil {
+			return false
+		}
+		n.CoolingUntil.Store(0)
+		n.Failures.Store(0)
+	}
+	return true
+}
+
+func (n *CDNNode) RecordFailure() {
+	fails := n.Failures.Add(1)
+	if fails >= 2 {
+		// Cool down for 60 seconds
+		n.CoolingUntil.Store(time.Now().Unix() + 60)
+	}
+}
+
+func (n *CDNNode) RecordSuccess() {
+	n.Failures.Store(0)
+}
+
+type Client struct {
+	httpClient *http.Client
+	imgClient  *http.Client
+	apiDomain  string
+	token      string
+	cdnNodes   []*CDNNode
+	mu         sync.RWMutex
+}
+
+func NewClient(apiDomain string, token string, timeoutSeconds int) *Client {
+	if apiDomain == "" {
+		apiDomain = DefaultAPIDomain
+	}
+	apiDomain = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(apiDomain), "https://"), "http://")
+	apiDomain = strings.TrimRight(apiDomain, "/")
+
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = DefaultTimeoutSecs
+	}
+
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 20,
+		IdleConnTimeout:     90 * time.Second,
+	}
+
+	client := &Client{
+		httpClient: &http.Client{
+			Timeout:   time.Duration(timeoutSeconds) * time.Second,
+			Transport: transport,
+		},
+		imgClient: &http.Client{
+			Timeout:   time.Duration(timeoutSeconds*2) * time.Second,
+			Transport: transport,
+		},
+		apiDomain: apiDomain,
+		token:     token,
+		cdnNodes: []*CDNNode{
+			{Host: "c1.mangafunc.fun"},
+			{Host: "c2.mangafunc.fun"},
+			{Host: "c3.mangafunc.fun"},
+			{Host: "c4.mangafunc.fun"},
+		},
+	}
+	return client
+}
+
+func (c *Client) SetAPIDomain(domain string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if domain == "" {
+		domain = DefaultAPIDomain
+	}
+	domain = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(domain), "https://"), "http://")
+	c.apiDomain = strings.TrimRight(domain, "/")
+}
+
+func (c *Client) SetToken(token string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.token = strings.TrimSpace(token)
+}
+
+func (c *Client) getDomain() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.apiDomain
+}
+
+func (c *Client) getToken() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.token
+}
+
+func (c *Client) defaultHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("version", "2025.08.15")
+	req.Header.Set("platform", "1")
+	req.Header.Set("webp", "1")
+	req.Header.Set("region", "1")
+
+	tok := c.getToken()
+	if tok != "" {
+		req.Header.Set("authorization", "Token "+tok)
+	}
+}
+
+type copyAPIResponse struct {
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Results json.RawMessage `json:"results"`
+}
+
+func (c *Client) getJSON(ctx context.Context, endpoint string, query url.Values, target any) error {
+	domain := c.getDomain()
+	scheme := "https"
+	if strings.HasPrefix(domain, "127.0.0.1") || strings.HasPrefix(domain, "localhost") {
+		scheme = "http"
+	}
+	fullURL := fmt.Sprintf("%s://%s%s", scheme, domain, endpoint)
+	if len(query) > 0 {
+		fullURL += "?" + query.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+	if err != nil {
+		return err
+	}
+	c.defaultHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 210 {
+		// Risk control triggered
+		return fmt.Errorf("risk control 210: account rate-limited")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("copymanga api error status %d", resp.StatusCode)
+	}
+
+	var base copyAPIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&base); err != nil {
+		return fmt.Errorf("decode copymanga response: %w", err)
+	}
+	if base.Code != 200 {
+		return fmt.Errorf("copymanga api code %d: %s", base.Code, base.Message)
+	}
+
+	if target != nil && len(base.Results) > 0 {
+		if err := json.Unmarshal(base.Results, target); err != nil {
+			return fmt.Errorf("decode copymanga results: %w", err)
+		}
+	}
+	return nil
+}
+
+type searchComicItem struct {
+	Name     string `json:"name"`
+	PathWord string `json:"path_word"`
+	Author   []struct {
+		Name string `json:"name"`
+	} `json:"author"`
+	Cover  string `json:"cover"`
+	Brief  string `json:"brief"`
+	Status struct {
+		Value   int    `json:"value"`
+		Display string `json:"display"`
+	} `json:"status"`
+	DatetimeUpdated string `json:"datetime_updated"`
+}
+
+type searchResultsData struct {
+	List   []searchComicItem `json:"list"`
+	Total  int               `json:"total"`
+	Limit  int               `json:"limit"`
+	Offset int               `json:"offset"`
+}
+
+func (c *Client) SearchManga(ctx context.Context, query string, page int, limit int) (contracts.OnlineSearchResult, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	q := url.Values{}
+	q.Set("q", strings.TrimSpace(query))
+	q.Set("limit", strconv.Itoa(limit))
+	q.Set("offset", strconv.Itoa(offset))
+	q.Set("platform", "1")
+
+	var data searchResultsData
+	if err := c.getJSON(ctx, "/api/v3/search/comic", q, &data); err != nil {
+		return contracts.OnlineSearchResult{}, err
+	}
+
+	items := make([]contracts.OnlineMangaItem, 0, len(data.List))
+	for _, it := range data.List {
+		authors := make([]string, 0, len(it.Author))
+		for _, a := range it.Author {
+			if strings.TrimSpace(a.Name) != "" {
+				authors = append(authors, strings.TrimSpace(a.Name))
+			}
+		}
+
+		statusStr := it.Status.Display
+		if it.Status.Value == 0 {
+			statusStr = "ongoing"
+		} else if it.Status.Value == 1 {
+			statusStr = "completed"
+		}
+
+		items = append(items, contracts.OnlineMangaItem{
+			ID:          it.PathWord,
+			Source:      SiteName,
+			Title:       it.Name,
+			Author:      strings.Join(authors, ", "),
+			CoverURL:    it.Cover,
+			Status:      statusStr,
+			Description: it.Brief,
+			UpdateTime:  it.DatetimeUpdated,
+		})
+	}
+
+	totalPages := 1
+	if data.Total > 0 && limit > 0 {
+		totalPages = (data.Total + limit - 1) / limit
+	}
+
+	return contracts.OnlineSearchResult{
+		Items:      items,
+		TotalItems: data.Total,
+		Page:       page,
+		TotalPages: totalPages,
+	}, nil
+}
+
+type comicDetailData struct {
+	Comic struct {
+		Name     string `json:"name"`
+		PathWord string `json:"path_word"`
+		Brief    string `json:"brief"`
+		Cover    string `json:"cover"`
+		Author   []struct {
+			Name string `json:"name"`
+		} `json:"author"`
+	} `json:"comic"`
+	Groups map[string]struct {
+		Name     string `json:"name"`
+		PathWord string `json:"path_word"`
+	} `json:"groups"`
+}
+
+type chapterItemInList struct {
+	UUID  string  `json:"uuid"`
+	Name  string  `json:"name"`
+	Index float64 `json:"index"`
+}
+
+type chaptersRespData struct {
+	List  []chapterItemInList `json:"list"`
+	Total int                 `json:"total"`
+}
+
+func (c *Client) GetMangaChapters(ctx context.Context, comicPathWord string) ([]contracts.OnlineMangaChapter, error) {
+	q := url.Values{}
+	q.Set("platform", "1")
+
+	var detail comicDetailData
+	if err := c.getJSON(ctx, "/api/v3/comic2/"+url.PathEscape(comicPathWord), q, &detail); err != nil {
+		return nil, err
+	}
+
+	groupPathWord := "default"
+	if len(detail.Groups) > 0 {
+		if _, ok := detail.Groups["default"]; !ok {
+			for k := range detail.Groups {
+				groupPathWord = k
+				break
+			}
+		}
+	}
+
+	limit := 100
+	offset := 0
+	var allChapters []contracts.OnlineMangaChapter
+
+	for {
+		cq := url.Values{}
+		cq.Set("limit", strconv.Itoa(limit))
+		cq.Set("offset", strconv.Itoa(offset))
+
+		var chResp chaptersRespData
+		err := c.getJSON(ctx, fmt.Sprintf("/api/v3/comic/%s/group/%s/chapters", url.PathEscape(comicPathWord), url.PathEscape(groupPathWord)), cq, &chResp)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, ch := range chResp.List {
+			allChapters = append(allChapters, contracts.OnlineMangaChapter{
+				ID:      ch.UUID,
+				MangaID: comicPathWord,
+				Source:  SiteName,
+				Title:   ch.Name,
+				Number:  ch.Index,
+			})
+		}
+
+		offset += limit
+		if offset >= chResp.Total || len(chResp.List) == 0 {
+			break
+		}
+	}
+
+	return allChapters, nil
+}
+
+type chapterDetailData struct {
+	Chapter struct {
+		ComicPathWord string  `json:"comic_path_word"`
+		Name          string  `json:"name"`
+		Index         float64 `json:"index"`
+		Words         []int   `json:"words"`
+		Contents      []struct {
+			URL string `json:"url"`
+		} `json:"contents"`
+	} `json:"chapter"`
+}
+
+func (c *Client) GetChapterImageURLs(ctx context.Context, comicPathWord, chapterUUID string) ([]string, error) {
+	q := url.Values{}
+	q.Set("platform", "1")
+
+	var ch chapterDetailData
+	err := c.getJSON(ctx, fmt.Sprintf("/api/v3/comic/%s/chapter2/%s", url.PathEscape(comicPathWord), url.PathEscape(chapterUUID)), q, &ch)
+	if err != nil {
+		return nil, err
+	}
+
+	urls := make([]string, 0, len(ch.Chapter.Contents))
+	for _, item := range ch.Chapter.Contents {
+		if strings.TrimSpace(item.URL) != "" {
+			urls = append(urls, strings.TrimSpace(item.URL))
+		}
+	}
+	return urls, nil
+}
+
+func (c *Client) GetStripedCDNURL(originalURL string, pageIndex int) string {
+	u, err := url.Parse(originalURL)
+	if err != nil || len(c.cdnNodes) == 0 {
+		return originalURL
+	}
+
+	healthyNodes := make([]*CDNNode, 0, len(c.cdnNodes))
+	for _, n := range c.cdnNodes {
+		if n.IsHealthy() {
+			healthyNodes = append(healthyNodes, n)
+		}
+	}
+	if len(healthyNodes) == 0 {
+		healthyNodes = c.cdnNodes // fallback to all
+	}
+
+	selected := healthyNodes[pageIndex%len(healthyNodes)]
+	u.Host = selected.Host
+	return u.String()
+}
+
+func (c *Client) RecordCDNResult(usedURL string, success bool) {
+	u, err := url.Parse(usedURL)
+	if err != nil {
+		return
+	}
+	for _, n := range c.cdnNodes {
+		if n.Host == u.Host {
+			if success {
+				n.RecordSuccess()
+			} else {
+				n.RecordFailure()
+			}
+			break
+		}
+	}
+}
+
+// DownloadImageStream downloads an image into writer using buffer pool without allocating entire image
+func (c *Client) DownloadImageStream(ctx context.Context, targetURL string, writer io.Writer) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")
+	req.Header.Set("Referer", "https://copymanga.tv/")
+
+	resp, err := c.imgClient.Do(req)
+	if err != nil {
+		c.RecordCDNResult(targetURL, false)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		c.RecordCDNResult(targetURL, false)
+		return fmt.Errorf("image fetch status %d", resp.StatusCode)
+	}
+
+	bufPtr := bufferPool.Get().(*[]byte)
+	defer bufferPool.Put(bufPtr)
+
+	_, err = io.CopyBuffer(writer, resp.Body, *bufPtr)
+	if err != nil {
+		c.RecordCDNResult(targetURL, false)
+		return err
+	}
+
+	c.RecordCDNResult(targetURL, true)
+	return nil
+}
+
+type ComicInfoXML struct {
+	XMLName xml.Name `xml:"ComicInfo"`
+	Title   string   `xml:"Title,omitempty"`
+	Series  string   `xml:"Series,omitempty"`
+	Number  string   `xml:"Number,omitempty"`
+	Writer  string   `xml:"Writer,omitempty"`
+	Summary string   `xml:"Summary,omitempty"`
+	Pages   int      `xml:"PageCount,omitempty"`
+}
+
+func (c *Client) BuildComicInfoXML(series, title, writer, summary string, number float64, pageCount int) ([]byte, error) {
+	numStr := fmt.Sprintf("%.1f", number)
+	numStr = strings.TrimSuffix(numStr, ".0")
+
+	info := ComicInfoXML{
+		Title:   title,
+		Series:  series,
+		Number:  numStr,
+		Writer:  writer,
+		Summary: summary,
+		Pages:   pageCount,
+	}
+	var buf bytes.Buffer
+	buf.WriteString(xml.Header)
+	enc := xml.NewEncoder(&buf)
+	enc.Indent("", "  ")
+	if err := enc.Encode(info); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// StreamSaveCBZ saves a list of image byte-producers directly into a .cbz archive atomically
+func StreamSaveCBZ(finalFilePath string, xmlMetadata []byte, totalPages int, fetchImage func(ctx context.Context, pageIndex int, writer io.Writer) error) error {
+	dir := filepath.Dir(finalFilePath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create output dir: %w", err)
+	}
+
+	tmpPath := finalFilePath + ".tmp"
+	tmpFile, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("create tmp cbz: %w", err)
+	}
+
+	success := false
+	defer func() {
+		_ = tmpFile.Close()
+		if !success {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	zipWriter := zip.NewWriter(tmpFile)
+
+	// Write ComicInfo.xml if available
+	if len(xmlMetadata) > 0 {
+		metaEntry, err := zipWriter.Create("ComicInfo.xml")
+		if err == nil {
+			_, _ = metaEntry.Write(xmlMetadata)
+		}
+	}
+
+	// Write images sequentially into zip
+	for i := 0; i < totalPages; i++ {
+		entryName := fmt.Sprintf("%03d.webp", i+1)
+		entryWriter, err := zipWriter.Create(entryName)
+		if err != nil {
+			return fmt.Errorf("create zip entry %s: %w", entryName, err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err = fetchImage(ctx, i, entryWriter)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("fetch page %d: %w", i+1, err)
+		}
+	}
+
+	if err := zipWriter.Close(); err != nil {
+		return fmt.Errorf("close zip writer: %w", err)
+	}
+
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("sync tmp file: %w", err)
+	}
+	_ = tmpFile.Close()
+
+	if err := os.Rename(tmpPath, finalFilePath); err != nil {
+		return fmt.Errorf("rename tmp to cbz: %w", err)
+	}
+
+	success = true
+	return nil
+}
+
+// RegisterTemporaryAccount allows generating a guest account if risk control 210 occurs
+func (c *Client) RegisterTemporaryAccount(ctx context.Context) (string, error) {
+	randNum := rand.Intn(90000) + 10000
+	username := fmt.Sprintf("pneko%d", randNum)
+	password := fmt.Sprintf("pwd%d", randNum)
+
+	form := url.Values{}
+	form.Set("username", username)
+	form.Set("password", password)
+	form.Set("source", "freeSite")
+
+	scheme := "https"
+	domain := c.getDomain()
+	if strings.HasPrefix(domain, "127.0.0.1") || strings.HasPrefix(domain, "localhost") {
+		scheme = "http"
+	}
+	regURL := fmt.Sprintf("%s://%s/api/v3/register", scheme, domain)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, regURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	c.defaultHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// Perform login
+	encodedPwd := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s-%d", password, Salt)))
+	loginForm := url.Values{}
+	loginForm.Set("username", username)
+	loginForm.Set("password", encodedPwd)
+	loginForm.Set("salt", strconv.Itoa(Salt))
+
+	loginURL := fmt.Sprintf("%s://%s/api/v3/login", scheme, domain)
+	lreq, err := http.NewRequestWithContext(ctx, http.MethodPost, loginURL, strings.NewReader(loginForm.Encode()))
+	if err != nil {
+		return "", err
+	}
+	lreq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	c.defaultHeaders(lreq)
+
+	lresp, err := c.httpClient.Do(lreq)
+	if err != nil {
+		return "", err
+	}
+	defer lresp.Body.Close()
+
+	var loginBase copyAPIResponse
+	if err := json.NewDecoder(lresp.Body).Decode(&loginBase); err != nil {
+		return "", err
+	}
+
+	var loginData struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(loginBase.Results, &loginData); err != nil {
+		return "", err
+	}
+
+	if loginData.Token != "" {
+		c.SetToken(loginData.Token)
+		return loginData.Token, nil
+	}
+	return "", fmt.Errorf("login failed: empty token")
+}
