@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import "@/lib/i18n";
 import { DownloadWidget } from "./download-widget";
 import type { DownloadProgress, DownloadTask } from "@/lib/contracts";
 
