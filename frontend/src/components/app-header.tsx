@@ -5,8 +5,10 @@ import {
   BookOpen,
   Check,
   ChevronDown,
+  Download,
   FolderCog,
   Folders,
+  Globe,
   Languages,
   MoonStar,
   RefreshCw,
@@ -46,6 +48,10 @@ interface AppHeaderProps {
   onToggleShowOffline?: () => void;
   onRescan?: () => void;
   isRescanning?: boolean;
+  localMangaItems?: LibraryManga[];
+  onSelectLocalManga?: (id: string) => void;
+  onOpenOnlineSearch?: (source: "copymanga" | "klz9", query: string) => void;
+  onOpenSettingsTab?: (tab: "general" | "sources" | "downloads" | "reader" | "shortcuts" | "about") => void;
 }
 
 export function AppHeader({
@@ -70,11 +76,18 @@ export function AppHeader({
   onToggleShowOffline,
   onRescan,
   isRescanning = false,
+  localMangaItems = [],
+  onSelectLocalManga,
+  onOpenOnlineSearch,
+  onOpenSettingsTab,
 }: AppHeaderProps) {
   const { t } = useTranslation();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   const sourceMenuRef = useRef<HTMLDivElement>(null);
   const offlineMenuRef = useRef<HTMLDivElement>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false);
   const [isOfflineMenuOpen, setIsOfflineMenuOpen] = useState(false);
   const isMac = isMacPlatform();
@@ -169,6 +182,106 @@ export function AppHeader({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOfflineMenuOpen]);
+
+  // Click outside to dismiss search composite popover
+  useEffect(() => {
+    if (!isSearchFocused) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchFocused(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isSearchFocused]);
+
+  useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [searchQuery]);
+
+  const trimmedQuery = searchQuery.trim();
+  const lowerQuery = trimmedQuery.toLowerCase();
+
+  const localMatches = trimmedQuery
+    ? localMangaItems
+        .filter((item) => {
+          const matchTitle = item.title.toLowerCase().includes(lowerQuery);
+          const matchPath = item.relativePath?.toLowerCase().includes(lowerQuery);
+          return matchTitle || matchPath;
+        })
+        .slice(0, 5)
+    : [];
+
+  const copyMangaEnabled = Boolean(settings?.downloader?.enableCopyManga);
+  const rawMangaEnabled = Boolean(settings?.downloader?.enableRawManga);
+
+  type ActionableItem =
+    | { type: "local"; item: LibraryManga }
+    | { type: "online"; source: "copymanga" | "klz9"; label: string }
+    | { type: "settings"; label: string };
+
+  const actionableItems: ActionableItem[] = [];
+  if (trimmedQuery) {
+    for (const m of localMatches) {
+      actionableItems.push({ type: "local", item: m });
+    }
+    if (copyMangaEnabled) {
+      actionableItems.push({
+        type: "online",
+        source: "copymanga",
+        label: t("downloader.searchInCopyManga", { query: trimmedQuery }),
+      });
+    }
+    if (rawMangaEnabled) {
+      actionableItems.push({
+        type: "online",
+        source: "klz9",
+        label: t("downloader.searchInRawManga", { query: trimmedQuery }),
+      });
+    }
+    if (!copyMangaEnabled && !rawMangaEnabled) {
+      actionableItems.push({
+        type: "settings",
+        label: t("downloader.openSettings"),
+      });
+    }
+  }
+
+  const handleSelectActionable = (action: ActionableItem) => {
+    if (action.type === "local") {
+      onSelectLocalManga?.(action.item.id);
+      setIsSearchFocused(false);
+    } else if (action.type === "online") {
+      onOpenOnlineSearch?.(action.source, trimmedQuery);
+      setIsSearchFocused(false);
+    } else if (action.type === "settings") {
+      onOpenSettingsTab?.("downloads");
+      setIsSearchFocused(false);
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!trimmedQuery || !isSearchFocused || actionableItems.length === 0) {
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1) % actionableItems.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 + actionableItems.length) % actionableItems.length);
+    } else if (e.key === "Enter") {
+      if (highlightedIndex >= 0 && highlightedIndex < actionableItems.length) {
+        e.preventDefault();
+        handleSelectActionable(actionableItems[highlightedIndex]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setIsSearchFocused(false);
+    }
+  };
 
   return (
     <header
@@ -464,15 +577,20 @@ export function AppHeader({
         )}
       </div>
 
-      {/* Middle section: Instant search filter */}
-      <div className="app-window-no-drag flex items-center max-w-sm flex-1 mx-2">
+      {/* Middle section: Instant search filter with composite dropdown */}
+      <div ref={searchContainerRef} className="app-window-no-drag relative flex items-center max-w-sm flex-1 mx-2">
         <div className="relative w-full">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/70 pointer-events-none" />
           <input
             ref={searchInputRef}
             type="text"
             value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onFocus={() => setIsSearchFocused(true)}
+            onChange={(e) => {
+              onSearchChange(e.target.value);
+              setIsSearchFocused(true);
+            }}
+            onKeyDown={handleSearchKeyDown}
             placeholder={t("library.searchPlaceholder")}
             className="h-7 w-full rounded-lg border border-border/60 bg-muted/40 pl-8 pr-14 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none transition-all duration-150 focus:border-primary/50 focus:bg-background focus:ring-1 focus:ring-primary/20"
           />
@@ -480,7 +598,10 @@ export function AppHeader({
             {searchQuery ? (
               <button
                 type="button"
-                onClick={() => onSearchChange("")}
+                onClick={() => {
+                  onSearchChange("");
+                  setIsSearchFocused(false);
+                }}
                 className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:text-foreground"
               >
                 <X className="h-3 w-3" />
@@ -492,6 +613,157 @@ export function AppHeader({
             )}
           </div>
         </div>
+
+        {/* Dropdown Popover */}
+        {isSearchFocused && trimmedQuery && (
+          <div
+            className="absolute left-0 top-full mt-1.5 w-full min-w-[320px] max-w-md rounded-xl border border-border/80 bg-card/95 shadow-xl backdrop-blur-xl p-1 z-50 animate-in fade-in-0 zoom-in-95 origin-top-left"
+            role="listbox"
+          >
+            {/* Section 1: Local manga */}
+            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground/70 tracking-wider">
+              {t("downloader.localMangaGroup")}
+            </div>
+            {localMatches.length > 0 ? (
+              <div className="space-y-0.5">
+                {localMatches.map((item, idx) => {
+                  const isHighlighted = highlightedIndex === idx;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="option"
+                      aria-selected={isHighlighted}
+                      onClick={() => handleSelectActionable({ type: "local", item })}
+                      className={cn(
+                        "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left group",
+                        isHighlighted ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted/60"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="truncate font-medium">{item.title}</span>
+                          {item.relativePath && (
+                            <span className="text-[10px] text-muted-foreground/60 truncate font-mono">
+                              {item.relativePath}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {typeof item.chapterCount === "number" && item.chapterCount > 0 && (
+                        <span className="text-[10px] font-mono text-muted-foreground/60 ml-2 shrink-0">
+                          {item.chapterCount} {t("downloader.pages")}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="px-2.5 py-1.5 text-[11px] text-muted-foreground/60 select-none">
+                {t("downloader.noLocalMatch")}
+              </div>
+            )}
+
+            <div className="h-px bg-border/40 my-1 mx-1" />
+
+            {/* Section 2: Online downloaders */}
+            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground/70 tracking-wider">
+              {t("downloader.onlineGroup")}
+            </div>
+
+            <div className="space-y-0.5">
+              {copyMangaEnabled && (
+                (() => {
+                  const actionIndex = localMatches.length;
+                  const isHighlighted = highlightedIndex === actionIndex;
+                  return (
+                    <button
+                      key="online-copymanga"
+                      type="button"
+                      role="option"
+                      aria-selected={isHighlighted}
+                      onClick={() =>
+                        handleSelectActionable({
+                          type: "online",
+                          source: "copymanga",
+                          label: t("downloader.searchInCopyManga", { query: trimmedQuery }),
+                        })
+                      }
+                      className={cn(
+                        "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left group",
+                        isHighlighted ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted/60"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Globe className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span className="truncate font-medium">
+                          {t("downloader.searchInCopyManga", { query: trimmedQuery })}
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0 ml-2">
+                        {t("downloader.sourceCopyManga")}
+                      </span>
+                    </button>
+                  );
+                })()
+              )}
+
+              {rawMangaEnabled && (
+                (() => {
+                  const actionIndex = localMatches.length + (copyMangaEnabled ? 1 : 0);
+                  const isHighlighted = highlightedIndex === actionIndex;
+                  return (
+                    <button
+                      key="online-klz9"
+                      type="button"
+                      role="option"
+                      aria-selected={isHighlighted}
+                      onClick={() =>
+                        handleSelectActionable({
+                          type: "online",
+                          source: "klz9",
+                          label: t("downloader.searchInRawManga", { query: trimmedQuery }),
+                        })
+                      }
+                      className={cn(
+                        "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left group",
+                        isHighlighted ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted/60"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Download className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                        <span className="truncate font-medium">
+                          {t("downloader.searchInRawManga", { query: trimmedQuery })}
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-mono text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded shrink-0 ml-2">
+                        {t("downloader.sourceRawManga")}
+                      </span>
+                    </button>
+                  );
+                })()
+              )}
+
+              {!copyMangaEnabled && !rawMangaEnabled && (
+                <div className="flex items-center justify-between px-2.5 py-1.5 text-xs text-muted-foreground/80">
+                  <span className="truncate text-[11px]">{t("downloader.onlineSearchDisabled")}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenSettingsTab?.("downloads");
+                      setIsSearchFocused(false);
+                    }}
+                    className="text-primary hover:underline font-medium text-[11px] shrink-0 ml-2 cursor-pointer"
+                  >
+                    {t("downloader.openSettings")}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right section: Theme, Language, Settings */}

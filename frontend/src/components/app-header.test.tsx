@@ -248,4 +248,154 @@ describe("AppHeader Component", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("renders composite search dropdown with local matches and online search options", () => {
+    const handleSelectLocal = vi.fn();
+    const handleOnlineSearch = vi.fn();
+    const handleOpenSettingsTab = vi.fn();
+
+    const mockLocalItems = [
+      {
+        id: "manga-1",
+        title: "Chainsaw Man",
+        relativePath: "Chainsaw Man/Vol 1",
+        sourceURL: "/path/1",
+        coverImageURL: "",
+        chapterCount: 12,
+        pageCount: 200,
+        lastUpdated: "2026-01-01",
+      },
+      {
+        id: "manga-2",
+        title: "One Piece",
+        relativePath: "One Piece/Vol 100",
+        sourceURL: "/path/2",
+        coverImageURL: "",
+        chapterCount: 10,
+        pageCount: 180,
+        lastUpdated: "2026-01-01",
+      },
+    ];
+
+    const onlineEnabledSettings: AppSettings = {
+      ...baseSettings,
+      downloader: {
+        enableCopyManga: true,
+        enableRawManga: true,
+      },
+    };
+
+    render(
+      <AppHeader
+        selectedCollectionPath={null}
+        totalCount={2}
+        onBackToMain={vi.fn()}
+        searchQuery="Chainsaw"
+        onSearchChange={vi.fn()}
+        settings={onlineEnabledSettings}
+        onCycleTheme={vi.fn()}
+        onCycleLocale={vi.fn()}
+        settingsOpen={false}
+        onToggleSettings={vi.fn()}
+        localMangaItems={mockLocalItems}
+        onSelectLocalManga={handleSelectLocal}
+        onOpenOnlineSearch={handleOnlineSearch}
+        onOpenSettingsTab={handleOpenSettingsTab}
+      />
+    );
+
+    const input = screen.getByPlaceholderText(i18n.t("library.searchPlaceholder"));
+    fireEvent.focus(input);
+
+    const listbox = screen.getByRole("listbox");
+    expect(listbox).toBeInTheDocument();
+
+    // Local match should be rendered
+    expect(screen.getByText("Chainsaw Man")).toBeInTheDocument();
+    // One Piece shouldn't match "Chainsaw"
+    expect(screen.queryByText("One Piece")).not.toBeInTheDocument();
+
+    // Online providers should be rendered
+    const copymangaOption = screen.getByText(/在 CopyManga 中搜索 "Chainsaw"|Search "Chainsaw" in CopyManga/i);
+    expect(copymangaOption).toBeInTheDocument();
+    const rawmangaOption = screen.getByText(/在 RawManga 中搜索 "Chainsaw"|Search "Chainsaw" in RawManga/i);
+    expect(rawmangaOption).toBeInTheDocument();
+
+    // Click local item
+    fireEvent.click(screen.getByText("Chainsaw Man"));
+    expect(handleSelectLocal).toHaveBeenCalledWith("manga-1");
+  });
+
+  it("handles online search selection and disabled settings shortcut", () => {
+    const handleOnlineSearch = vi.fn();
+    const handleOpenSettingsTab = vi.fn();
+
+    const disabledSettings: AppSettings = {
+      ...baseSettings,
+      downloader: {
+        enableCopyManga: false,
+        enableRawManga: false,
+      },
+    };
+
+    const { rerender } = render(
+      <AppHeader
+        selectedCollectionPath={null}
+        totalCount={0}
+        onBackToMain={vi.fn()}
+        searchQuery="Naruto"
+        onSearchChange={vi.fn()}
+        settings={disabledSettings}
+        onCycleTheme={vi.fn()}
+        onCycleLocale={vi.fn()}
+        settingsOpen={false}
+        onToggleSettings={vi.fn()}
+        localMangaItems={[]}
+        onOpenOnlineSearch={handleOnlineSearch}
+        onOpenSettingsTab={handleOpenSettingsTab}
+      />
+    );
+
+    const input = screen.getByPlaceholderText(i18n.t("library.searchPlaceholder"));
+    fireEvent.focus(input);
+
+    // Shows disabled notice
+    const disabledNotice = screen.getByText(i18n.t("downloader.onlineSearchDisabled"));
+    expect(disabledNotice).toBeInTheDocument();
+
+    // Clicking settings link opens settings downloads tab
+    const openSettingsBtn = screen.getByText(i18n.t("downloader.openSettings"));
+    fireEvent.click(openSettingsBtn);
+    expect(handleOpenSettingsTab).toHaveBeenCalledWith("downloads");
+
+    // Re-render with copyManga enabled
+    rerender(
+      <AppHeader
+        selectedCollectionPath={null}
+        totalCount={0}
+        onBackToMain={vi.fn()}
+        searchQuery="Naruto"
+        onSearchChange={vi.fn()}
+        settings={{
+          ...baseSettings,
+          downloader: {
+            enableCopyManga: true,
+            enableRawManga: false,
+          },
+        }}
+        onCycleTheme={vi.fn()}
+        onCycleLocale={vi.fn()}
+        settingsOpen={false}
+        onToggleSettings={vi.fn()}
+        localMangaItems={[]}
+        onOpenOnlineSearch={handleOnlineSearch}
+        onOpenSettingsTab={handleOpenSettingsTab}
+      />
+    );
+
+    fireEvent.focus(input);
+    const copymangaBtn = screen.getByText(/在 CopyManga 中搜索 "Naruto"|Search "Naruto" in CopyManga/i);
+    fireEvent.click(copymangaBtn);
+    expect(handleOnlineSearch).toHaveBeenCalledWith("copymanga", "Naruto");
+  });
 });
