@@ -86,6 +86,9 @@ func (a *App) GetAppVersion() contracts.AppVersionInfo {
 	if len(commit) > 7 {
 		commit = commit[:7]
 	}
+	if commit == "" {
+		commit = "dev"
+	}
 
 	return contracts.AppVersionInfo{
 		Version: version,

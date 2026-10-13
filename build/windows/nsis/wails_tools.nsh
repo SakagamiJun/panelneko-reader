@@ -238,6 +238,9 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
     !insertmacro APP_ASSOCIATE "zip" "ZIP Archive" "ZIP Archive" "$INSTDIR\icons.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
     File "..\icons.ico"
     
+    !insertmacro APP_ASSOCIATE "rar" "RAR Archive" "RAR Archive" "$INSTDIR\icons.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\icons.ico"
+    
 !macroend
 
 !macro wails.unassociateFiles
@@ -250,6 +253,9 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
     Delete "$INSTDIR\icons.ico"
     
     !insertmacro APP_UNASSOCIATE "zip" "ZIP Archive"
+    Delete "$INSTDIR\icons.ico"
+    
+    !insertmacro APP_UNASSOCIATE "rar" "RAR Archive"
     Delete "$INSTDIR\icons.ico"
     
 !macroend
