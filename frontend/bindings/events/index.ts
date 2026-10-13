@@ -9,6 +9,16 @@ import type {} from "../github.com/wailsapp/wails/v3/internal/eventdata.js";
 import "../github.com/wailsapp/wails/v3/internal/eventcreate.js";
 
 /**
+ * Name of the custom event "download:progress".
+ */
+export const DownloadProgress = "download:progress";
+
+/**
+ * Name of the custom event "download:tasks_updated".
+ */
+export const DownloadTasksUpdated = "download:tasks_updated";
+
+/**
  * Name of the custom event "files:dropped".
  */
 export const FilesDropped = "files:dropped";
@@ -37,15 +47,4 @@ export const SettingsUpdated = "settings:updated";
  * Name of the custom event "theme:resolved".
  */
 export const ThemeResolved = "theme:resolved";
-
-/**
- * Name of the custom event "download:progress".
- */
-export const DownloadProgress = "download:progress";
-
-/**
- * Name of the custom event "download:tasks_updated".
- */
-export const DownloadTasksUpdated = "download:tasks_updated";
-
 

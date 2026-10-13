@@ -206,6 +206,6 @@ export const EVENTS = {
   LIBRARY_UPDATED: BindingsEvents.LibraryUpdated,
   FILES_DROPPED: BindingsEvents.FilesDropped,
   FILES_OPENED: BindingsEvents.FilesOpened,
-  DOWNLOAD_PROGRESS: (BindingsEvents as any).DownloadProgress ?? "download:progress",
-  DOWNLOAD_TASKS_UPDATED: (BindingsEvents as any).DownloadTasksUpdated ?? "download:tasks_updated",
+  DOWNLOAD_PROGRESS: BindingsEvents.DownloadProgress,
+  DOWNLOAD_TASKS_UPDATED: BindingsEvents.DownloadTasksUpdated,
 } as const;

@@ -22,11 +22,78 @@ export interface AppSettings {
     "enableThumbnailCache"?: boolean | null;
     "thumbnailQuality"?: ThumbnailQuality;
     "duplicateMergeMode"?: DuplicateMergeMode;
+    "downloader": DownloaderSettings;
 }
 
 export interface AppVersionInfo {
     "version": string;
     "commit"?: string;
+}
+
+export interface CreateDownloadTaskInput {
+    "source": string;
+    "mangaID": string;
+    "mangaTitle": string;
+    "mangaCoverURL"?: string;
+    "chapterID": string;
+    "chapterTitle": string;
+    "chapterNumber": number;
+}
+
+export interface DownloadProgress {
+    "activeTasks": number;
+    "totalTasks": number;
+    "downloadedPages": number;
+    "totalPages": number;
+    "speedFormatted": string;
+    "bytesPerSec": number;
+}
+
+export interface DownloadTask {
+    "id": string;
+    "source": string;
+    "mangaID": string;
+    "mangaTitle": string;
+    "mangaCoverURL"?: string;
+    "chapterID": string;
+    "chapterTitle": string;
+    "chapterNumber": number;
+    "status": DownloadTaskStatus;
+    "totalPages": number;
+    "downloadedPages": number;
+    "speed"?: string;
+    "errorMessage"?: string;
+    "createdAt": string;
+    "updatedAt": string;
+}
+
+export enum DownloadTaskStatus {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    DownloadStatusPending = "pending",
+    DownloadStatusDownloading = "downloading",
+    DownloadStatusPaused = "paused",
+    DownloadStatusCompleted = "completed",
+    DownloadStatusFailed = "failed",
+};
+
+export interface DownloaderSettings {
+    "enableCopyManga": boolean;
+    "copyMangaApiDomain"?: string;
+    "copyMangaToken"?: string;
+    "enableRawManga": boolean;
+    "rawMangaBaseUrl"?: string;
+    "downloadDir"?: string;
+
+    /**
+     * "cbz" or "folder"
+     */
+    "downloadFormat"?: string;
+    "maxConcurrentDownloads"?: number;
+    "maxImageConcurrency"?: number;
 }
 
 export enum DuplicateMergeMode {
@@ -83,6 +150,42 @@ export enum LocaleMode {
 export interface LocaleResolvedPayload {
     "mode": string;
     "locale": string;
+}
+
+export interface OnlineMangaChapter {
+    "id": string;
+    "mangaID": string;
+    "source": string;
+    "title": string;
+    "number": number;
+    "releaseDate"?: string;
+}
+
+export interface OnlineMangaItem {
+    "id": string;
+
+    /**
+     * "copymanga" | "klz9"
+     */
+    "source": string;
+    "title": string;
+    "author": string;
+    "coverURL": string;
+
+    /**
+     * "ongoing" | "completed" | ""
+     */
+    "status": string;
+    "description"?: string;
+    "updateTime"?: string;
+    "totalChapters"?: number;
+}
+
+export interface OnlineSearchResult {
+    "items": OnlineMangaItem[] | null;
+    "totalItems": number;
+    "page": number;
+    "totalPages": number;
 }
 
 export interface ReaderChapter {

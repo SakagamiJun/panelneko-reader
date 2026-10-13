@@ -12,6 +12,8 @@ import type * as contracts$0 from "../../../../sakagamijun/panelneko-reader/inte
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
+            "download:progress": contracts$0.DownloadProgress;
+            "download:tasks_updated": void;
             "files:dropped": string[] | null;
             "files:opened": string[] | null;
             "library:updated": void;

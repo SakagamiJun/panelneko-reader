@@ -23,6 +23,8 @@ func init() {
 	application.RegisterEvent[contracts.LocaleResolvedPayload](contracts.EventLocaleResolved)
 	application.RegisterEvent[[]string](contracts.EventFilesDropped)
 	application.RegisterEvent[[]string](contracts.EventFilesOpened)
+	application.RegisterEvent[contracts.DownloadProgress](contracts.EventDownloadProgress)
+	application.RegisterEvent[application.Void](contracts.EventDownloadTasksUpdated)
 }
 
 func main() {
