@@ -84,3 +84,39 @@ export function UpdateReaderProgress(input: contracts$0.ReaderProgress): $Cancel
 export function UpdateSettings(input: contracts$0.AppSettings): $CancellablePromise<contracts$0.AppSettings> {
     return $Call.ByID(2894041249, input);
 }
+
+export function SearchOnlineManga(source: string, query: string, page: number): $CancellablePromise<any> {
+    return $Call.ByName("github.com/sakagamijun/panelneko-reader.App.SearchOnlineManga", source, query, page);
+}
+
+export function GetOnlineMangaChapters(source: string, mangaID: string): $CancellablePromise<any> {
+    return $Call.ByName("github.com/sakagamijun/panelneko-reader.App.GetOnlineMangaChapters", source, mangaID);
+}
+
+export function CreateDownloadTasks(tasks: any[]): $CancellablePromise<any> {
+    return $Call.ByName("github.com/sakagamijun/panelneko-reader.App.CreateDownloadTasks", tasks);
+}
+
+export function PauseDownloadTask(taskID: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/sakagamijun/panelneko-reader.App.PauseDownloadTask", taskID);
+}
+
+export function ResumeDownloadTask(taskID: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/sakagamijun/panelneko-reader.App.ResumeDownloadTask", taskID);
+}
+
+export function CancelDownloadTask(taskID: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/sakagamijun/panelneko-reader.App.CancelDownloadTask", taskID);
+}
+
+export function GetDownloadTasks(): $CancellablePromise<any> {
+    return $Call.ByName("github.com/sakagamijun/panelneko-reader.App.GetDownloadTasks");
+}
+
+export function ClearCompletedDownloadTasks(): $CancellablePromise<void> {
+    return $Call.ByName("github.com/sakagamijun/panelneko-reader.App.ClearCompletedDownloadTasks");
+}
+
+export function GetDownloadProgress(): $CancellablePromise<any> {
+    return $Call.ByName("github.com/sakagamijun/panelneko-reader.App.GetDownloadProgress");
+}

@@ -38,3 +38,14 @@ export const SettingsUpdated = "settings:updated";
  */
 export const ThemeResolved = "theme:resolved";
 
+/**
+ * Name of the custom event "download:progress".
+ */
+export const DownloadProgress = "download:progress";
+
+/**
+ * Name of the custom event "download:tasks_updated".
+ */
+export const DownloadTasksUpdated = "download:tasks_updated";
+
+

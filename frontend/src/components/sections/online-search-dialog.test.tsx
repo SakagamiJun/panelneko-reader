@@ -24,9 +24,9 @@ describe("OnlineSearchDialog Component", () => {
   });
 
   const mockSearchResults: OnlineSearchResult = {
-    total: 1,
+    totalItems: 1,
     page: 1,
-    limit: 20,
+    totalPages: 1,
     items: [
       {
         id: "dandadan",

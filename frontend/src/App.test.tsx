@@ -495,18 +495,18 @@ describe("App Collection View in Duplicate Merge Mode", () => {
         status: "downloading",
         totalPages: 24,
         downloadedPages: 12,
-        speedBytesPerSec: 1048576,
+        speed: "1.0 MB/s",
         createdAt: "2026-01-01",
+        updatedAt: "2026-01-01",
       },
     ]);
     vi.spyOn(appAdapter, "getDownloadProgress").mockResolvedValue({
+      activeTasks: 1,
       totalTasks: 1,
-      completedTasks: 0,
-      failedTasks: 0,
       totalPages: 24,
       downloadedPages: 12,
-      bytesPerSecond: 1048576,
-      status: "downloading",
+      speedFormatted: "1.0 MB/s",
+      bytesPerSec: 1048576,
     });
 
     renderApp();

@@ -49,13 +49,12 @@ export default function App() {
   const [showOfflineToast, setShowOfflineToast] = useState(false);
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress>({
+    activeTasks: 0,
     totalTasks: 0,
-    completedTasks: 0,
-    failedTasks: 0,
-    totalPages: 0,
     downloadedPages: 0,
-    bytesPerSecond: 0,
-    status: "idle",
+    totalPages: 0,
+    speedFormatted: "0 B/s",
+    bytesPerSec: 0,
   });
   const [onlineSearchOpen, setOnlineSearchOpen] = useState(false);
   const [onlineSearchSource, setOnlineSearchSource] = useState<"copymanga" | "klz9">("copymanga");
