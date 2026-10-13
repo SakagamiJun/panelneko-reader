@@ -4,10 +4,12 @@ import {
   AlertTriangle,
   BookOpen,
   Check,
+  Download,
   ExternalLink,
   Folder,
   FolderInput,
   FolderOpen,
+  Globe,
   Info,
   Keyboard,
   Loader2,
@@ -42,7 +44,7 @@ import type {
 } from "@/lib/contracts";
 import { cn, formatBytes } from "@/lib/utils";
 
-export type SettingsTab = "general" | "sources" | "reader" | "shortcuts" | "about";
+export type SettingsTab = "general" | "sources" | "downloads" | "reader" | "shortcuts" | "about";
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -165,6 +167,37 @@ export function SettingsDialog({
 
   const updateField = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     updateFields({ [key]: value } as Partial<AppSettings>);
+  };
+
+  const updateDownloader = (patch: Partial<NonNullable<AppSettings["downloader"]>>) => {
+    const current = form.downloader || {
+      enableCopyManga: false,
+      enableRawManga: false,
+      downloadDir: "",
+      downloadFormat: "cbz",
+      maxConcurrentDownloads: 3,
+      maxImageConcurrency: 10,
+    };
+    updateFields({
+      downloader: {
+        ...current,
+        ...patch,
+      },
+    });
+  };
+
+  const handleSelectDownloadDir = async () => {
+    try {
+      const selected = await appAdapter.selectDirectory({
+        title: t("settings.downloadDir"),
+        defaultDirectory: form.downloader?.downloadDir || form.libraryRoot,
+      });
+      if (selected) {
+        updateDownloader({ downloadDir: selected });
+      }
+    } catch (err) {
+      console.error("Failed to select download directory:", err);
+    }
   };
 
   const handleBrowseNewSource = async () => {
@@ -296,6 +329,7 @@ export function SettingsDialog({
   const tabs: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
     { id: "general", label: t("settings.generalTab"), icon: <Sliders className="h-4 w-4" /> },
     { id: "sources", label: t("settings.sourcesTab"), icon: <Folder className="h-4 w-4" /> },
+    { id: "downloads", label: t("settings.downloadsTab"), icon: <Download className="h-4 w-4" /> },
     { id: "reader", label: t("settings.readerPreferences"), icon: <BookOpen className="h-4 w-4" /> },
     { id: "shortcuts", label: t("settings.shortcuts"), icon: <Keyboard className="h-4 w-4" /> },
     { id: "about", label: t("settings.aboutTab"), icon: <Info className="h-4 w-4" /> },
@@ -911,6 +945,171 @@ export function SettingsDialog({
                     />
                   </SettingGroup>
                 </div>
+              </div>
+            )}
+
+            {activeTab === "downloads" && (
+              <div className="space-y-6">
+                {/* CopyManga Provider Section */}
+                <SettingGroup
+                  title={t("settings.copyMangaSection")}
+                  description={t("settings.copyMangaDesc")}
+                >
+                  <SettingRow
+                    icon={<Globe className="h-4 w-4 text-primary" />}
+                    title={t("settings.enableCopyManga")}
+                    description={t("settings.enableCopyMangaHint")}
+                    control={
+                      <Switch
+                        checked={Boolean(form.downloader?.enableCopyManga)}
+                        onChange={(checked) => updateDownloader({ enableCopyManga: checked })}
+                      />
+                    }
+                  />
+                  {form.downloader?.enableCopyManga && (
+                    <>
+                      <SettingRow
+                        title={t("settings.copyMangaApiDomain")}
+                        description={t("settings.copyMangaApiDomainHint")}
+                        control={
+                          <Input
+                            value={form.downloader?.copyMangaApiDomain ?? "api.copy202601.com"}
+                            onChange={(e) => updateDownloader({ copyMangaApiDomain: e.target.value })}
+                            className="w-56 text-xs h-7.5"
+                            placeholder="api.copy202601.com"
+                          />
+                        }
+                      />
+                      <SettingRow
+                        title={t("settings.copyMangaToken")}
+                        description={t("settings.copyMangaTokenHint")}
+                        control={
+                          <Input
+                            value={form.downloader?.copyMangaToken ?? ""}
+                            onChange={(e) => updateDownloader({ copyMangaToken: e.target.value })}
+                            className="w-56 text-xs h-7.5"
+                            placeholder="Optional authorization token"
+                          />
+                        }
+                      />
+                    </>
+                  )}
+                </SettingGroup>
+
+                {/* RawManga (KLZ9) Provider Section */}
+                <SettingGroup
+                  title={t("settings.rawMangaSection")}
+                  description={t("settings.rawMangaDesc")}
+                >
+                  <SettingRow
+                    icon={<Download className="h-4 w-4 text-amber-500" />}
+                    title={t("settings.enableRawManga")}
+                    description={t("settings.enableRawMangaHint")}
+                    control={
+                      <Switch
+                        checked={Boolean(form.downloader?.enableRawManga)}
+                        onChange={(checked) => updateDownloader({ enableRawManga: checked })}
+                      />
+                    }
+                  />
+                  {form.downloader?.enableRawManga && (
+                    <SettingRow
+                      title={t("settings.rawMangaBaseUrl")}
+                      description={t("settings.rawMangaBaseUrlHint")}
+                      control={
+                        <Input
+                          value={form.downloader?.rawMangaBaseUrl ?? "https://klz9.com"}
+                          onChange={(e) => updateDownloader({ rawMangaBaseUrl: e.target.value })}
+                          className="w-56 text-xs h-7.5"
+                          placeholder="https://klz9.com"
+                        />
+                      }
+                    />
+                  )}
+                </SettingGroup>
+
+                {/* Storage & Concurrency Section */}
+                <SettingGroup
+                  title={t("settings.storageAndConcurrencySection")}
+                >
+                  <SettingRow
+                    icon={<FolderOpen className="h-4 w-4 text-muted-foreground" />}
+                    title={t("settings.downloadDir")}
+                    description={t("settings.downloadDirHint")}
+                    control={
+                      <div className="flex items-center gap-2 max-w-sm">
+                        <span
+                          className="truncate font-mono text-[11px] text-muted-foreground bg-muted/50 px-2 py-1 rounded border border-border/50 max-w-[200px]"
+                          title={form.downloader?.downloadDir || (form.libraryRoot ? `${form.libraryRoot}/Downloads` : "")}
+                        >
+                          {form.downloader?.downloadDir || (form.libraryRoot ? `${form.libraryRoot}/Downloads` : "")}
+                        </span>
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          onClick={() => void handleSelectDownloadDir()}
+                          className="h-7 text-xs shrink-0 cursor-pointer"
+                        >
+                          <FolderOpen className="h-3.5 w-3.5 mr-1" />
+                          <span>{t("settings.browse")}</span>
+                        </Button>
+                      </div>
+                    }
+                  />
+                  <SettingRow
+                    title={t("settings.downloadFormat")}
+                    description={t("settings.downloadFormatHint")}
+                    control={
+                      <SegmentedControl
+                        value={form.downloader?.downloadFormat ?? "cbz"}
+                        onChange={(val) => updateDownloader({ downloadFormat: val as "cbz" | "folder" })}
+                        options={[
+                          { value: "cbz", label: t("settings.formatCbz") },
+                          { value: "folder", label: t("settings.formatFolder") },
+                        ]}
+                      />
+                    }
+                  />
+                  <SettingRow
+                    title={t("settings.maxConcurrentDownloads")}
+                    description={t("settings.maxConcurrentDownloadsHint")}
+                    control={
+                      <Input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={form.downloader?.maxConcurrentDownloads ?? 3}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 1 && val <= 10) {
+                            updateDownloader({ maxConcurrentDownloads: val });
+                          }
+                        }}
+                        className="w-20 text-xs h-7.5 font-mono"
+                      />
+                    }
+                  />
+                  <SettingRow
+                    title={t("settings.maxImageConcurrency")}
+                    description={t("settings.maxImageConcurrencyHint")}
+                    control={
+                      <Input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={form.downloader?.maxImageConcurrency ?? 10}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 1 && val <= 30) {
+                            updateDownloader({ maxImageConcurrency: val });
+                          }
+                        }}
+                        className="w-20 text-xs h-7.5 font-mono"
+                      />
+                    }
+                  />
+                </SettingGroup>
               </div>
             )}
 

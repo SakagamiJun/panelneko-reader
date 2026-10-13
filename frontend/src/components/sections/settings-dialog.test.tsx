@@ -353,5 +353,38 @@ describe("SettingsDialog Component - Sources Tab", () => {
       })
     );
   });
+
+  it("renders downloads tab and toggles provider settings", () => {
+    const onSaveSpy = vi.fn();
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={mockSettings}
+        onSave={onSaveSpy}
+        defaultTab="downloads"
+      />
+    );
+
+    // Verify sections exist
+    expect(screen.getAllByText(/CopyManga/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/RawManga/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/存储与并发控制|Storage & Concurrency|保存先と同時実行数/i)).toBeInTheDocument();
+
+    // Find switches for providers
+    const switches = screen.getAllByRole("switch");
+    expect(switches.length).toBeGreaterThanOrEqual(2);
+
+    // Toggle CopyManga switch
+    fireEvent.click(switches[0]);
+    expect(onSaveSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        downloader: expect.objectContaining({
+          enableCopyManga: true,
+        }),
+      })
+    );
+  });
 });
 
