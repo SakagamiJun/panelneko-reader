@@ -473,4 +473,47 @@ describe("App Collection View in Duplicate Merge Mode", () => {
       expect(screen.getByText("Action")).toBeInTheDocument();
     });
   });
+
+  it("renders download widget in unified bottom-right dock when tasks exist", async () => {
+    vi.spyOn(appAdapter, "getSettings").mockResolvedValue({
+      ...baseSettings,
+      downloader: {
+        enableCopyManga: true,
+        enableRawManga: true,
+      },
+    });
+    vi.spyOn(appAdapter, "listLibraryManga").mockResolvedValue(mockItems);
+    vi.spyOn(appAdapter, "getDownloadTasks").mockResolvedValue([
+      {
+        id: "task-1",
+        source: "copymanga",
+        mangaID: "dandadan",
+        mangaTitle: "Dandadan",
+        chapterID: "c1",
+        chapterTitle: "Chapter 1",
+        chapterNumber: 1,
+        status: "downloading",
+        totalPages: 24,
+        downloadedPages: 12,
+        speedBytesPerSec: 1048576,
+        createdAt: "2026-01-01",
+      },
+    ]);
+    vi.spyOn(appAdapter, "getDownloadProgress").mockResolvedValue({
+      totalTasks: 1,
+      completedTasks: 0,
+      failedTasks: 0,
+      totalPages: 24,
+      downloadedPages: 12,
+      bytesPerSecond: 1048576,
+      status: "downloading",
+    });
+
+    renderApp();
+
+    // Verify download widget rendered
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: /下载管理|Download Manager|ダウンロード管理/i })).toBeInTheDocument();
+    });
+  });
 });

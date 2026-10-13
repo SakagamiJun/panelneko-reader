@@ -5,14 +5,18 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { LibraryGrid } from "@/components/library/library-grid";
 import { SettingsDialog, type SettingsTab } from "@/components/sections/settings-dialog";
+import { OnlineSearchDialog } from "@/components/sections/online-search-dialog";
 import { ReaderController, type ReaderJumpRequest } from "@/components/reader-controller";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UpdateToast } from "@/components/ui/update-toast";
 import { OfflineToast } from "@/components/ui/offline-toast";
+import { DownloadWidget } from "@/components/ui/download-widget";
 import { appAdapter } from "@/lib/api";
 import {
   type AppSettings,
+  type DownloadProgress,
+  type DownloadTask,
   type DuplicateMergeMode,
   EVENTS,
   type LibraryManga,
@@ -43,6 +47,19 @@ export default function App() {
   const [collectionToToggle, setCollectionToToggle] = useState<LibraryManga | null>(null);
   const [updateNotification, setUpdateNotification] = useState<UpdateCheckResult | null>(null);
   const [showOfflineToast, setShowOfflineToast] = useState(false);
+  const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress>({
+    totalTasks: 0,
+    completedTasks: 0,
+    failedTasks: 0,
+    totalPages: 0,
+    downloadedPages: 0,
+    bytesPerSecond: 0,
+    status: "idle",
+  });
+  const [onlineSearchOpen, setOnlineSearchOpen] = useState(false);
+  const [onlineSearchSource, setOnlineSearchSource] = useState<"copymanga" | "klz9">("copymanga");
+  const [onlineSearchQuery, setOnlineSearchQuery] = useState("");
   const prevOfflineSourcesCountRef = useRef<number | null>(null);
   const hasCheckedStartupRef = useRef(false);
 
@@ -100,11 +117,31 @@ export default function App() {
     const offFilesDropped = appAdapter.subscribe(EVENTS.FILES_DROPPED, handleIncomingPaths);
     const offFilesOpened = appAdapter.subscribe(EVENTS.FILES_OPENED, handleIncomingPaths);
 
+    // Initial sync and event subscriptions for downloads
+    void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
+    void appAdapter.getDownloadProgress().then(setDownloadProgress).catch(() => {});
+
+    const offProgress = appAdapter.subscribe(EVENTS.DOWNLOAD_PROGRESS, (payload) => {
+      if (payload && typeof payload === "object") {
+        setDownloadProgress(payload as DownloadProgress);
+      }
+    });
+
+    const offTasks = appAdapter.subscribe(EVENTS.DOWNLOAD_TASKS_UPDATED, (payload) => {
+      if (Array.isArray(payload)) {
+        setDownloadTasks(payload as DownloadTask[]);
+      } else {
+        void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
+      }
+    });
+
     return () => {
       offSettings();
       offLibrary();
       offFilesDropped();
       offFilesOpened();
+      offProgress();
+      offTasks();
     };
   }, [queryClient]);
 
@@ -580,6 +617,21 @@ export default function App() {
           onToggleShowOffline={() => setShowOffline((prev) => !prev)}
           onRescan={() => scanLibraryMutation.mutate()}
           isRescanning={scanLibraryMutation.isPending}
+          localMangaItems={library}
+          onSelectLocalManga={(id) => {
+            const item = library.find((i) => i.id === id);
+            if (item && item.isAvailable === false) {
+              setOfflineMangaAlert(item);
+              return;
+            }
+            setSelectedLibraryID(id);
+          }}
+          onOpenOnlineSearch={(source, query) => {
+            setOnlineSearchSource(source);
+            setOnlineSearchQuery(query);
+            setOnlineSearchOpen(true);
+          }}
+          onOpenSettingsTab={(tab) => openSettingsWithTab(tab)}
         />
       )}
 
@@ -713,10 +765,43 @@ export default function App() {
         }}
       />
 
-      {/* Toast Notification Container */}
+      {/* Online Manga Search & Download Dialog */}
+      <OnlineSearchDialog
+        open={onlineSearchOpen}
+        onClose={() => setOnlineSearchOpen(false)}
+        initialSource={onlineSearchSource}
+        initialQuery={onlineSearchQuery}
+        settings={settings}
+        onDownloadStarted={() => {
+          void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
+          void appAdapter.getDownloadProgress().then(setDownloadProgress).catch(() => {});
+        }}
+      />
+
+      {/* Unified Bottom-Right Notification & Widget Dock */}
       {(updateNotification ||
-        (showOfflineToast && offlineSourcesCount > 0 && !selectedCollectionPath && !selectedLibraryID)) && (
+        (showOfflineToast && offlineSourcesCount > 0 && !selectedCollectionPath && !selectedLibraryID) ||
+        (downloadTasks.length > 0 && !selectedLibraryID)) && (
         <div className="fixed bottom-5 right-5 z-50 flex flex-col-reverse gap-2.5 pointer-events-none items-end max-w-[calc(100vw-2.5rem)]">
+          {/* Collapsible Download Progress Widget */}
+          {downloadTasks.length > 0 && !selectedLibraryID && (
+            <div className="pointer-events-auto">
+              <DownloadWidget
+                tasks={downloadTasks}
+                progress={downloadProgress}
+                onPauseTask={(id) => void appAdapter.pauseDownloadTask(id)}
+                onResumeTask={(id) => void appAdapter.resumeDownloadTask(id)}
+                onCancelTask={(id) => void appAdapter.cancelDownloadTask(id)}
+                onClearCompleted={() => {
+                  void appAdapter.clearCompletedDownloadTasks().then(() => {
+                    void appAdapter.getDownloadTasks().then(setDownloadTasks);
+                  });
+                }}
+              />
+            </div>
+          )}
+
+          {/* Update Toast */}
           {updateNotification && (
             <UpdateToast
               update={updateNotification}
@@ -728,6 +813,7 @@ export default function App() {
             />
           )}
 
+          {/* Offline Sources Warning Toast */}
           {showOfflineToast && offlineSourcesCount > 0 && !selectedCollectionPath && !selectedLibraryID && (
             <OfflineToast
               offlineSourcesCount={offlineSourcesCount}
