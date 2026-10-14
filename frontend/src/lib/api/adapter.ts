@@ -6,7 +6,9 @@ import type {
   DownloadTask,
   LibraryManga,
   LibrarySource,
+  MangaOnlineLink,
   OnlineMangaChapter,
+  OnlineMangaItem,
   OnlineSearchResult,
   ReaderManifest,
   ReaderProgress,
@@ -53,4 +55,11 @@ export interface AppAdapter {
   getDownloadTasks(): Promise<DownloadTask[]>;
   clearCompletedDownloadTasks(): Promise<void>;
   getDownloadProgress(): Promise<DownloadProgress>;
+  retryDownloadTask(taskID: string): Promise<void>;
+  matchLocalManga(mangaID: string, provider: string): Promise<OnlineMangaItem[]>;
+  linkMangaOnline(input: MangaOnlineLink): Promise<void>;
+  getMangaOnlineLink(mangaID: string): Promise<MangaOnlineLink>;
+  unlinkMangaOnline(mangaID: string): Promise<void>;
+  checkMangaUpdates(mangaID: string): Promise<number>;
+  checkAllFollowedUpdates(): Promise<number>;
 }

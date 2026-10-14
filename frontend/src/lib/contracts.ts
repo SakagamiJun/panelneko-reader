@@ -57,9 +57,15 @@ export interface DownloaderSettings {
   enableRawManga: boolean;
   rawMangaBaseUrl?: string;
   downloadDir?: string;
+  targetSourceId?: string;
+  downloadSubPath?: string;
+  copymangaCDNMode?: "official" | "striped";
+  copymangaCustomCDNs?: string;
   downloadFormat?: "cbz" | "folder";
   maxConcurrentDownloads?: number;
   maxImageConcurrency?: number;
+  autoCheckComicUpdates?: boolean;
+  autoFollowPolicy?: "latest_only" | "fill_gaps";
 }
 
 export interface OnlineMangaItem {
@@ -80,6 +86,8 @@ export interface OnlineMangaChapter {
   source: string;
   title: string;
   number: number;
+  group?: string;
+  groupPathWord?: string;
   releaseDate?: string;
 }
 
@@ -90,7 +98,7 @@ export interface OnlineSearchResult {
   totalPages: number;
 }
 
-export type DownloadTaskStatus = "pending" | "downloading" | "paused" | "completed" | "failed";
+export type DownloadTaskStatus = "pending" | "downloading" | "paused" | "waiting_source" | "completed" | "failed";
 
 export interface DownloadTask {
   id: string;
@@ -101,6 +109,8 @@ export interface DownloadTask {
   chapterID: string;
   chapterTitle: string;
   chapterNumber: number;
+  chapterGroup?: string;
+  targetSourceID?: string;
   status: DownloadTaskStatus;
   totalPages: number;
   downloadedPages: number;
@@ -127,6 +137,19 @@ export interface CreateDownloadTaskInput {
   chapterID: string;
   chapterTitle: string;
   chapterNumber: number;
+  chapterGroup?: string;
+  targetSourceID?: string;
+}
+
+export interface MangaOnlineLink {
+  mangaId: string;
+  onlineSource: string;
+  onlineComicId: string;
+  onlineTitle: string;
+  autoFollow: boolean;
+  followPolicy: "latest_only" | "fill_gaps";
+  lastCheckedAt?: string;
+  lastNotifiedChapter?: string;
 }
 
 export interface LibraryManga {

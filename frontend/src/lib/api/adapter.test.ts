@@ -38,6 +38,13 @@ const requiredAdapterMethods: AdapterMethod[] = [
   "getDownloadTasks",
   "clearCompletedDownloadTasks",
   "getDownloadProgress",
+  "retryDownloadTask",
+  "matchLocalManga",
+  "linkMangaOnline",
+  "getMangaOnlineLink",
+  "unlinkMangaOnline",
+  "checkMangaUpdates",
+  "checkAllFollowedUpdates",
 ];
 
 describe("AppAdapter Interface Completeness Guard", () => {

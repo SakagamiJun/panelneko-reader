@@ -6,7 +6,9 @@ import type {
   DownloadTask,
   LibraryManga,
   LibrarySource,
+  MangaOnlineLink,
   OnlineMangaChapter,
+  OnlineMangaItem,
   OnlineSearchResult,
   ReaderManifest,
   ReaderProgress,
@@ -200,6 +202,59 @@ export class WailsAdapter implements AppAdapter {
       speedFormatted: "",
       bytesPerSec: 0,
     };
+  }
+
+  async retryDownloadTask(taskID: string): Promise<void> {
+    const fn = (App as any).RetryDownloadTask;
+    if (typeof fn === "function") {
+      await fn(taskID);
+    }
+  }
+
+  async matchLocalManga(mangaID: string, provider: string): Promise<OnlineMangaItem[]> {
+    const fn = (App as any).MatchLocalManga;
+    if (typeof fn === "function") {
+      return ((await fn(mangaID, provider)) ?? []) as OnlineMangaItem[];
+    }
+    return [];
+  }
+
+  async linkMangaOnline(input: MangaOnlineLink): Promise<void> {
+    const fn = (App as any).LinkMangaOnline;
+    if (typeof fn === "function") {
+      await fn(input);
+    }
+  }
+
+  async getMangaOnlineLink(mangaID: string): Promise<MangaOnlineLink> {
+    const fn = (App as any).GetMangaOnlineLink;
+    if (typeof fn === "function") {
+      return ((await fn(mangaID)) ?? {}) as MangaOnlineLink;
+    }
+    return {} as MangaOnlineLink;
+  }
+
+  async unlinkMangaOnline(mangaID: string): Promise<void> {
+    const fn = (App as any).UnlinkMangaOnline;
+    if (typeof fn === "function") {
+      await fn(mangaID);
+    }
+  }
+
+  async checkMangaUpdates(mangaID: string): Promise<number> {
+    const fn = (App as any).CheckMangaUpdates;
+    if (typeof fn === "function") {
+      return (await fn(mangaID)) ?? 0;
+    }
+    return 0;
+  }
+
+  async checkAllFollowedUpdates(): Promise<number> {
+    const fn = (App as any).CheckAllFollowedUpdates;
+    if (typeof fn === "function") {
+      return (await fn()) ?? 0;
+    }
+    return 0;
   }
 
   subscribe(eventName: string, callback: (payload: unknown) => void) {

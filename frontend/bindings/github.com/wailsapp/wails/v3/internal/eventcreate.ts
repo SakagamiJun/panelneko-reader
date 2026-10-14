@@ -6,4 +6,26 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
-Object.freeze($Create.Events);
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as contracts$0 from "../../../../sakagamijun/panelneko-reader/internal/contracts/models.js";
+
+function configure() {
+    Object.freeze(Object.assign($Create.Events, {
+        "download:progress": $$createType0,
+        "files:dropped": $$createType1,
+        "files:opened": $$createType1,
+        "locale:resolved": $$createType2,
+        "settings:updated": $$createType3,
+        "theme:resolved": $$createType4,
+    }));
+}
+
+// Private type creation functions
+const $$createType0 = contracts$0.DownloadProgress.createFrom;
+const $$createType1 = $Create.Array($Create.Any);
+const $$createType2 = contracts$0.LocaleResolvedPayload.createFrom;
+const $$createType3 = contracts$0.AppSettings.createFrom;
+const $$createType4 = contracts$0.ThemeResolvedPayload.createFrom;
+
+configure();

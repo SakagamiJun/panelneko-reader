@@ -789,7 +789,14 @@ export default function App() {
                 tasks={downloadTasks}
                 progress={downloadProgress}
                 onPauseTask={(id) => void appAdapter.pauseDownloadTask(id)}
-                onResumeTask={(id) => void appAdapter.resumeDownloadTask(id)}
+                onResumeTask={(id) => {
+                  const task = downloadTasks.find((t) => t.id === id);
+                  if (task && (task.status === "failed" || task.status === "waiting_source")) {
+                    void appAdapter.retryDownloadTask(id);
+                  } else {
+                    void appAdapter.resumeDownloadTask(id);
+                  }
+                }}
                 onCancelTask={(id) => void appAdapter.cancelDownloadTask(id)}
                 onClearCompleted={() => {
                   void appAdapter.clearCompletedDownloadTasks().then(() => {

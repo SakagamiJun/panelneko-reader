@@ -156,6 +156,7 @@ export function DownloadWidget({
           const pct = task.totalPages > 0 ? Math.round((task.downloadedPages / task.totalPages) * 100) : 0;
           const isDownloading = task.status === "downloading";
           const isPaused = task.status === "paused";
+          const isWaitingSource = task.status === "waiting_source";
           const isCompleted = task.status === "completed";
           const isFailed = task.status === "failed";
 
@@ -183,6 +184,7 @@ export function DownloadWidget({
                     "text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0",
                     isDownloading && "text-primary bg-primary/10 font-semibold",
                     isPaused && "text-amber-500 bg-amber-500/10",
+                    isWaitingSource && "text-sky-500 bg-sky-500/10",
                     isCompleted && "text-emerald-500 bg-emerald-500/10",
                     isFailed && "text-destructive bg-destructive/10"
                   )}
@@ -191,6 +193,8 @@ export function DownloadWidget({
                     ? t("downloader.statusDownloading")
                     : isPaused
                     ? t("downloader.statusPaused")
+                    : isWaitingSource
+                    ? t("downloader.statusWaitingSource")
                     : isCompleted
                     ? t("downloader.statusCompleted")
                     : isFailed
@@ -257,7 +261,7 @@ export function DownloadWidget({
                     </Button>
                   )}
 
-                  {isFailed && (
+                  {(isFailed || isWaitingSource) && (
                     <Button
                       type="button"
                       size="xs"

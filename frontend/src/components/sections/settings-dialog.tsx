@@ -992,6 +992,34 @@ export function SettingsDialog({
                           />
                         }
                       />
+                      <SettingRow
+                        title={t("settings.copyMangaCDNMode")}
+                        description={t("settings.copyMangaCDNModeHint")}
+                        control={
+                          <SegmentedControl
+                            value={form.downloader?.copymangaCDNMode ?? "official"}
+                            onChange={(val) => updateDownloader({ copymangaCDNMode: val as "official" | "striped" })}
+                            options={[
+                              { value: "official", label: t("settings.copyMangaCDNOfficial") },
+                              { value: "striped", label: t("settings.copyMangaCDNStriped") },
+                            ]}
+                          />
+                        }
+                      />
+                      {form.downloader?.copymangaCDNMode === "striped" && (
+                        <SettingRow
+                          title={t("settings.copyMangaCustomCDNs")}
+                          description={t("settings.copyMangaCustomCDNsHint")}
+                          control={
+                            <Input
+                              value={form.downloader?.copymangaCustomCDNs ?? ""}
+                              onChange={(e) => updateDownloader({ copymangaCustomCDNs: e.target.value })}
+                              className="w-56 text-xs h-7.5"
+                              placeholder="e.g. cdn.example.com, cdn2.example.com"
+                            />
+                          }
+                        />
+                      )}
                     </>
                   )}
                 </SettingGroup>
@@ -1028,10 +1056,75 @@ export function SettingsDialog({
                   )}
                 </SettingGroup>
 
+                {/* Automatic Updates & Follow Section */}
+                <SettingGroup
+                  title={t("settings.updatesAndFollowSection")}
+                  description={t("settings.updatesAndFollowDesc")}
+                >
+                  <SettingRow
+                    title={t("settings.autoCheckComicUpdates")}
+                    description={t("settings.autoCheckComicUpdatesHint")}
+                    control={
+                      <Switch
+                        checked={Boolean(form.downloader?.autoCheckComicUpdates)}
+                        onChange={(checked) => updateDownloader({ autoCheckComicUpdates: checked })}
+                      />
+                    }
+                  />
+                  <SettingRow
+                    title={t("settings.autoFollowPolicy")}
+                    description={t("settings.autoFollowPolicyHint")}
+                    control={
+                      <SegmentedControl
+                        value={form.downloader?.autoFollowPolicy ?? "latest_only"}
+                        onChange={(val) => updateDownloader({ autoFollowPolicy: val as "latest_only" | "fill_gaps" })}
+                        options={[
+                          { value: "latest_only", label: t("settings.policyLatestOnly") },
+                          { value: "fill_gaps", label: t("settings.policyFillGaps") },
+                        ]}
+                      />
+                    }
+                  />
+                </SettingGroup>
+
                 {/* Storage & Concurrency Section */}
                 <SettingGroup
                   title={t("settings.storageAndConcurrencySection")}
                 >
+                  {(form.librarySources?.length ?? 0) > 0 && (
+                    <>
+                      <SettingRow
+                        icon={<FolderOpen className="h-4 w-4 text-muted-foreground" />}
+                        title={t("settings.targetLibrarySource")}
+                        description={t("settings.targetLibrarySourceHint")}
+                        control={
+                          <select
+                            value={form.downloader?.targetSourceId || form.librarySources?.[0]?.id || ""}
+                            onChange={(e) => updateDownloader({ targetSourceId: e.target.value })}
+                            className="h-7.5 px-2.5 rounded-md border border-border/60 bg-muted/40 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+                          >
+                            {form.librarySources?.map((src) => (
+                              <option key={src.id} value={src.id} className="bg-popover text-popover-foreground">
+                                {src.name} ({src.path})
+                              </option>
+                            ))}
+                          </select>
+                        }
+                      />
+                      <SettingRow
+                        title={t("settings.downloadSubPath")}
+                        description={t("settings.downloadSubPathHint")}
+                        control={
+                          <Input
+                            value={form.downloader?.downloadSubPath ?? ""}
+                            onChange={(e) => updateDownloader({ downloadSubPath: e.target.value })}
+                            className="w-48 text-xs h-7.5 font-mono"
+                            placeholder="e.g. Downloads"
+                          />
+                        }
+                      />
+                    </>
+                  )}
                   <SettingRow
                     icon={<FolderOpen className="h-4 w-4 text-muted-foreground" />}
                     title={t("settings.downloadDir")}

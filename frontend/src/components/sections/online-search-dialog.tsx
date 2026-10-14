@@ -53,9 +53,25 @@ export function OnlineSearchDialog({
   const [selectedManga, setSelectedManga] = useState<OnlineMangaItem | null>(null);
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [chapters, setChapters] = useState<OnlineMangaChapter[]>([]);
+  const [activeGroup, setActiveGroup] = useState<string>("all");
   const [chaptersError, setChaptersError] = useState<string | null>(null);
   const [selectedChapterIds, setSelectedChapterIds] = useState<Set<string>>(new Set());
   const [isSubmittingDownload, setIsSubmittingDownload] = useState(false);
+
+  const availableGroups = useMemo(() => {
+    const set = new Set<string>();
+    for (const ch of chapters) {
+      if (ch.group) {
+        set.add(ch.group);
+      }
+    }
+    return Array.from(set);
+  }, [chapters]);
+
+  const displayedChapters = useMemo(() => {
+    if (activeGroup === "all") return chapters;
+    return chapters.filter((ch) => ch.group === activeGroup);
+  }, [chapters, activeGroup]);
 
   // Sync initial query and source when opened
   useEffect(() => {
@@ -72,6 +88,7 @@ export function OnlineSearchDialog({
       setQueryInput(initialQuery);
       setSelectedManga(null);
       setChapters([]);
+      setActiveGroup("all");
       setSelectedChapterIds(new Set());
       setSearchError(null);
       setChaptersError(null);
@@ -122,6 +139,7 @@ export function OnlineSearchDialog({
     setSelectedManga(manga);
     setLoadingChapters(true);
     setChaptersError(null);
+    setActiveGroup("all");
     setSelectedChapterIds(new Set());
 
     try {
@@ -150,18 +168,32 @@ export function OnlineSearchDialog({
   };
 
   const handleSelectAll = () => {
-    setSelectedChapterIds(new Set(chapters.map((c) => c.id)));
+    setSelectedChapterIds((prev) => {
+      const next = new Set(prev);
+      for (const ch of displayedChapters) {
+        next.add(ch.id);
+      }
+      return next;
+    });
   };
 
   const handleDeselectAll = () => {
-    setSelectedChapterIds(new Set());
+    setSelectedChapterIds((prev) => {
+      const next = new Set(prev);
+      for (const ch of displayedChapters) {
+        next.delete(ch.id);
+      }
+      return next;
+    });
   };
 
   const handleInvertSelection = () => {
     setSelectedChapterIds((prev) => {
-      const next = new Set<string>();
-      for (const ch of chapters) {
-        if (!prev.has(ch.id)) {
+      const next = new Set(prev);
+      for (const ch of displayedChapters) {
+        if (next.has(ch.id)) {
+          next.delete(ch.id);
+        } else {
           next.add(ch.id);
         }
       }
@@ -183,6 +215,8 @@ export function OnlineSearchDialog({
       chapterID: ch.id,
       chapterTitle: ch.title,
       chapterNumber: ch.number,
+      chapterGroup: ch.group,
+      targetSourceID: settings?.downloader?.targetSourceId,
     }));
 
     setIsSubmittingDownload(true);
@@ -510,38 +544,74 @@ export function OnlineSearchDialog({
                       <span>{t("downloader.idleStatus")}</span>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                      {chapters.map((ch) => {
-                        const isChecked = selectedChapterIds.has(ch.id);
-                        return (
+                    <>
+                      {availableGroups.length > 1 && (
+                        <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
                           <button
-                            key={ch.id}
                             type="button"
-                            onClick={() => handleToggleChapter(ch.id)}
+                            onClick={() => setActiveGroup("all")}
                             className={cn(
-                              "flex items-center justify-between p-2 rounded-lg text-left text-xs border transition-colors cursor-pointer select-none group",
-                              isChecked
-                                ? "bg-primary/10 border-primary/40 text-foreground"
-                                : "bg-card hover:bg-muted/50 border-border/60 text-muted-foreground"
+                              "px-2.5 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer border",
+                              activeGroup === "all"
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/50"
                             )}
                           >
-                            <span className="truncate flex-1 font-medium text-[11px]" title={ch.title}>
-                              {ch.title}
-                            </span>
-                            <div
+                            {t("downloader.allGroups") || "全部"} ({chapters.length})
+                          </button>
+                          {availableGroups.map((grp) => {
+                            const count = chapters.filter((c) => c.group === grp).length;
+                            return (
+                              <button
+                                key={grp}
+                                type="button"
+                                onClick={() => setActiveGroup(grp)}
+                                className={cn(
+                                  "px-2.5 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer border",
+                                  activeGroup === grp
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/50"
+                                )}
+                              >
+                                {grp} ({count})
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {displayedChapters.map((ch) => {
+                          const isChecked = selectedChapterIds.has(ch.id);
+                          return (
+                            <button
+                              key={ch.id}
+                              type="button"
+                              onClick={() => handleToggleChapter(ch.id)}
                               className={cn(
-                                "h-3.5 w-3.5 rounded border flex items-center justify-center ml-1.5 shrink-0 transition-colors",
+                                "flex items-center justify-between p-2 rounded-lg text-left text-xs border transition-colors cursor-pointer select-none group",
                                 isChecked
-                                  ? "bg-primary border-primary text-primary-foreground"
-                                  : "border-border/80 group-hover:border-primary/50"
+                                  ? "bg-primary/10 border-primary/40 text-foreground"
+                                  : "bg-card hover:bg-muted/50 border-border/60 text-muted-foreground"
                               )}
                             >
-                              {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                              <span className="truncate flex-1 font-medium text-[11px]" title={ch.title}>
+                                {ch.title}
+                              </span>
+                              <div
+                                className={cn(
+                                  "h-3.5 w-3.5 rounded border flex items-center justify-center ml-1.5 shrink-0 transition-colors",
+                                  isChecked
+                                    ? "bg-primary border-primary text-primary-foreground"
+                                    : "border-border/80 group-hover:border-primary/50"
+                                )}
+                              >
+                                {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
                   )}
                 </div>
 

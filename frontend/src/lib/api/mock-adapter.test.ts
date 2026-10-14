@@ -241,5 +241,28 @@ describe("MockAdapter Pin Functionality", () => {
     tasks = await adapter.getDownloadTasks();
     expect(tasks.length).toBe(0);
   });
+
+  it("handles online linking and matching in mock mode", async () => {
+    const matched = await adapter.matchLocalManga("mock-1", "copymanga");
+    expect(matched.length).toBeGreaterThan(0);
+    expect(matched[0].source).toBe("copymanga");
+
+    await adapter.linkMangaOnline({
+      mangaId: "mock-1",
+      onlineSource: "copymanga",
+      onlineComicId: "mock-online-1",
+      onlineTitle: "Mock Matched Comic",
+      autoFollow: true,
+      followPolicy: "latest_only",
+    });
+
+    const link = await adapter.getMangaOnlineLink("mock-1");
+    expect(link.onlineComicId).toBe("mock-online-1");
+    expect(link.autoFollow).toBe(true);
+
+    await adapter.unlinkMangaOnline("mock-1");
+    const linkAfter = await adapter.getMangaOnlineLink("mock-1");
+    expect(linkAfter.onlineComicId).toBeUndefined();
+  });
 });
 

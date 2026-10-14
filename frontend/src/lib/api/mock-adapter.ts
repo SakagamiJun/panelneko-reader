@@ -6,7 +6,9 @@ import {
   EVENTS,
   type LibraryManga,
   type LibrarySource,
+  type MangaOnlineLink,
   type OnlineMangaChapter,
+  type OnlineMangaItem,
   type OnlineSearchResult,
   type ReaderManifest,
   type ReaderProgress,
@@ -173,6 +175,7 @@ export class MockAdapter implements AppAdapter {
   private listeners = new Map<string, Set<Listener>>();
   private collectionOverrides = new Map<string, boolean>();
   private mockTasks: DownloadTask[] = [];
+  private mockLinks = new Map<string, MangaOnlineLink>();
 
   async getSettings() {
     return this.readSettings();
@@ -615,6 +618,50 @@ export class MockAdapter implements AppAdapter {
       speedFormatted: active > 0 ? "2.8 MB/s" : "",
       bytesPerSec: active > 0 ? 2.8 * 1024 * 1024 : 0,
     };
+  }
+
+  async retryDownloadTask(taskID: string): Promise<void> {
+    const task = this.mockTasks.find((t) => t.id === taskID);
+    if (task) {
+      task.status = "pending";
+      task.errorMessage = undefined;
+      this.emit(EVENTS.DOWNLOAD_TASKS_UPDATED, [...this.mockTasks]);
+      this.emit(EVENTS.DOWNLOAD_PROGRESS, await this.getDownloadProgress());
+    }
+  }
+
+  async matchLocalManga(mangaID: string, provider: string): Promise<OnlineMangaItem[]> {
+    return [
+      {
+        id: `mock-match-${mangaID}`,
+        source: provider,
+        title: "Mock Matched Comic",
+        author: "Mock Author",
+        coverURL: "https://example.com/cover.jpg",
+        status: "ongoing",
+        totalChapters: 120,
+      },
+    ];
+  }
+
+  async linkMangaOnline(input: MangaOnlineLink): Promise<void> {
+    this.mockLinks.set(input.mangaId, input);
+  }
+
+  async getMangaOnlineLink(mangaID: string): Promise<MangaOnlineLink> {
+    return this.mockLinks.get(mangaID) ?? ({} as MangaOnlineLink);
+  }
+
+  async unlinkMangaOnline(mangaID: string): Promise<void> {
+    this.mockLinks.delete(mangaID);
+  }
+
+  async checkMangaUpdates(_mangaID: string): Promise<number> {
+    return 0;
+  }
+
+  async checkAllFollowedUpdates(): Promise<number> {
+    return 0;
   }
 
   subscribe(eventName: string, callback: Listener) {

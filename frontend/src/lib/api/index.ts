@@ -107,4 +107,25 @@ export const appAdapter: AppAdapter = {
   getDownloadProgress() {
     return currentAdapter().getDownloadProgress();
   },
+  retryDownloadTask(taskID) {
+    return currentAdapter().retryDownloadTask(taskID);
+  },
+  matchLocalManga(mangaID, provider) {
+    return currentAdapter().matchLocalManga(mangaID, provider);
+  },
+  linkMangaOnline(input) {
+    return currentAdapter().linkMangaOnline(input);
+  },
+  getMangaOnlineLink(mangaID) {
+    return currentAdapter().getMangaOnlineLink(mangaID);
+  },
+  unlinkMangaOnline(mangaID) {
+    return currentAdapter().unlinkMangaOnline(mangaID);
+  },
+  checkMangaUpdates(mangaID) {
+    return currentAdapter().checkMangaUpdates(mangaID);
+  },
+  checkAllFollowedUpdates() {
+    return currentAdapter().checkAllFollowedUpdates();
+  },
 };
