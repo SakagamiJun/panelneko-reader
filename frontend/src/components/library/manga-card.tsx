@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BookImage, Folder, FolderOpen, Folders, Pin } from "lucide-react";
+import { Bell, BookImage, Folder, FolderOpen, Folders, Pin } from "lucide-react";
 import type { LibraryManga } from "@/lib/contracts";
 import { i18n } from "@/lib/i18n";
 import { cn, formatDateTime, formatSmartDate } from "@/lib/utils";
@@ -13,6 +13,9 @@ export interface MangaCardProps {
   onToggleCollection?: (item: LibraryManga) => void;
   onOpenDirectory: (mangaID: string) => void;
   sourceName?: string;
+  isAutoFollowing?: boolean;
+  isLinked?: boolean;
+  onToggleAutoFollow?: (mangaID: string) => void;
 }
 
 export const MangaCard = memo(function MangaCard({
@@ -23,6 +26,9 @@ export const MangaCard = memo(function MangaCard({
   onToggleCollection,
   onOpenDirectory,
   sourceName,
+  isAutoFollowing,
+  isLinked,
+  onToggleAutoFollow,
 }: MangaCardProps) {
   const { t } = useTranslation();
   const [imageError, setImageError] = useState(false);
@@ -147,6 +153,33 @@ export const MangaCard = memo(function MangaCard({
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            {onToggleAutoFollow && !item.isCollection && (
+              <button
+                type="button"
+                title={
+                  !isLinked
+                    ? t("library.autoFollowUnlinked")
+                    : isAutoFollowing
+                    ? t("library.autoFollowActive")
+                    : t("library.autoFollowPaused")
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleAutoFollow(item.id);
+                }}
+                className={cn(
+                  "flex h-6 w-6 items-center justify-center rounded-md transition-all duration-150 cursor-pointer",
+                  isAutoFollowing
+                    ? "text-primary bg-primary/10 hover:bg-primary/20 opacity-100"
+                    : isLinked
+                    ? "text-muted-foreground opacity-60 hover:bg-muted hover:text-foreground hover:opacity-100"
+                    : "text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                )}
+              >
+                <Bell className={cn("h-3.5 w-3.5 transition-transform", isAutoFollowing && "fill-primary")} />
+              </button>
+            )}
+
             {!item.parentPath && onToggleCollection && (
               <button
                 type="button"

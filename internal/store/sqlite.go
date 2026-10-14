@@ -721,6 +721,35 @@ func (s *SQLiteStore) GetAutoFollowMangaLinks() ([]contracts.MangaOnlineLink, er
 	return links, rows.Err()
 }
 
+func (s *SQLiteStore) GetAllMangaOnlineLinks() ([]contracts.MangaOnlineLink, error) {
+	const query = `
+		SELECT manga_id, online_source, online_comic_id, online_title,
+		       auto_follow, follow_policy, last_checked_at, last_notified_chapter
+		FROM manga_online_links
+	`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query all manga online links: %w", err)
+	}
+	defer rows.Close()
+
+	var links []contracts.MangaOnlineLink
+	for rows.Next() {
+		var link contracts.MangaOnlineLink
+		var autoFollowInt int
+		err := rows.Scan(
+			&link.MangaID, &link.OnlineSource, &link.OnlineComicID, &link.OnlineTitle,
+			&autoFollowInt, &link.FollowPolicy, &link.LastCheckedAt, &link.LastNotifiedChapter,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan manga online link: %w", err)
+		}
+		link.AutoFollow = autoFollowInt == 1
+		links = append(links, link)
+	}
+	return links, rows.Err()
+}
+
 func (s *SQLiteStore) DeleteMangaOnlineLink(mangaID string) error {
 	const query = `DELETE FROM manga_online_links WHERE manga_id = ?`
 	_, err := s.db.Exec(query, mangaID)

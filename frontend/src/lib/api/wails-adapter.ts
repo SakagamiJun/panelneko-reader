@@ -257,6 +257,29 @@ export class WailsAdapter implements AppAdapter {
     return 0;
   }
 
+  async openLogDirectory(): Promise<void> {
+    const fn = (App as any).OpenLogDirectory;
+    if (typeof fn === "function") {
+      await fn();
+    }
+  }
+
+  async toggleMangaAutoFollow(mangaID: string): Promise<boolean> {
+    const fn = (App as any).ToggleMangaAutoFollow;
+    if (typeof fn === "function") {
+      return (await fn(mangaID)) ?? false;
+    }
+    return false;
+  }
+
+  async getAllMangaOnlineLinks(): Promise<MangaOnlineLink[]> {
+    const fn = (App as any).GetAllMangaOnlineLinks;
+    if (typeof fn === "function") {
+      return ((await fn()) ?? []) as MangaOnlineLink[];
+    }
+    return [];
+  }
+
   subscribe(eventName: string, callback: (payload: unknown) => void) {
     if (!isWailsEnvironment()) {
       return () => {};

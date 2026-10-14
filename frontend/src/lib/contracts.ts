@@ -47,6 +47,7 @@ export interface AppSettings {
   enableThumbnailCache?: boolean;
   thumbnailQuality?: ThumbnailQuality;
   duplicateMergeMode?: DuplicateMergeMode;
+  enableFileLogging?: boolean;
   downloader?: DownloaderSettings;
 }
 

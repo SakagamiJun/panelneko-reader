@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { BookImage, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MangaCard } from "@/components/library/manga-card";
-import type { LibraryManga, LibrarySource } from "@/lib/contracts";
+import type { LibraryManga, LibrarySource, MangaOnlineLink } from "@/lib/contracts";
 
 export interface LibraryGridProps {
   items: LibraryManga[];
@@ -20,6 +20,8 @@ export interface LibraryGridProps {
   onToggleCollection?: (item: LibraryManga) => void;
   onOpenDirectory: (mangaID: string) => void;
   sources?: LibrarySource[];
+  onlineLinksMap?: Map<string, MangaOnlineLink>;
+  onToggleAutoFollow?: (mangaID: string) => void;
 }
 
 export function LibraryGrid({
@@ -36,6 +38,8 @@ export function LibraryGrid({
   onToggleCollection,
   onOpenDirectory,
   sources,
+  onlineLinksMap,
+  onToggleAutoFollow,
 }: LibraryGridProps) {
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const [columns, setColumns] = useState(1);
@@ -153,18 +157,24 @@ export function LibraryGrid({
                 paddingBottom: "12px",
               }}
             >
-              {rowItems.map((item) => (
-                <MangaCard
-                  key={item.id}
-                  item={item}
-                  onOpenManga={onOpenManga}
-                  onOpenCollection={onOpenCollection}
-                  onTogglePin={onTogglePin}
-                  onToggleCollection={onToggleCollection}
-                  onOpenDirectory={onOpenDirectory}
-                  sourceName={showSourceBadge ? sourceMap.get(item.sourceID || "default") : undefined}
-                />
-              ))}
+              {rowItems.map((item) => {
+                const link = onlineLinksMap?.get(item.id);
+                return (
+                  <MangaCard
+                    key={item.id}
+                    item={item}
+                    onOpenManga={onOpenManga}
+                    onOpenCollection={onOpenCollection}
+                    onTogglePin={onTogglePin}
+                    onToggleCollection={onToggleCollection}
+                    onOpenDirectory={onOpenDirectory}
+                    sourceName={showSourceBadge ? sourceMap.get(item.sourceID || "default") : undefined}
+                    isLinked={Boolean(link)}
+                    isAutoFollowing={Boolean(link?.autoFollow)}
+                    onToggleAutoFollow={onToggleAutoFollow}
+                  />
+                );
+              })}
             </div>
           );
         })}

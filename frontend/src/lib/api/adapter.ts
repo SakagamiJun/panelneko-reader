@@ -62,4 +62,7 @@ export interface AppAdapter {
   unlinkMangaOnline(mangaID: string): Promise<void>;
   checkMangaUpdates(mangaID: string): Promise<number>;
   checkAllFollowedUpdates(): Promise<number>;
+  openLogDirectory(): Promise<void>;
+  toggleMangaAutoFollow(mangaID: string): Promise<boolean>;
+  getAllMangaOnlineLinks(): Promise<MangaOnlineLink[]>;
 }

@@ -468,6 +468,7 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 	}
 
 	settings.Downloader = dl
+	settings.EnableFileLogging = input.EnableFileLogging
 
 	return settings, nil
 }

@@ -10,9 +10,12 @@ import {
   FolderInput,
   FolderOpen,
   Globe,
+  HardDrive,
   Info,
   Keyboard,
+  Link2,
   Loader2,
+  Network,
   Pencil,
   Plus,
   RefreshCw,
@@ -54,6 +57,7 @@ export interface SettingsDialogProps {
   version?: string;
   commit?: string;
   defaultTab?: SettingsTab;
+  onOpenBatchLink?: () => void;
 }
 
 export function SettingsDialog({
@@ -64,6 +68,7 @@ export function SettingsDialog({
   version,
   commit,
   defaultTab = "general",
+  onOpenBatchLink,
 }: SettingsDialogProps) {
   const { t } = useTranslation();
   const [form, setForm] = useState<AppSettings>(settings);
@@ -365,6 +370,15 @@ export function SettingsDialog({
     { value: "follow", label: t("settings.sideClickFollowShort") },
     { value: "left_next", label: t("settings.sideClickLeftNextShort") },
   ];
+
+  const selectedTargetSourceId = form.downloader?.targetSourceId || form.librarySources?.[0]?.id;
+  const selectedTargetSource = form.librarySources?.find((s) => s.id === selectedTargetSourceId);
+  const targetSubPath = form.downloader?.downloadSubPath?.trim() ?? "";
+  const effectiveDownloadPath = selectedTargetSource
+    ? (targetSubPath
+        ? `${selectedTargetSource.path.replace(/[\\/]+$/, "")}/${targetSubPath.replace(/^[\\/]+/, "")}`
+        : selectedTargetSource.path)
+    : (form.downloader?.downloadDir || "");
 
   const handleClose = () => {
     onClose(form);
@@ -1087,69 +1101,134 @@ export function SettingsDialog({
                   />
                 </SettingGroup>
 
+                {/* Local Manga Linking Section */}
+                <SettingGroup
+                  title={t("settings.localMangaLinkingSection")}
+                  description={t("settings.localMangaLinkingDesc")}
+                >
+                  <SettingRow
+                    icon={<Link2 className="h-4 w-4 text-primary" />}
+                    title={t("settings.batchLinkTitle")}
+                    description={t("settings.batchLinkDesc")}
+                    control={
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        onClick={() => onOpenBatchLink?.()}
+                        className="gap-1.5 text-xs font-medium cursor-pointer"
+                      >
+                        <Link2 className="h-3.5 w-3.5 text-primary" />
+                        <span>{t("settings.openBatchLink")}</span>
+                      </Button>
+                    }
+                  />
+                </SettingGroup>
+
                 {/* Storage & Concurrency Section */}
                 <SettingGroup
                   title={t("settings.storageAndConcurrencySection")}
                 >
-                  {(form.librarySources?.length ?? 0) > 0 && (
-                    <>
-                      <SettingRow
-                        icon={<FolderOpen className="h-4 w-4 text-muted-foreground" />}
-                        title={t("settings.targetLibrarySource")}
-                        description={t("settings.targetLibrarySourceHint")}
-                        control={
-                          <select
-                            value={form.downloader?.targetSourceId || form.librarySources?.[0]?.id || ""}
-                            onChange={(e) => updateDownloader({ targetSourceId: e.target.value })}
-                            className="h-7.5 px-2.5 rounded-md border border-border/60 bg-muted/40 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
-                          >
-                            {form.librarySources?.map((src) => (
-                              <option key={src.id} value={src.id} className="bg-popover text-popover-foreground">
-                                {src.name} ({src.path})
-                              </option>
-                            ))}
-                          </select>
-                        }
-                      />
-                      <SettingRow
-                        title={t("settings.downloadSubPath")}
-                        description={t("settings.downloadSubPathHint")}
-                        control={
-                          <Input
-                            value={form.downloader?.downloadSubPath ?? ""}
-                            onChange={(e) => updateDownloader({ downloadSubPath: e.target.value })}
-                            className="w-48 text-xs h-7.5 font-mono"
-                            placeholder="e.g. Downloads"
-                          />
-                        }
-                      />
-                    </>
-                  )}
-                  <SettingRow
-                    icon={<FolderOpen className="h-4 w-4 text-muted-foreground" />}
-                    title={t("settings.downloadDir")}
-                    description={t("settings.downloadDirHint")}
-                    control={
-                      <div className="flex items-center gap-2 max-w-sm">
-                        <span
-                          className="truncate font-mono text-[11px] text-muted-foreground bg-muted/50 px-2 py-1 rounded border border-border/50 max-w-[200px]"
-                          title={form.downloader?.downloadDir || (form.libraryRoot ? `${form.libraryRoot}/Downloads` : "")}
-                        >
-                          {form.downloader?.downloadDir || (form.libraryRoot ? `${form.libraryRoot}/Downloads` : "")}
-                        </span>
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="outline"
-                          onClick={() => void handleSelectDownloadDir()}
-                          className="h-7 text-xs shrink-0 cursor-pointer"
-                        >
-                          <FolderOpen className="h-3.5 w-3.5 mr-1" />
-                          <span>{t("settings.browse")}</span>
-                        </Button>
+                  {(form.librarySources?.length ?? 0) > 0 ? (
+                    <div className="p-4 sm:p-5 border-b border-border/40 space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h5 className="text-xs font-semibold text-foreground">{t("settings.targetLibrarySource")}</h5>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">{t("settings.targetLibrarySourceHint")}</p>
+                        </div>
                       </div>
-                    }
-                  />
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {form.librarySources?.map((src) => {
+                          const isSelected = selectedTargetSourceId === src.id;
+                          return (
+                            <button
+                              key={src.id}
+                              type="button"
+                              onClick={() => updateDownloader({ targetSourceId: src.id })}
+                              className={cn(
+                                "flex flex-col text-left p-3 rounded-lg border transition-all text-xs relative cursor-pointer",
+                                isSelected
+                                  ? "border-primary/70 bg-primary/5 shadow-xs ring-1 ring-primary/25"
+                                  : "border-border/60 bg-card hover:bg-muted/40 hover:border-border"
+                              )}
+                            >
+                              <div className="flex items-center justify-between w-full mb-1">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {src.type === "smb" || src.type === "webdav" ? (
+                                    <Network className={cn("h-3.5 w-3.5 shrink-0", isSelected ? "text-primary" : "text-muted-foreground")} />
+                                  ) : (
+                                    <HardDrive className={cn("h-3.5 w-3.5 shrink-0", isSelected ? "text-primary" : "text-muted-foreground")} />
+                                  )}
+                                  <span className={cn("font-medium truncate", isSelected ? "text-foreground font-semibold" : "text-foreground/90")}>
+                                    {src.name}
+                                  </span>
+                                </div>
+                                {isSelected && (
+                                  <span className="flex items-center justify-center h-4 w-4 rounded-full bg-primary text-primary-foreground shrink-0 ml-1">
+                                    <Check className="h-2.5 w-2.5" />
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] font-mono text-muted-foreground/80 truncate w-full" title={src.path}>
+                                {src.path}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="pt-1">
+                        <SettingRow
+                          title={t("settings.downloadSubPath")}
+                          description={t("settings.downloadSubPathHint")}
+                          control={
+                            <Input
+                              value={form.downloader?.downloadSubPath ?? ""}
+                              onChange={(e) => updateDownloader({ downloadSubPath: e.target.value })}
+                              className="w-48 text-xs h-7.5 font-mono"
+                              placeholder="Downloads"
+                            />
+                          }
+                        />
+                      </div>
+
+                      {effectiveDownloadPath && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/40 border border-border/40 text-[11px]">
+                          <span className="text-muted-foreground shrink-0">{t("settings.effectiveDownloadPath")}:</span>
+                          <span className="font-mono text-foreground font-medium truncate select-all" title={effectiveDownloadPath}>
+                            {effectiveDownloadPath}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <SettingRow
+                      icon={<FolderOpen className="h-4 w-4 text-muted-foreground" />}
+                      title={t("settings.downloadDir")}
+                      description={t("settings.downloadDirHint")}
+                      control={
+                        <div className="flex items-center gap-2 max-w-sm">
+                          <span
+                            className="truncate font-mono text-[11px] text-muted-foreground bg-muted/50 px-2 py-1 rounded border border-border/50 max-w-[200px]"
+                            title={form.downloader?.downloadDir || (form.libraryRoot ? `${form.libraryRoot}/Downloads` : "")}
+                          >
+                            {form.downloader?.downloadDir || (form.libraryRoot ? `${form.libraryRoot}/Downloads` : "")}
+                          </span>
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            onClick={() => void handleSelectDownloadDir()}
+                            className="h-7 text-xs shrink-0 cursor-pointer"
+                          >
+                            <FolderOpen className="h-3.5 w-3.5 mr-1" />
+                            <span>{t("settings.browse")}</span>
+                          </Button>
+                        </div>
+                      }
+                    />
+                  )}
                   <SettingRow
                     title={t("settings.downloadFormat")}
                     description={t("settings.downloadFormatHint")}
@@ -1574,6 +1653,38 @@ export function SettingsDialog({
                           </span>
                         </Button>
                       </div>
+                    }
+                  />
+                </SettingGroup>
+
+                <SettingGroup
+                  title={t("settings.diagnosticsAndLogs")}
+                  description={t("settings.diagnosticsAndLogsDesc")}
+                >
+                  <SettingRow
+                    title={t("settings.enableFileLogging")}
+                    description={t("settings.enableFileLoggingHint")}
+                    control={
+                      <Switch
+                        checked={Boolean(form.enableFileLogging)}
+                        onChange={(checked) => updateField("enableFileLogging", checked)}
+                      />
+                    }
+                  />
+                  <SettingRow
+                    title={t("settings.openLogDirectory")}
+                    description={t("settings.openLogDirectoryHint")}
+                    control={
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        onClick={() => void appAdapter.openLogDirectory()}
+                        className="gap-1 text-xs cursor-pointer"
+                      >
+                        <FolderOpen className="h-3 w-3" />
+                        <span>{t("settings.openLogDirectory")}</span>
+                      </Button>
                     }
                   />
                 </SettingGroup>

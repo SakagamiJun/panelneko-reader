@@ -19,6 +19,7 @@ import (
 	"github.com/sakagamijun/panelneko-reader/internal/downloader/copymanga"
 	"github.com/sakagamijun/panelneko-reader/internal/downloader/klz9"
 	"github.com/sakagamijun/panelneko-reader/internal/library"
+	"github.com/sakagamijun/panelneko-reader/internal/logger"
 	"github.com/sakagamijun/panelneko-reader/internal/settings"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -391,6 +392,10 @@ func (a *App) bootstrap() error {
 	a.settings = settingsService
 
 	st := settingsService.Get()
+	_ = logger.Get().Init(filepath.Join(appDataDir, "logs"), st.EnableFileLogging)
+	ver := a.GetAppVersion()
+	logger.Get().Info("PanelNeko Reader initialized. Version: %s (%s)", ver.Version, ver.Commit)
+
 	copyClient := copymanga.NewClient(st.Downloader.CopyMangaAPIDomain, st.Downloader.CopyMangaToken, 15)
 	copyClient.SetCDNSettings(st.Downloader.CopyMangaCDNMode, st.Downloader.CopyMangaCustomCDNs)
 	klzClient := klz9.NewClient(storeValue, st.Downloader.RawMangaBaseURL, 20)
@@ -447,6 +452,8 @@ func (a *App) UpdateSettings(input contracts.AppSettings) (contracts.AppSettings
 	if a.klz9 != nil {
 		a.klz9.SetBaseURL(updated.Downloader.RawMangaBaseURL)
 	}
+
+	_ = logger.Get().SetEnabled(updated.EnableFileLogging)
 
 	a.emit(contracts.EventSettingsUpdated, updated)
 
@@ -1361,5 +1368,51 @@ func (a *App) CheckAllFollowedUpdates() (int, error) {
 		time.Sleep(1500 * time.Millisecond)
 	}
 
+	logger.Get().Info("Followed comics update check complete, queued %d new chapters", totalQueued)
 	return totalQueued, nil
+}
+
+func (a *App) OpenLogDirectory() error {
+	logDir := logger.Get().LogDir()
+	if logDir == "" {
+		if a.store != nil {
+			logDir = filepath.Join(a.store.DataDir(), "logs")
+		}
+	}
+	if logDir == "" {
+		return fmt.Errorf("log directory not initialized")
+	}
+	_ = os.MkdirAll(logDir, 0o755)
+
+	if wailsApp := application.Get(); wailsApp != nil && wailsApp.Env != nil {
+		return wailsApp.Env.OpenFileManager(logDir, false)
+	}
+	return library.FileOpener(logDir)
+}
+
+func (a *App) ToggleMangaAutoFollow(mangaID string) (bool, error) {
+	if err := a.ensureReady(); err != nil {
+		return false, err
+	}
+	link, found, err := a.store.GetMangaOnlineLink(mangaID)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, fmt.Errorf("manga not linked to any online source")
+	}
+
+	link.AutoFollow = !link.AutoFollow
+	if err := a.store.SaveMangaOnlineLink(link); err != nil {
+		return false, err
+	}
+	logger.Get().Info("Toggled auto follow for manga %s (%s): %v", mangaID, link.OnlineTitle, link.AutoFollow)
+	return link.AutoFollow, nil
+}
+
+func (a *App) GetAllMangaOnlineLinks() ([]contracts.MangaOnlineLink, error) {
+	if err := a.ensureReady(); err != nil {
+		return nil, err
+	}
+	return a.store.GetAllMangaOnlineLinks()
 }

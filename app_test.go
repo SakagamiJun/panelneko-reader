@@ -1163,6 +1163,29 @@ func TestMangaOnlineLinkingAndDownloaderRPC(t *testing.T) {
 		t.Fatalf("unexpected fetched link: %+v", fetched)
 	}
 
+	// Test GetAllMangaOnlineLinks
+	allLinks, err := app.GetAllMangaOnlineLinks()
+	if err != nil {
+		t.Fatalf("GetAllMangaOnlineLinks failed: %v", err)
+	}
+	if len(allLinks) != 1 {
+		t.Fatalf("expected 1 link in allLinks, got %d", len(allLinks))
+	}
+
+	// Test ToggleMangaAutoFollow
+	newStatus, err := app.ToggleMangaAutoFollow(mangaID)
+	if err != nil {
+		t.Fatalf("ToggleMangaAutoFollow failed: %v", err)
+	}
+	if newStatus {
+		t.Fatalf("expected autoFollow to be toggled to false, got true")
+	}
+
+	// Test OpenLogDirectory
+	if err := app.OpenLogDirectory(); err != nil {
+		t.Fatalf("OpenLogDirectory failed: %v", err)
+	}
+
 	// Test Unlink
 	if err := app.UnlinkMangaOnline(mangaID); err != nil {
 		t.Fatalf("UnlinkMangaOnline failed: %v", err)

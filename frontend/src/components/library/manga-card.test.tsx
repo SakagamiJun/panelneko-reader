@@ -126,4 +126,26 @@ describe("MangaCard Component", () => {
 
     expect(screen.queryByRole("img", { name: "One Piece" })).not.toBeInTheDocument();
   });
+
+  it("renders auto-follow button and triggers onToggleAutoFollow when clicked", () => {
+    const onToggleAutoFollowSpy = vi.fn();
+
+    render(
+      <MangaCard
+        item={baseManga}
+        onOpenManga={vi.fn()}
+        onOpenCollection={vi.fn()}
+        onTogglePin={vi.fn()}
+        onOpenDirectory={vi.fn()}
+        isLinked={true}
+        isAutoFollowing={true}
+        onToggleAutoFollow={onToggleAutoFollowSpy}
+      />
+    );
+
+    const followBtn = screen.getByRole("button", { name: /已开启自动追更|Auto-follow enabled|自動追跡が有効/i });
+    expect(followBtn).toBeInTheDocument();
+    fireEvent.click(followBtn);
+    expect(onToggleAutoFollowSpy).toHaveBeenCalledWith("manga-1");
+  });
 });

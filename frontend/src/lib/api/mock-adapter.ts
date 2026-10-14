@@ -664,6 +664,23 @@ export class MockAdapter implements AppAdapter {
     return 0;
   }
 
+  async openLogDirectory(): Promise<void> {
+    // Mock open log directory
+  }
+
+  async toggleMangaAutoFollow(mangaID: string): Promise<boolean> {
+    const link = this.mockLinks.get(mangaID);
+    if (!link) {
+      throw new Error("manga not linked to any online source");
+    }
+    link.autoFollow = !link.autoFollow;
+    return link.autoFollow;
+  }
+
+  async getAllMangaOnlineLinks(): Promise<MangaOnlineLink[]> {
+    return Array.from(this.mockLinks.values());
+  }
+
   subscribe(eventName: string, callback: Listener) {
     const listeners = this.listeners.get(eventName) ?? new Set<Listener>();
     listeners.add(callback);

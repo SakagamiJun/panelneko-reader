@@ -386,5 +386,88 @@ describe("SettingsDialog Component - Sources Tab", () => {
       })
     );
   });
+
+  it("calls onOpenBatchLink when batch link button is clicked in downloads tab", () => {
+    const onOpenBatchLinkSpy = vi.fn();
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={mockSettings}
+        onSave={vi.fn()}
+        defaultTab="downloads"
+        onOpenBatchLink={onOpenBatchLinkSpy}
+      />
+    );
+
+    const batchLinkBtn = screen.getByRole("button", { name: /打开批量关联管理|Open Batch Linker|一括紐付けを開く/i });
+    expect(batchLinkBtn).toBeInTheDocument();
+    fireEvent.click(batchLinkBtn);
+    expect(onOpenBatchLinkSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders storage source tiles and updates target source", () => {
+    const onSaveSpy = vi.fn();
+    const settingsWithSources: AppSettings = {
+      ...mockSettings,
+      librarySources: [
+        { id: "default", name: "Default Library", path: "/mock/library", type: "local", enabled: true, mangaCount: 10 },
+        { id: "nas-source", name: "NAS Library", path: "/Volumes/NAS/Manga", type: "smb", enabled: true, mangaCount: 25 },
+      ],
+    };
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={settingsWithSources}
+        onSave={onSaveSpy}
+        defaultTab="downloads"
+      />
+    );
+
+    // Click secondary source tile (NAS Library)
+    const nasSourceTile = screen.getByRole("button", { name: /NAS Library/i });
+    expect(nasSourceTile).toBeInTheDocument();
+    fireEvent.click(nasSourceTile);
+
+    expect(onSaveSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        downloader: expect.objectContaining({
+          targetSourceId: "nas-source",
+        }),
+      })
+    );
+  });
+
+  it("renders diagnostics and logging controls in about tab and triggers openLogDirectory", () => {
+    const openLogSpy = vi.spyOn(appAdapter, "openLogDirectory").mockResolvedValue();
+    const onSaveSpy = vi.fn();
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={mockSettings}
+        onSave={onSaveSpy}
+        defaultTab="about"
+      />
+    );
+
+    const openLogBtn = screen.getByRole("button", { name: /打开日志目录|Open Log Directory|ログフォルダを開く/i });
+    expect(openLogBtn).toBeInTheDocument();
+    fireEvent.click(openLogBtn);
+    expect(openLogSpy).toHaveBeenCalledTimes(1);
+
+    const switches = screen.getAllByRole("switch");
+    const loggingSwitch = switches[switches.length - 1];
+    fireEvent.click(loggingSwitch);
+    expect(onSaveSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enableFileLogging: true,
+      })
+    );
+  });
 });
 

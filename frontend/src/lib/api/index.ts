@@ -128,4 +128,13 @@ export const appAdapter: AppAdapter = {
   checkAllFollowedUpdates() {
     return currentAdapter().checkAllFollowedUpdates();
   },
+  openLogDirectory() {
+    return currentAdapter().openLogDirectory();
+  },
+  toggleMangaAutoFollow(mangaID) {
+    return currentAdapter().toggleMangaAutoFollow(mangaID);
+  },
+  getAllMangaOnlineLinks() {
+    return currentAdapter().getAllMangaOnlineLinks();
+  },
 };

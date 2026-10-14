@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Loader2, RefreshCw } from "lucide-react";
@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/app-header";
 import { LibraryGrid } from "@/components/library/library-grid";
 import { SettingsDialog, type SettingsTab } from "@/components/sections/settings-dialog";
 import { OnlineSearchDialog } from "@/components/sections/online-search-dialog";
+import { MangaBatchLinkDialog } from "@/components/sections/manga-batch-link-dialog";
 import { ReaderController, type ReaderJumpRequest } from "@/components/reader-controller";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -21,6 +22,7 @@ import {
   EVENTS,
   type LibraryManga,
   type LibrarySource,
+  type MangaOnlineLink,
   type UpdateCheckResult,
 } from "@/lib/contracts";
 import { i18n } from "@/lib/i18n";
@@ -59,6 +61,7 @@ export default function App() {
   const [onlineSearchOpen, setOnlineSearchOpen] = useState(false);
   const [onlineSearchSource, setOnlineSearchSource] = useState<"copymanga" | "klz9">("copymanga");
   const [onlineSearchQuery, setOnlineSearchQuery] = useState("");
+  const [batchLinkOpen, setBatchLinkOpen] = useState(false);
   const prevOfflineSourcesCountRef = useRef<number | null>(null);
   const hasCheckedStartupRef = useRef(false);
 
@@ -355,6 +358,34 @@ export default function App() {
   }, [settings?.duplicateMergeMode, selectedCollectionPath]);
 
   const library = libraryQuery.data ?? [];
+
+  const onlineLinksQuery = useQuery({
+    queryKey: ["mangaOnlineLinks"],
+    queryFn: () => appAdapter.getAllMangaOnlineLinks(),
+  });
+
+  const onlineLinksMap = useMemo(() => {
+    const map = new Map<string, MangaOnlineLink>();
+    for (const link of onlineLinksQuery.data ?? []) {
+      map.set(link.mangaId, link);
+    }
+    return map;
+  }, [onlineLinksQuery.data]);
+
+  const handleToggleAutoFollow = async (mangaID: string) => {
+    const link = onlineLinksMap.get(mangaID);
+    if (!link) {
+      setBatchLinkOpen(true);
+      return;
+    }
+    try {
+      await appAdapter.toggleMangaAutoFollow(mangaID);
+      await onlineLinksQuery.refetch();
+    } catch (err) {
+      console.error("Failed to toggle manga auto-follow:", err);
+    }
+  };
+
   const offlineSourcesCount = (settings?.librarySources ?? []).filter(
     (s) => s.enabled && s.status === "offline"
   ).length;
@@ -703,6 +734,8 @@ export default function App() {
                   void appAdapter.openDirectory(id);
                 }}
                 sources={settings?.librarySources}
+                onlineLinksMap={onlineLinksMap}
+                onToggleAutoFollow={handleToggleAutoFollow}
               />
             </div>
           </div>
@@ -719,6 +752,7 @@ export default function App() {
           version={versionQuery.data?.version}
           commit={versionQuery.data?.commit}
           defaultTab={settingsDefaultTab}
+          onOpenBatchLink={() => setBatchLinkOpen(true)}
         />
       )}
 
@@ -774,6 +808,17 @@ export default function App() {
         onDownloadStarted={() => {
           void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
           void appAdapter.getDownloadProgress().then(setDownloadProgress).catch(() => {});
+        }}
+      />
+
+      {/* Local Manga Batch Linking Dialog */}
+      <MangaBatchLinkDialog
+        open={batchLinkOpen}
+        onClose={() => setBatchLinkOpen(false)}
+        mangas={library}
+        onLinksChanged={() => {
+          void onlineLinksQuery.refetch();
+          void queryClient.invalidateQueries({ queryKey: ["library"] });
         }}
       />
 

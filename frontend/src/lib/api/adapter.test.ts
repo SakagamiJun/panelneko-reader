@@ -45,6 +45,9 @@ const requiredAdapterMethods: AdapterMethod[] = [
   "unlinkMangaOnline",
   "checkMangaUpdates",
   "checkAllFollowedUpdates",
+  "openLogDirectory",
+  "toggleMangaAutoFollow",
+  "getAllMangaOnlineLinks",
 ];
 
 describe("AppAdapter Interface Completeness Guard", () => {

@@ -41,6 +41,10 @@ export function CreateDownloadTasks(inputs: contracts$0.CreateDownloadTaskInput[
     return $Call.ByID(2151602833, inputs);
 }
 
+export function GetAllMangaOnlineLinks(): $CancellablePromise<contracts$0.MangaOnlineLink[] | null> {
+    return $Call.ByID(1961264694);
+}
+
 export function GetAppVersion(): $CancellablePromise<contracts$0.AppVersionInfo> {
     return $Call.ByID(1780012486);
 }
@@ -93,6 +97,10 @@ export function OpenDirectory(mangaID: string): $CancellablePromise<void> {
     return $Call.ByID(4113378380, mangaID);
 }
 
+export function OpenLogDirectory(): $CancellablePromise<void> {
+    return $Call.ByID(495849456);
+}
+
 export function PauseDownloadTask(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(3743113560, taskID);
 }
@@ -127,6 +135,10 @@ export function SearchOnlineManga(source: string, query: string, page: number, l
 
 export function ToggleCollection(mangaID: string): $CancellablePromise<boolean> {
     return $Call.ByID(2397913529, mangaID);
+}
+
+export function ToggleMangaAutoFollow(mangaID: string): $CancellablePromise<boolean> {
+    return $Call.ByID(2427082533, mangaID);
 }
 
 export function TogglePin(mangaID: string): $CancellablePromise<boolean> {

@@ -124,6 +124,7 @@ type AppSettings struct {
 	EnableThumbnailCache      *bool               `json:"enableThumbnailCache,omitempty"`
 	ThumbnailQuality          ThumbnailQuality    `json:"thumbnailQuality,omitempty"`
 	DuplicateMergeMode        DuplicateMergeMode  `json:"duplicateMergeMode,omitempty"`
+	EnableFileLogging         bool                `json:"enableFileLogging"`
 	Downloader                DownloaderSettings  `json:"downloader"`
 }
 
