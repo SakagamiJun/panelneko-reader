@@ -14,8 +14,8 @@ declare module "@wailsio/runtime" {
         interface CustomEvents {
             "download:progress": contracts$0.DownloadProgress;
             "download:tasks_updated": void;
-            "files:dropped": string[];
-            "files:opened": string[];
+            "files:dropped": string[] | null;
+            "files:opened": string[] | null;
             "library:updated": void;
             "locale:resolved": contracts$0.LocaleResolvedPayload;
             "settings:updated": contracts$0.AppSettings;
