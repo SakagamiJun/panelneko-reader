@@ -1136,3 +1136,43 @@ func TestAppServiceShutdown(t *testing.T) {
 		t.Fatalf("ServiceShutdown on nil store failed: %v", err)
 	}
 }
+
+func TestMangaOnlineLinkingAndDownloaderRPC(t *testing.T) {
+	app, cleanup := newAssetTestApp(t, t.TempDir())
+	defer cleanup()
+
+	mangaID := "test-manga-1"
+	link := contracts.MangaOnlineLink{
+		MangaID:       mangaID,
+		OnlineSource:  "copymanga",
+		OnlineComicID: "onepiece",
+		OnlineTitle:   "海贼王",
+		AutoFollow:    true,
+		FollowPolicy:  "latest_only",
+	}
+
+	if err := app.LinkMangaOnline(link); err != nil {
+		t.Fatalf("LinkMangaOnline failed: %v", err)
+	}
+
+	fetched, err := app.GetMangaOnlineLink(mangaID)
+	if err != nil {
+		t.Fatalf("GetMangaOnlineLink failed: %v", err)
+	}
+	if fetched.OnlineComicID != "onepiece" || fetched.OnlineTitle != "海贼王" || !fetched.AutoFollow {
+		t.Fatalf("unexpected fetched link: %+v", fetched)
+	}
+
+	// Test Unlink
+	if err := app.UnlinkMangaOnline(mangaID); err != nil {
+		t.Fatalf("UnlinkMangaOnline failed: %v", err)
+	}
+
+	fetchedAfter, err := app.GetMangaOnlineLink(mangaID)
+	if err != nil {
+		t.Fatalf("GetMangaOnlineLink after unlink failed: %v", err)
+	}
+	if fetchedAfter.OnlineComicID != "" {
+		t.Fatalf("expected empty link after unlink, got %+v", fetchedAfter)
+	}
+}

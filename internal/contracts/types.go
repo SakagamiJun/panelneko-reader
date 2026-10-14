@@ -128,15 +128,21 @@ type AppSettings struct {
 }
 
 type DownloaderSettings struct {
-	EnableCopyManga        bool   `json:"enableCopyManga"`
-	CopyMangaAPIDomain     string `json:"copyMangaApiDomain,omitempty"`
-	CopyMangaToken         string `json:"copyMangaToken,omitempty"`
-	EnableRawManga         bool   `json:"enableRawManga"`
-	RawMangaBaseURL        string `json:"rawMangaBaseUrl,omitempty"`
-	DownloadDir            string `json:"downloadDir,omitempty"`
-	DownloadFormat         string `json:"downloadFormat,omitempty"` // "cbz" or "folder"
-	MaxConcurrentDownloads int    `json:"maxConcurrentDownloads,omitempty"`
-	MaxImageConcurrency    int    `json:"maxImageConcurrency,omitempty"`
+	EnableCopyManga        bool     `json:"enableCopyManga"`
+	CopyMangaAPIDomain     string   `json:"copyMangaApiDomain,omitempty"`
+	CopyMangaToken         string   `json:"copyMangaToken,omitempty"`
+	CopyMangaCDNMode       string   `json:"copyMangaCdnMode,omitempty"` // "official" | "striped"
+	CopyMangaCustomCDNs    []string `json:"copyMangaCustomCdns,omitempty"`
+	EnableRawManga         bool     `json:"enableRawManga"`
+	RawMangaBaseURL        string   `json:"rawMangaBaseUrl,omitempty"`
+	TargetSourceID         string   `json:"targetSourceId,omitempty"`
+	DownloadSubPath        string   `json:"downloadSubPath,omitempty"`
+	DownloadDir            string   `json:"downloadDir,omitempty"`
+	DownloadFormat         string   `json:"downloadFormat,omitempty"` // "cbz" or "folder"
+	MaxConcurrentDownloads int      `json:"maxConcurrentDownloads,omitempty"`
+	MaxImageConcurrency    int      `json:"maxImageConcurrency,omitempty"`
+	AutoCheckComicUpdates  bool     `json:"autoCheckComicUpdates,omitempty"`
+	AutoFollowPolicy       string   `json:"autoFollowPolicy,omitempty"` // "latest_only" | "fill_gaps"
 }
 
 type OnlineMangaItem struct {
@@ -152,12 +158,14 @@ type OnlineMangaItem struct {
 }
 
 type OnlineMangaChapter struct {
-	ID          string  `json:"id"`
-	MangaID     string  `json:"mangaID"`
-	Source      string  `json:"source"`
-	Title       string  `json:"title"`
-	Number      float64 `json:"number"`
-	ReleaseDate string  `json:"releaseDate,omitempty"`
+	ID            string  `json:"id"`
+	MangaID       string  `json:"mangaID"`
+	Source        string  `json:"source"`
+	Title         string  `json:"title"`
+	Number        float64 `json:"number"`
+	Group         string  `json:"group,omitempty"`
+	GroupPathWord string  `json:"groupPathWord,omitempty"`
+	ReleaseDate   string  `json:"releaseDate,omitempty"`
 }
 
 type OnlineSearchResult struct {
@@ -170,11 +178,12 @@ type OnlineSearchResult struct {
 type DownloadTaskStatus string
 
 const (
-	DownloadStatusPending     DownloadTaskStatus = "pending"
-	DownloadStatusDownloading DownloadTaskStatus = "downloading"
-	DownloadStatusPaused      DownloadTaskStatus = "paused"
-	DownloadStatusCompleted   DownloadTaskStatus = "completed"
-	DownloadStatusFailed      DownloadTaskStatus = "failed"
+	DownloadStatusPending       DownloadTaskStatus = "pending"
+	DownloadStatusDownloading   DownloadTaskStatus = "downloading"
+	DownloadStatusPaused        DownloadTaskStatus = "paused"
+	DownloadStatusWaitingSource DownloadTaskStatus = "waiting_source"
+	DownloadStatusCompleted     DownloadTaskStatus = "completed"
+	DownloadStatusFailed        DownloadTaskStatus = "failed"
 )
 
 type DownloadTask struct {
@@ -186,6 +195,8 @@ type DownloadTask struct {
 	ChapterID       string             `json:"chapterID"`
 	ChapterTitle    string             `json:"chapterTitle"`
 	ChapterNumber   float64            `json:"chapterNumber"`
+	ChapterGroup    string             `json:"chapterGroup,omitempty"`
+	TargetSourceID  string             `json:"targetSourceID,omitempty"`
 	Status          DownloadTaskStatus `json:"status"`
 	TotalPages      int                `json:"totalPages"`
 	DownloadedPages int                `json:"downloadedPages"`
@@ -205,13 +216,26 @@ type DownloadProgress struct {
 }
 
 type CreateDownloadTaskInput struct {
-	Source        string  `json:"source"`
-	MangaID       string  `json:"mangaID"`
-	MangaTitle    string  `json:"mangaTitle"`
-	MangaCoverURL string  `json:"mangaCoverURL,omitempty"`
-	ChapterID     string  `json:"chapterID"`
-	ChapterTitle  string  `json:"chapterTitle"`
-	ChapterNumber float64 `json:"chapterNumber"`
+	Source         string  `json:"source"`
+	MangaID        string  `json:"mangaID"`
+	MangaTitle     string  `json:"mangaTitle"`
+	MangaCoverURL  string  `json:"mangaCoverURL,omitempty"`
+	ChapterID      string  `json:"chapterID"`
+	ChapterTitle   string  `json:"chapterTitle"`
+	ChapterNumber  float64 `json:"chapterNumber"`
+	ChapterGroup   string  `json:"chapterGroup,omitempty"`
+	TargetSourceID string  `json:"targetSourceID,omitempty"`
+}
+
+type MangaOnlineLink struct {
+	MangaID             string `json:"mangaId"`
+	OnlineSource        string `json:"onlineSource"`
+	OnlineComicID       string `json:"onlineComicId"`
+	OnlineTitle         string `json:"onlineTitle"`
+	AutoFollow          bool   `json:"autoFollow"`
+	FollowPolicy        string `json:"followPolicy"` // "latest_only" | "fill_gaps"
+	LastCheckedAt       string `json:"lastCheckedAt"`
+	LastNotifiedChapter string `json:"lastNotifiedChapter,omitempty"`
 }
 
 type SiteProfile struct {

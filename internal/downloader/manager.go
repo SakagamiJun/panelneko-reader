@@ -131,6 +131,11 @@ func (m *Manager) CreateTasks(inputs []contracts.CreateDownloadTaskInput) ([]con
 			}
 		}
 
+		targetSrcID := in.TargetSourceID
+		if strings.TrimSpace(targetSrcID) == "" {
+			targetSrcID = m.settings.Get().Downloader.TargetSourceID
+		}
+
 		task := contracts.DownloadTask{
 			ID:              taskID,
 			Source:          in.Source,
@@ -140,6 +145,8 @@ func (m *Manager) CreateTasks(inputs []contracts.CreateDownloadTaskInput) ([]con
 			ChapterID:       in.ChapterID,
 			ChapterTitle:    in.ChapterTitle,
 			ChapterNumber:   in.ChapterNumber,
+			ChapterGroup:    in.ChapterGroup,
+			TargetSourceID:  targetSrcID,
 			Status:          contracts.DownloadStatusPending,
 			TotalPages:      0,
 			DownloadedPages: 0,
@@ -193,32 +200,92 @@ func (m *Manager) startWorker(task contracts.DownloadTask) {
 		if ctx.Err() != nil {
 			_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusPaused, "")
 		} else {
-			_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusFailed, err.Error())
+			latest, found, _ := m.store.GetDownloadTask(task.ID)
+			if found && latest.Status == contracts.DownloadStatusWaitingSource {
+				// Keep waiting_source status
+			} else {
+				_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusFailed, err.Error())
+			}
 		}
 	} else {
 		_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusCompleted, "")
 	}
 }
 
+func (m *Manager) resolveTargetDirectory(task contracts.DownloadTask) (string, error) {
+	st := m.settings.Get()
+	targetSrcID := task.TargetSourceID
+	if strings.TrimSpace(targetSrcID) == "" {
+		targetSrcID = st.Downloader.TargetSourceID
+	}
+
+	var targetSource contracts.LibrarySource
+	found := false
+	for _, src := range st.LibrarySources {
+		if src.ID == targetSrcID {
+			targetSource = src
+			found = true
+			break
+		}
+	}
+	if !found && len(st.LibrarySources) > 0 {
+		targetSource = st.LibrarySources[0]
+		found = true
+	}
+
+	if !found {
+		base := st.Downloader.DownloadDir
+		if base == "" {
+			base = filepath.Join(st.LibraryRoot, "Downloads")
+		}
+		return base, nil
+	}
+
+	// Health check target library source accessibility (handles offline NAS or unmounted drive)
+	fi, err := os.Stat(targetSource.Path)
+	if err != nil || !fi.IsDir() {
+		return "", fmt.Errorf("target library source '%s' (%s) is offline or unreachable: %w", targetSource.Name, targetSource.Path, err)
+	}
+
+	if st.Downloader.DownloadSubPath != "" {
+		return filepath.Join(targetSource.Path, st.Downloader.DownloadSubPath), nil
+	}
+	return targetSource.Path, nil
+}
+
 func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTask) error {
 	st := m.settings.Get()
-	downloadBaseDir := st.Downloader.DownloadDir
-	if strings.TrimSpace(downloadBaseDir) == "" {
-		downloadBaseDir = filepath.Join(st.LibraryRoot, "Downloads")
+	downloadBaseDir, err := m.resolveTargetDirectory(task)
+	if err != nil {
+		_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusWaitingSource, err.Error())
+		m.emit(contracts.EventDownloadTasksUpdated, nil)
+		m.emitProgress()
+		return err
 	}
 
 	safeManga := SanitizeFilename(task.MangaTitle)
 	safeChapter := SanitizeFilename(task.ChapterTitle)
+	safeGroup := SanitizeFilename(task.ChapterGroup)
+	if strings.EqualFold(safeGroup, "default") {
+		safeGroup = ""
+	}
+
+	var chapterDir string
+	if safeGroup != "" {
+		chapterDir = filepath.Join(downloadBaseDir, safeManga, safeGroup)
+	} else {
+		chapterDir = filepath.Join(downloadBaseDir, safeManga)
+	}
+
 	var finalFilePath string
 	format := st.Downloader.DownloadFormat
 	if format == "folder" {
-		finalFilePath = filepath.Join(downloadBaseDir, safeManga, fmt.Sprintf("%03.0f - %s", task.ChapterNumber, safeChapter))
+		finalFilePath = filepath.Join(chapterDir, fmt.Sprintf("%03.0f - %s", task.ChapterNumber, safeChapter))
 	} else {
-		finalFilePath = filepath.Join(downloadBaseDir, safeManga, fmt.Sprintf("%03.0f - %s.cbz", task.ChapterNumber, safeChapter))
+		finalFilePath = filepath.Join(chapterDir, fmt.Sprintf("%03.0f - %s.cbz", task.ChapterNumber, safeChapter))
 	}
 
 	var pageURLs []string
-	var err error
 
 	if task.Source == copymanga.SiteName {
 		pageURLs, err = m.copyManga.GetChapterImageURLs(ctx, task.MangaID, task.ChapterID)
@@ -399,6 +466,45 @@ func (m *Manager) ClearCompletedTasks() error {
 	m.emit(contracts.EventDownloadTasksUpdated, nil)
 	m.emitProgress()
 	return err
+}
+
+func (m *Manager) ResumeWaitingTasks(sourceID string) {
+	tasks, err := m.store.GetDownloadTasks()
+	if err != nil {
+		return
+	}
+	resumedAny := false
+	for _, t := range tasks {
+		if t.Status == contracts.DownloadStatusWaitingSource {
+			if sourceID == "" || t.TargetSourceID == sourceID || t.TargetSourceID == "" {
+				dir, err := m.resolveTargetDirectory(t)
+				if err == nil && dir != "" {
+					_ = m.store.UpdateDownloadTaskStatus(t.ID, contracts.DownloadStatusPending, "")
+					t.Status = contracts.DownloadStatusPending
+					go m.startWorker(t)
+					resumedAny = true
+				}
+			}
+		}
+	}
+	if resumedAny {
+		m.emit(contracts.EventDownloadTasksUpdated, nil)
+		m.emitProgress()
+	}
+}
+
+func (m *Manager) RetryTask(taskID string) error {
+	t, found, err := m.store.GetDownloadTask(taskID)
+	if err != nil || !found {
+		return fmt.Errorf("task not found: %s", taskID)
+	}
+
+	_ = m.store.UpdateDownloadTaskStatus(taskID, contracts.DownloadStatusPending, "")
+	t.Status = contracts.DownloadStatusPending
+	go m.startWorker(t)
+	m.emit(contracts.EventDownloadTasksUpdated, nil)
+	m.emitProgress()
+	return nil
 }
 
 func (m *Manager) GetProgress() contracts.DownloadProgress {

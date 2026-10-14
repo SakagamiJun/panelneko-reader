@@ -99,12 +99,18 @@ func DefaultSettings() contracts.AppSettings {
 			EnableCopyManga:        false,
 			CopyMangaAPIDomain:     "api.copy202601.com",
 			CopyMangaToken:         "",
+			CopyMangaCDNMode:       "official",
+			CopyMangaCustomCDNs:    nil,
 			EnableRawManga:         false,
 			RawMangaBaseURL:        "https://klz9.com",
-			DownloadDir:            filepath.Join(defaultRoot, "Downloads"),
+			TargetSourceID:         "default",
+			DownloadSubPath:        "",
+			DownloadDir:            defaultRoot,
 			DownloadFormat:         "cbz",
 			MaxConcurrentDownloads: 3,
 			MaxImageConcurrency:    10,
+			AutoCheckComicUpdates:  false,
+			AutoFollowPolicy:       "latest_only",
 		},
 	}
 }
@@ -404,6 +410,33 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 	}
 	dl.RawMangaBaseURL = strings.TrimRight(strings.TrimSpace(dl.RawMangaBaseURL), "/")
 
+	if strings.TrimSpace(dl.TargetSourceID) == "" {
+		dl.TargetSourceID = "default"
+	}
+	targetExists := false
+	var targetSourcePath string
+	for _, src := range settings.LibrarySources {
+		if src.ID == dl.TargetSourceID {
+			targetExists = true
+			targetSourcePath = src.Path
+			break
+		}
+	}
+	if !targetExists && len(settings.LibrarySources) > 0 {
+		dl.TargetSourceID = settings.LibrarySources[0].ID
+		targetSourcePath = settings.LibrarySources[0].Path
+	}
+
+	dl.DownloadSubPath = strings.Trim(strings.TrimSpace(dl.DownloadSubPath), `/\`)
+
+	if strings.TrimSpace(dl.CopyMangaCDNMode) != "striped" {
+		dl.CopyMangaCDNMode = "official"
+	}
+
+	if strings.TrimSpace(dl.AutoFollowPolicy) != "fill_gaps" {
+		dl.AutoFollowPolicy = "latest_only"
+	}
+
 	if strings.TrimSpace(dl.DownloadFormat) != "folder" {
 		dl.DownloadFormat = "cbz"
 	}
@@ -420,11 +453,19 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 		dl.MaxImageConcurrency = 30
 	}
 
-	dlDir := strings.TrimSpace(dl.DownloadDir)
-	if dlDir == "" {
-		dlDir = filepath.Join(settings.LibraryRoot, "Downloads")
+	if targetSourcePath != "" {
+		if dl.DownloadSubPath != "" {
+			dl.DownloadDir = filepath.Clean(filepath.Join(targetSourcePath, dl.DownloadSubPath))
+		} else {
+			dl.DownloadDir = filepath.Clean(targetSourcePath)
+		}
+	} else {
+		dlDir := strings.TrimSpace(dl.DownloadDir)
+		if dlDir == "" {
+			dlDir = filepath.Join(settings.LibraryRoot, "Downloads")
+		}
+		dl.DownloadDir = filepath.Clean(dlDir)
 	}
-	dl.DownloadDir = filepath.Clean(dlDir)
 
 	settings.Downloader = dl
 

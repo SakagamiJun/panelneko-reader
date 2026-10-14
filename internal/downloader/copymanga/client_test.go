@@ -65,6 +65,14 @@ func TestCopyMangaSearchAndStriping(t *testing.T) {
 
 	// Test CDN Striping
 	origURL := "https://cdn.example.com/p1.webp"
+
+	// Default is official route (no rewriting)
+	if sOfficial := client.GetStripedCDNURL(origURL, 0); sOfficial != origURL {
+		t.Errorf("expected official route to retain original url, got %s", sOfficial)
+	}
+
+	// Enable striped CDN mode
+	client.SetCDNSettings("striped", nil)
 	s1 := client.GetStripedCDNURL(origURL, 0)
 	s2 := client.GetStripedCDNURL(origURL, 1)
 	if s1 == s2 {

@@ -73,6 +73,7 @@ type Client struct {
 	imgClient  *http.Client
 	apiDomain  string
 	token      string
+	cdnMode    string // "official" | "striped"
 	cdnNodes   []*CDNNode
 	mu         sync.RWMutex
 }
@@ -105,6 +106,7 @@ func NewClient(apiDomain string, token string, timeoutSeconds int) *Client {
 		},
 		apiDomain: apiDomain,
 		token:     token,
+		cdnMode:   "official",
 		cdnNodes: []*CDNNode{
 			{Host: "c1.mangafunc.fun"},
 			{Host: "c2.mangafunc.fun"},
@@ -113,6 +115,38 @@ func NewClient(apiDomain string, token string, timeoutSeconds int) *Client {
 		},
 	}
 	return client
+}
+
+func (c *Client) SetCDNSettings(mode string, customCDNs []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if mode != "striped" {
+		c.cdnMode = "official"
+	} else {
+		c.cdnMode = "striped"
+	}
+
+	if len(customCDNs) > 0 {
+		var nodes []*CDNNode
+		for _, raw := range customCDNs {
+			h := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(raw), "https://"), "http://")
+			h = strings.Trim(h, "/")
+			if h != "" {
+				nodes = append(nodes, &CDNNode{Host: h})
+			}
+		}
+		if len(nodes) > 0 {
+			c.cdnNodes = nodes
+			return
+		}
+	}
+	// fallback default striped nodes
+	c.cdnNodes = []*CDNNode{
+		{Host: "c1.mangafunc.fun"},
+		{Host: "c2.mangafunc.fun"},
+		{Host: "c3.mangafunc.fun"},
+		{Host: "c4.mangafunc.fun"},
+	}
 }
 
 func (c *Client) SetAPIDomain(domain string) {
@@ -329,44 +363,72 @@ func (c *Client) GetMangaChapters(ctx context.Context, comicPathWord string) ([]
 		return nil, err
 	}
 
-	groupPathWord := "default"
+	type groupTarget struct {
+		pathWord string
+		name     string
+	}
+	var targetGroups []groupTarget
+
 	if len(detail.Groups) > 0 {
-		if _, ok := detail.Groups["default"]; !ok {
-			for k := range detail.Groups {
-				groupPathWord = k
-				break
+		if def, ok := detail.Groups["default"]; ok {
+			name := def.Name
+			if name == "" {
+				name = "话"
+			}
+			targetGroups = append(targetGroups, groupTarget{pathWord: "default", name: name})
+		}
+		if tb, ok := detail.Groups["tankobon"]; ok {
+			name := tb.Name
+			if name == "" {
+				name = "卷"
+			}
+			targetGroups = append(targetGroups, groupTarget{pathWord: "tankobon", name: name})
+		}
+		for k, v := range detail.Groups {
+			if k != "default" && k != "tankobon" {
+				name := v.Name
+				if name == "" {
+					name = k
+				}
+				targetGroups = append(targetGroups, groupTarget{pathWord: k, name: name})
 			}
 		}
+	} else {
+		targetGroups = append(targetGroups, groupTarget{pathWord: "default", name: "话"})
 	}
 
 	limit := 100
-	offset := 0
 	var allChapters []contracts.OnlineMangaChapter
 
-	for {
-		cq := url.Values{}
-		cq.Set("limit", strconv.Itoa(limit))
-		cq.Set("offset", strconv.Itoa(offset))
+	for _, grp := range targetGroups {
+		offset := 0
+		for {
+			cq := url.Values{}
+			cq.Set("limit", strconv.Itoa(limit))
+			cq.Set("offset", strconv.Itoa(offset))
 
-		var chResp chaptersRespData
-		err := c.getJSON(ctx, fmt.Sprintf("/api/v3/comic/%s/group/%s/chapters", url.PathEscape(comicPathWord), url.PathEscape(groupPathWord)), cq, &chResp)
-		if err != nil {
-			return nil, err
-		}
+			var chResp chaptersRespData
+			err := c.getJSON(ctx, fmt.Sprintf("/api/v3/comic/%s/group/%s/chapters", url.PathEscape(comicPathWord), url.PathEscape(grp.pathWord)), cq, &chResp)
+			if err != nil {
+				return nil, err
+			}
 
-		for _, ch := range chResp.List {
-			allChapters = append(allChapters, contracts.OnlineMangaChapter{
-				ID:      ch.UUID,
-				MangaID: comicPathWord,
-				Source:  SiteName,
-				Title:   ch.Name,
-				Number:  ch.Index,
-			})
-		}
+			for _, ch := range chResp.List {
+				allChapters = append(allChapters, contracts.OnlineMangaChapter{
+					ID:            ch.UUID,
+					MangaID:       comicPathWord,
+					Source:        SiteName,
+					Title:         ch.Name,
+					Number:        ch.Index,
+					Group:         grp.name,
+					GroupPathWord: grp.pathWord,
+				})
+			}
 
-		offset += limit
-		if offset >= chResp.Total || len(chResp.List) == 0 {
-			break
+			offset += limit
+			if offset >= chResp.Total || len(chResp.List) == 0 {
+				break
+			}
 		}
 	}
 
@@ -405,19 +467,28 @@ func (c *Client) GetChapterImageURLs(ctx context.Context, comicPathWord, chapter
 }
 
 func (c *Client) GetStripedCDNURL(originalURL string, pageIndex int) string {
-	u, err := url.Parse(originalURL)
-	if err != nil || len(c.cdnNodes) == 0 {
+	c.mu.RLock()
+	mode := c.cdnMode
+	nodes := c.cdnNodes
+	c.mu.RUnlock()
+
+	if mode != "striped" || len(nodes) == 0 {
 		return originalURL
 	}
 
-	healthyNodes := make([]*CDNNode, 0, len(c.cdnNodes))
-	for _, n := range c.cdnNodes {
+	u, err := url.Parse(originalURL)
+	if err != nil {
+		return originalURL
+	}
+
+	healthyNodes := make([]*CDNNode, 0, len(nodes))
+	for _, n := range nodes {
 		if n.IsHealthy() {
 			healthyNodes = append(healthyNodes, n)
 		}
 	}
 	if len(healthyNodes) == 0 {
-		healthyNodes = c.cdnNodes // fallback to all
+		healthyNodes = nodes // fallback to all
 	}
 
 	selected := healthyNodes[pageIndex%len(healthyNodes)]

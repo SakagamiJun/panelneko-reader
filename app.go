@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -391,6 +392,7 @@ func (a *App) bootstrap() error {
 
 	st := settingsService.Get()
 	copyClient := copymanga.NewClient(st.Downloader.CopyMangaAPIDomain, st.Downloader.CopyMangaToken, 15)
+	copyClient.SetCDNSettings(st.Downloader.CopyMangaCDNMode, st.Downloader.CopyMangaCustomCDNs)
 	klzClient := klz9.NewClient(storeValue, st.Downloader.RawMangaBaseURL, 20)
 	downloadMgr := downloader.NewManager(storeValue, settingsService, copyClient, klzClient)
 	downloadMgr.SetEmitter(a.emit)
@@ -403,6 +405,13 @@ func (a *App) bootstrap() error {
 	a.copyManga = copyClient
 	a.klz9 = klzClient
 	a.downloads = downloadMgr
+
+	if st.Downloader.AutoCheckComicUpdates {
+		go func() {
+			time.Sleep(8 * time.Second)
+			_, _ = a.CheckAllFollowedUpdates()
+		}()
+	}
 
 	cacheDir := filepath.Join(appDataDir, "cache", "thumbnails")
 	_ = os.MkdirAll(cacheDir, 0o755)
@@ -433,6 +442,7 @@ func (a *App) UpdateSettings(input contracts.AppSettings) (contracts.AppSettings
 	if a.copyManga != nil {
 		a.copyManga.SetAPIDomain(updated.Downloader.CopyMangaAPIDomain)
 		a.copyManga.SetToken(updated.Downloader.CopyMangaToken)
+		a.copyManga.SetCDNSettings(updated.Downloader.CopyMangaCDNMode, updated.Downloader.CopyMangaCustomCDNs)
 	}
 	if a.klz9 != nil {
 		a.klz9.SetBaseURL(updated.Downloader.RawMangaBaseURL)
@@ -538,6 +548,9 @@ func (a *App) performSourcesScan() ([]contracts.LibraryManga, error) {
 				return nil, err
 			}
 		} else {
+			if a.downloads != nil {
+				a.downloads.ResumeWaitingTasks(res.Source.ID)
+			}
 			if err := a.store.SaveLibraryMangaForSource(res.Source.ID, res.Items, res.NewModTimes); err != nil {
 				return nil, err
 			}
@@ -1166,4 +1179,187 @@ func (a *App) GetDownloadProgress() contracts.DownloadProgress {
 		return contracts.DownloadProgress{}
 	}
 	return a.downloads.GetProgress()
+}
+
+func (a *App) RetryDownloadTask(taskID string) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	if a.downloads == nil {
+		return fmt.Errorf("download manager not initialized")
+	}
+	return a.downloads.RetryTask(taskID)
+}
+
+func (a *App) MatchLocalManga(mangaID string, provider string) ([]contracts.OnlineMangaItem, error) {
+	if err := a.ensureReady(); err != nil {
+		return nil, err
+	}
+	manga, found, err := a.store.GetLibraryManga(mangaID)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("local manga not found: %s", mangaID)
+	}
+
+	searchKeyword := manga.Title
+	cleaned := downloader.CleanMangaTitle(manga.Title)
+	if cleaned != "" {
+		searchKeyword = cleaned
+	}
+
+	res, err := a.SearchOnlineManga(provider, searchKeyword, 1, 20)
+	if err != nil {
+		return nil, err
+	}
+
+	items := res.Items
+	sort.Slice(items, func(i, j int) bool {
+		simI := downloader.LevenshteinSimilarity(searchKeyword, items[i].Title)
+		simJ := downloader.LevenshteinSimilarity(searchKeyword, items[j].Title)
+		return simI > simJ
+	})
+
+	return items, nil
+}
+
+func (a *App) LinkMangaOnline(input contracts.MangaOnlineLink) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(input.MangaID) == "" || strings.TrimSpace(input.OnlineComicID) == "" {
+		return fmt.Errorf("mangaID and onlineComicID are required")
+	}
+	if input.FollowPolicy == "" {
+		input.FollowPolicy = "latest_only"
+	}
+	return a.store.SaveMangaOnlineLink(input)
+}
+
+func (a *App) GetMangaOnlineLink(mangaID string) (contracts.MangaOnlineLink, error) {
+	if err := a.ensureReady(); err != nil {
+		return contracts.MangaOnlineLink{}, err
+	}
+	link, _, err := a.store.GetMangaOnlineLink(mangaID)
+	return link, err
+}
+
+func (a *App) UnlinkMangaOnline(mangaID string) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	return a.store.DeleteMangaOnlineLink(mangaID)
+}
+
+func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
+	if err := a.ensureReady(); err != nil {
+		return 0, err
+	}
+	link, found, err := a.store.GetMangaOnlineLink(mangaID)
+	if err != nil || !found {
+		return 0, err
+	}
+
+	localManga, found, err := a.store.GetLibraryManga(mangaID)
+	if err != nil || !found {
+		return 0, fmt.Errorf("local manga not found: %s", mangaID)
+	}
+
+	onlineChapters, err := a.GetOnlineMangaChapters(link.OnlineSource, link.OnlineComicID)
+	if err != nil {
+		return 0, fmt.Errorf("get online chapters: %w", err)
+	}
+
+	manifest, err := library.GetReaderManifestWithSources(a.getActiveSources(), mangaID, a.settings.Get().DuplicateMergeMode)
+	if err != nil {
+		return 0, fmt.Errorf("get local manifest: %w", err)
+	}
+
+	localNumbers := make(map[float64]bool)
+	var maxLocalNumber float64 = -1
+	for _, ch := range manifest.Chapters {
+		localNumbers[ch.Number] = true
+		if ch.Number > maxLocalNumber {
+			maxLocalNumber = ch.Number
+		}
+	}
+
+	// Filter tasks already queued
+	existingTasks, _ := a.downloads.GetTasks()
+	existingTaskChapters := make(map[string]bool)
+	for _, t := range existingTasks {
+		if t.Source == link.OnlineSource && t.MangaID == link.OnlineComicID {
+			existingTaskChapters[t.ChapterID] = true
+		}
+	}
+
+	var inputs []contracts.CreateDownloadTaskInput
+	var lastChapterTitle string
+
+	for _, ch := range onlineChapters {
+		if existingTaskChapters[ch.ID] {
+			continue
+		}
+
+		shouldDownload := false
+		if link.FollowPolicy == "fill_gaps" {
+			if !localNumbers[ch.Number] {
+				shouldDownload = true
+			}
+		} else { // latest_only default
+			if ch.Number > maxLocalNumber {
+				shouldDownload = true
+			}
+		}
+
+		if shouldDownload {
+			inputs = append(inputs, contracts.CreateDownloadTaskInput{
+				Source:         link.OnlineSource,
+				MangaID:        link.OnlineComicID,
+				MangaTitle:     link.OnlineTitle,
+				ChapterID:      ch.ID,
+				ChapterTitle:   ch.Title,
+				ChapterNumber:  ch.Number,
+				ChapterGroup:   ch.Group,
+				TargetSourceID: localManga.SourceID,
+			})
+			lastChapterTitle = ch.Title
+		}
+	}
+
+	if len(inputs) > 0 {
+		if _, err := a.downloads.CreateTasks(inputs); err != nil {
+			return 0, err
+		}
+	}
+
+	link.LastCheckedAt = time.Now().UTC().Format(time.RFC3339)
+	if lastChapterTitle != "" {
+		link.LastNotifiedChapter = lastChapterTitle
+	}
+	_ = a.store.SaveMangaOnlineLink(link)
+
+	return len(inputs), nil
+}
+
+func (a *App) CheckAllFollowedUpdates() (int, error) {
+	if err := a.ensureReady(); err != nil {
+		return 0, err
+	}
+	links, err := a.store.GetAutoFollowMangaLinks()
+	if err != nil {
+		return 0, err
+	}
+
+	totalQueued := 0
+	for _, link := range links {
+		n, err := a.CheckMangaUpdates(link.MangaID)
+		if err == nil {
+			totalQueued += n
+		}
+		time.Sleep(1500 * time.Millisecond)
+	}
+
+	return totalQueued, nil
 }
