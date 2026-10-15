@@ -6,7 +6,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/wailsapp/wails/v2 v2.16.0
 	golang.org/x/image v0.46.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 )
 
 require (
