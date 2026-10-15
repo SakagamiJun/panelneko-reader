@@ -60,6 +60,8 @@ export interface DownloaderSettings {
   downloadDir?: string;
   targetSourceId?: string;
   downloadSubPath?: string;
+  copyMangaCdnMode?: "official" | "striped";
+  copyMangaCustomCdns?: string[] | null;
   copymangaCDNMode?: "official" | "striped";
   copymangaCustomCDNs?: string;
   downloadFormat?: "cbz" | "folder";

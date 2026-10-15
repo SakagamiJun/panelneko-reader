@@ -373,5 +373,10 @@ export const en = {
     empty: "Local library is empty",
     selectedCount: "{{count}} manga selected",
     batchLinkSelected: "Batch Link ({{count}})",
+    batchUnlinkSelected: "Batch Unlink ({{count}})",
+    filterAll: "All",
+    filterLinked: "Linked",
+    filterUnlinked: "Unlinked",
+    allSources: "All Directories",
   },
 };

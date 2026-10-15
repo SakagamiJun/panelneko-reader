@@ -373,5 +373,10 @@ export const zhCN = {
     empty: "本地漫画库为空",
     selectedCount: "已选择 {{count}} 部漫画",
     batchLinkSelected: "批量关联所选 ({{count}})",
+    batchUnlinkSelected: "批量取消关联 ({{count}})",
+    filterAll: "全部",
+    filterLinked: "已关联",
+    filterUnlinked: "未关联",
+    allSources: "全部目录",
   },
 };

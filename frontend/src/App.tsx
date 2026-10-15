@@ -816,6 +816,7 @@ export default function App() {
         open={batchLinkOpen}
         onClose={() => setBatchLinkOpen(false)}
         mangas={library}
+        sources={settings?.librarySources}
         onLinksChanged={() => {
           void onlineLinksQuery.refetch();
           void queryClient.invalidateQueries({ queryKey: ["library"] });

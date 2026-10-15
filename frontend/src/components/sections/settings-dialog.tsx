@@ -94,7 +94,24 @@ export function SettingsDialog({
   const [editingSourceName, setEditingSourceName] = useState("");
 
   useEffect(() => {
-    setForm(settings);
+    if (settings) {
+      const dl = settings.downloader;
+      const cdnMode = dl?.copyMangaCdnMode || dl?.copymangaCDNMode || "official";
+      const customCDNsStr = Array.isArray(dl?.copyMangaCustomCdns)
+        ? dl.copyMangaCustomCdns.join(", ")
+        : dl?.copymangaCustomCDNs || "";
+      setForm({
+        ...settings,
+        downloader: dl
+          ? {
+              ...dl,
+              copyMangaCdnMode: cdnMode,
+              copymangaCDNMode: cdnMode,
+              copymangaCustomCDNs: customCDNsStr,
+            }
+          : dl,
+      });
+    }
   }, [settings]);
 
   useEffect(() => {
@@ -134,10 +151,6 @@ export function SettingsDialog({
       setIsCheckingUpdate(false);
     }
   };
-
-  useEffect(() => {
-    setForm(settings);
-  }, [settings]);
 
   useEffect(() => {
     if (open) {
@@ -1011,8 +1024,13 @@ export function SettingsDialog({
                         description={t("settings.copyMangaCDNModeHint")}
                         control={
                           <SegmentedControl
-                            value={form.downloader?.copymangaCDNMode ?? "official"}
-                            onChange={(val) => updateDownloader({ copymangaCDNMode: val as "official" | "striped" })}
+                            value={form.downloader?.copyMangaCdnMode || form.downloader?.copymangaCDNMode || "official"}
+                            onChange={(val) =>
+                              updateDownloader({
+                                copyMangaCdnMode: val as "official" | "striped",
+                                copymangaCDNMode: val as "official" | "striped",
+                              })
+                            }
                             options={[
                               { value: "official", label: t("settings.copyMangaCDNOfficial") },
                               { value: "striped", label: t("settings.copyMangaCDNStriped") },
@@ -1020,14 +1038,25 @@ export function SettingsDialog({
                           />
                         }
                       />
-                      {form.downloader?.copymangaCDNMode === "striped" && (
+                      {(form.downloader?.copyMangaCdnMode === "striped" || form.downloader?.copymangaCDNMode === "striped") && (
                         <SettingRow
                           title={t("settings.copyMangaCustomCDNs")}
                           description={t("settings.copyMangaCustomCDNsHint")}
                           control={
                             <Input
-                              value={form.downloader?.copymangaCustomCDNs ?? ""}
-                              onChange={(e) => updateDownloader({ copymangaCustomCDNs: e.target.value })}
+                              value={
+                                Array.isArray(form.downloader?.copyMangaCustomCdns)
+                                  ? form.downloader?.copyMangaCustomCdns.join(", ")
+                                  : form.downloader?.copymangaCustomCDNs ?? ""
+                              }
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const parsed = val.split(",").map((s) => s.trim()).filter(Boolean);
+                                updateDownloader({
+                                  copymangaCustomCDNs: val,
+                                  copyMangaCustomCdns: parsed,
+                                });
+                              }}
                               className="w-56 text-xs h-7.5"
                               placeholder="e.g. cdn.example.com, cdn2.example.com"
                             />

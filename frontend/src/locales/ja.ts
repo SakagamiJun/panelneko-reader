@@ -373,5 +373,10 @@ export const ja = {
     empty: "ローカル漫画ライブラリが空です",
     selectedCount: "{{count}} 作品選択中",
     batchLinkSelected: "選択作品を一括紐付け ({{count}})",
+    batchUnlinkSelected: "選択作品の一括紐付け解除 ({{count}})",
+    filterAll: "すべて",
+    filterLinked: "紐付け済",
+    filterUnlinked: "未紐付け",
+    allSources: "すべてのディレクトリ",
   },
 };

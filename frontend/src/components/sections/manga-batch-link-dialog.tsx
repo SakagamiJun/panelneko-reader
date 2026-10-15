@@ -5,6 +5,7 @@ import {
   BookOpen,
   Check,
   CheckSquare,
+  Folder,
   Globe,
   Link2,
   Loader2,
@@ -21,13 +22,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { appAdapter } from "@/lib/api";
-import type { LibraryManga, MangaOnlineLink, OnlineMangaItem } from "@/lib/contracts";
+import type { LibraryManga, LibrarySource, MangaOnlineLink, OnlineMangaItem } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 
 export interface MangaBatchLinkDialogProps {
   open: boolean;
   onClose: () => void;
   mangas: LibraryManga[];
+  sources?: LibrarySource[];
   onLinksChanged?: () => void;
 }
 
@@ -35,12 +37,15 @@ export function MangaBatchLinkDialog({
   open,
   onClose,
   mangas,
+  sources,
   onLinksChanged,
 }: MangaBatchLinkDialogProps) {
   const { t } = useTranslation();
 
   const [activeSource, setActiveSource] = useState<"copymanga" | "klz9">("copymanga");
   const [filterQuery, setFilterQuery] = useState("");
+  const [linkFilter, setLinkFilter] = useState<"all" | "unlinked" | "linked">("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [linksMap, setLinksMap] = useState<Map<string, MangaOnlineLink>>(new Map());
   const [loadingLinks, setLoadingLinks] = useState(false);
 
@@ -77,6 +82,8 @@ export function MangaBatchLinkDialog({
       setMatchResults(new Map());
       setSelectedMatch(new Map());
       setFilterQuery("");
+      setLinkFilter("all");
+      setSourceFilter("all");
     }
   }, [open, loadLinks]);
 
@@ -99,9 +106,22 @@ export function MangaBatchLinkDialog({
 
   const displayedMangas = useMemo(() => {
     const q = filterQuery.trim().toLowerCase();
-    if (!q) return nonCollectionMangas;
-    return nonCollectionMangas.filter((m) => m.title.toLowerCase().includes(q));
-  }, [nonCollectionMangas, filterQuery]);
+    return nonCollectionMangas.filter((m) => {
+      const isLinked = linksMap.has(m.id);
+      if (linkFilter === "linked" && !isLinked) return false;
+      if (linkFilter === "unlinked" && isLinked) return false;
+
+      if (sourceFilter !== "all" && (m.sourceID || "default") !== sourceFilter) {
+        return false;
+      }
+
+      if (q && !m.title.toLowerCase().includes(q) && !m.relativePath.toLowerCase().includes(q)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [nonCollectionMangas, linksMap, linkFilter, sourceFilter, filterQuery]);
 
   // Match a single manga
   const handleMatchSingle = async (manga: LibraryManga) => {
@@ -213,6 +233,31 @@ export function MangaBatchLinkDialog({
     setSelectedIds(new Set());
   };
 
+  // Batch unlink selected manga
+  const handleBatchUnlinkSelected = async () => {
+    const toUnlink = Array.from(selectedIds).filter((id) => linksMap.has(id));
+    if (toUnlink.length === 0) return;
+
+    setBatchMatching(true);
+    for (const id of toUnlink) {
+      try {
+        await appAdapter.unlinkMangaOnline(id);
+      } catch (err) {
+        console.error("Batch unlink error for:", id, err);
+      }
+    }
+    await loadLinks();
+    onLinksChanged?.();
+    setBatchMatching(false);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of toUnlink) {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
   // Selection toggles
   const handleToggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -227,13 +272,28 @@ export function MangaBatchLinkDialog({
   };
 
   const handleSelectAll = () => {
-    const valid = displayedMangas.filter((m) => selectedMatch.has(m.id)).map((m) => m.id);
-    setSelectedIds(new Set(valid));
+    setSelectedIds(new Set(displayedMangas.map((m) => m.id)));
   };
 
   const handleDeselectAll = () => {
     setSelectedIds(new Set());
   };
+
+  const selectedLinkedCount = useMemo(() => {
+    let count = 0;
+    for (const id of selectedIds) {
+      if (linksMap.has(id)) count++;
+    }
+    return count;
+  }, [selectedIds, linksMap]);
+
+  const selectedLinkableCount = useMemo(() => {
+    let count = 0;
+    for (const id of selectedIds) {
+      if (!linksMap.has(id) && selectedMatch.has(id)) count++;
+    }
+    return count;
+  }, [selectedIds, linksMap, selectedMatch]);
 
   if (!open) return null;
 
@@ -275,35 +335,94 @@ export function MangaBatchLinkDialog({
         </div>
 
         {/* Toolbar */}
-        <div className="px-5 py-3 border-b border-border/40 bg-muted/10 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                value={filterQuery}
-                onChange={(e) => setFilterQuery(e.target.value)}
-                placeholder={t("batchLink.filterPlaceholder")}
-                className="pl-8 h-8 text-xs bg-background/80"
+        <div className="px-5 py-3 border-b border-border/40 bg-muted/10 flex flex-col gap-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={filterQuery}
+                  onChange={(e) => setFilterQuery(e.target.value)}
+                  placeholder={t("batchLink.filterPlaceholder")}
+                  className="pl-8 h-8 text-xs bg-background/80"
+                />
+              </div>
+
+              {/* Status Filter: All / Unlinked / Linked */}
+              <SegmentedControl
+                value={linkFilter}
+                onChange={(val) => setLinkFilter(val as "all" | "unlinked" | "linked")}
+                options={[
+                  { value: "all", label: t("batchLink.filterAll") },
+                  { value: "unlinked", label: t("batchLink.filterUnlinked") },
+                  { value: "linked", label: t("batchLink.filterLinked") },
+                ]}
+              />
+
+              {/* Source Filter (if sources provided) */}
+              {(sources?.length ?? 0) > 1 && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <select
+                    value={sourceFilter}
+                    onChange={(e) => setSourceFilter(e.target.value)}
+                    className="h-8 px-2.5 rounded-lg border border-border/70 bg-card text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+                  >
+                    <option value="all">{t("batchLink.allSources")}</option>
+                    {sources?.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Target Online Source */}
+              <SegmentedControl
+                value={activeSource}
+                onChange={(val) => setActiveSource(val as "copymanga" | "klz9")}
+                options={[
+                  { value: "copymanga", label: "CopyManga" },
+                  { value: "klz9", label: "RawManga" },
+                ]}
               />
             </div>
-            <SegmentedControl
-              value={activeSource}
-              onChange={(val) => setActiveSource(val as "copymanga" | "klz9")}
-              options={[
-                { value: "copymanga", label: "CopyManga" },
-                { value: "klz9", label: "RawManga" },
-              ]}
-            />
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground pt-0.5">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={handleSelectAll}
+                className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <CheckSquare className="h-3 w-3 mr-1" />
+                <span>{t("downloader.selectAll")}</span>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={handleDeselectAll}
+                className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <Square className="h-3 w-3 mr-1" />
+                <span>{t("downloader.deselectAll")}</span>
+              </Button>
+              <span className="text-[11px] font-mono text-muted-foreground/80 ml-1">
+                {t("batchLink.selectedCount", { count: selectedIds.size })}
+              </span>
+            </div>
+
             <Button
               type="button"
               size="xs"
               variant="outline"
               onClick={() => void handleBatchMatch()}
               disabled={batchMatching}
-              className="h-8 text-xs gap-1.5"
+              className="h-7 text-xs gap-1.5 font-medium cursor-pointer"
             >
               {batchMatching ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -311,27 +430,6 @@ export function MangaBatchLinkDialog({
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
               )}
               <span>{t("batchLink.batchMatchAll")}</span>
-            </Button>
-            <div className="h-4 w-[1px] bg-border/60 mx-1" />
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={handleSelectAll}
-              className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-            >
-              <CheckSquare className="h-3 w-3 mr-1" />
-              <span>{t("downloader.selectAll")}</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={handleDeselectAll}
-              className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-            >
-              <Square className="h-3 w-3 mr-1" />
-              <span>{t("downloader.deselectAll")}</span>
             </Button>
           </div>
         </div>
@@ -536,14 +634,31 @@ export function MangaBatchLinkDialog({
               onClick={onClose}
               className="h-8 text-xs cursor-pointer"
             >
-              <span>{t("reader.close")}</span>
+              <span>{t("settings.close")}</span>
             </Button>
+            {selectedLinkedCount > 0 && (
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() => void handleBatchUnlinkSelected()}
+                disabled={batchMatching}
+                className="h-8 px-3 text-xs gap-1.5 cursor-pointer text-destructive border-destructive/40 hover:bg-destructive/10 font-medium"
+              >
+                {batchMatching ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Unlink className="h-3.5 w-3.5" />
+                )}
+                <span>{t("batchLink.batchUnlinkSelected", { count: selectedLinkedCount })}</span>
+              </Button>
+            )}
             <Button
               type="button"
               size="xs"
               variant="primary"
               onClick={() => void handleBatchLinkSelected()}
-              disabled={selectedIds.size === 0 || batchMatching}
+              disabled={selectedLinkableCount === 0 || batchMatching}
               className="h-8 px-4 text-xs gap-1.5 cursor-pointer font-semibold shadow-xs"
             >
               {batchMatching ? (
@@ -551,7 +666,7 @@ export function MangaBatchLinkDialog({
               ) : (
                 <Link2 className="h-3.5 w-3.5" />
               )}
-              <span>{t("batchLink.batchLinkSelected", { count: selectedIds.size })}</span>
+              <span>{t("batchLink.batchLinkSelected", { count: selectedLinkableCount || selectedIds.size })}</span>
             </Button>
           </div>
         </div>
