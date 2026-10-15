@@ -1035,7 +1035,6 @@ export function SettingsDialog({
                   description={t("settings.copyMangaDesc")}
                 >
                   <SettingRow
-                    icon={<Globe className="h-4 w-4 text-primary" />}
                     title={t("settings.enableCopyManga")}
                     description={t("settings.enableCopyMangaHint")}
                     control={
@@ -1054,7 +1053,7 @@ export function SettingsDialog({
                           <Input
                             value={form.downloader?.copyMangaApiDomain ?? "api.copy202601.com"}
                             onChange={(e) => updateDownloader({ copyMangaApiDomain: e.target.value })}
-                            className="w-56 text-xs h-7.5"
+                            className="w-56 text-xs h-7"
                             placeholder="api.copy202601.com"
                           />
                         }
@@ -1066,7 +1065,7 @@ export function SettingsDialog({
                           <Input
                             value={form.downloader?.copyMangaToken ?? ""}
                             onChange={(e) => updateDownloader({ copyMangaToken: e.target.value })}
-                            className="w-56 text-xs h-7.5"
+                            className="w-56 text-xs h-7"
                             placeholder="Optional authorization token"
                           />
                         }
@@ -1076,6 +1075,7 @@ export function SettingsDialog({
                         description={t("settings.copyMangaCDNModeHint")}
                         control={
                           <SegmentedControl
+                            size="sm"
                             value={form.downloader?.copyMangaCdnMode || form.downloader?.copymangaCDNMode || "official"}
                             onChange={(val) =>
                               updateDownloader({
@@ -1109,7 +1109,7 @@ export function SettingsDialog({
                                   copyMangaCustomCdns: parsed,
                                 });
                               }}
-                              className="w-56 text-xs h-7.5"
+                              className="w-56 text-xs h-7"
                               placeholder="e.g. cdn.example.com, cdn2.example.com"
                             />
                           }
@@ -1125,7 +1125,6 @@ export function SettingsDialog({
                   description={t("settings.rawMangaDesc")}
                 >
                   <SettingRow
-                    icon={<Download className="h-4 w-4 text-amber-500" />}
                     title={t("settings.enableRawManga")}
                     description={t("settings.enableRawMangaHint")}
                     control={
@@ -1143,7 +1142,7 @@ export function SettingsDialog({
                         <Input
                           value={form.downloader?.rawMangaBaseUrl ?? "https://klz9.com"}
                           onChange={(e) => updateDownloader({ rawMangaBaseUrl: e.target.value })}
-                          className="w-56 text-xs h-7.5"
+                          className="w-56 text-xs h-7"
                           placeholder="https://klz9.com"
                         />
                       }
@@ -1171,6 +1170,7 @@ export function SettingsDialog({
                     description={t("settings.autoFollowPolicyHint")}
                     control={
                       <SegmentedControl
+                        size="sm"
                         value={form.downloader?.autoFollowPolicy ?? "latest_only"}
                         onChange={(val) => updateDownloader({ autoFollowPolicy: val as "latest_only" | "fill_gaps" })}
                         options={[
@@ -1188,7 +1188,6 @@ export function SettingsDialog({
                   description={t("settings.localMangaLinkingDesc")}
                 >
                   <SettingRow
-                    icon={<Link2 className="h-4 w-4 text-primary" />}
                     title={t("settings.batchLinkTitle")}
                     description={t("settings.batchLinkDesc")}
                     control={
@@ -1197,9 +1196,9 @@ export function SettingsDialog({
                         size="xs"
                         variant="outline"
                         onClick={() => onOpenBatchLink?.()}
-                        className="gap-1.5 text-xs font-medium cursor-pointer"
+                        className="h-7 px-2.5 text-xs font-medium cursor-pointer"
                       >
-                        <Link2 className="h-3.5 w-3.5 text-primary" />
+                        <Link2 className="h-3.5 w-3.5 mr-1 text-primary" />
                         <span>{t("settings.openBatchLink")}</span>
                       </Button>
                     }
@@ -1211,15 +1210,13 @@ export function SettingsDialog({
                   title={t("settings.storageAndConcurrencySection")}
                 >
                   {(form.librarySources?.length ?? 0) > 0 ? (
-                    <div className="p-4 sm:p-5 border-b border-border/40 space-y-3.5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h5 className="text-xs font-semibold text-foreground">{t("settings.targetLibrarySource")}</h5>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">{t("settings.targetLibrarySourceHint")}</p>
-                        </div>
+                    <div className="p-3.5 sm:p-4 border-b border-border/40 space-y-3">
+                      <div>
+                        <h5 className="text-xs font-semibold text-foreground">{t("settings.targetLibrarySource")}</h5>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{t("settings.targetLibrarySourceHint")}</p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {form.librarySources?.map((src) => {
                           const isSelected = selectedTargetSourceId === src.id;
                           return (
@@ -1228,7 +1225,7 @@ export function SettingsDialog({
                               type="button"
                               onClick={() => updateDownloader({ targetSourceId: src.id })}
                               className={cn(
-                                "flex flex-col text-left p-3 rounded-lg border transition-all text-xs relative cursor-pointer",
+                                "flex flex-col text-left p-2.5 rounded-lg border transition-all text-xs relative cursor-pointer",
                                 isSelected
                                   ? "border-primary/70 bg-primary/5 shadow-xs ring-1 ring-primary/25"
                                   : "border-border/60 bg-card hover:bg-muted/40 hover:border-border"
@@ -1260,22 +1257,22 @@ export function SettingsDialog({
                       </div>
 
                       <div className="pt-1">
-                        <SettingRow
-                          title={t("settings.downloadSubPath")}
-                          description={t("settings.downloadSubPathHint")}
-                          control={
-                            <Input
-                              value={form.downloader?.downloadSubPath ?? ""}
-                              onChange={(e) => updateDownloader({ downloadSubPath: e.target.value })}
-                              className="w-48 text-xs h-7.5 font-mono"
-                              placeholder="Downloads"
-                            />
-                          }
-                        />
+                        <div className="flex items-center justify-between gap-4 py-1">
+                          <div>
+                            <div className="text-xs font-medium text-foreground">{t("settings.downloadSubPath")}</div>
+                            <div className="text-[11px] text-muted-foreground">{t("settings.downloadSubPathHint")}</div>
+                          </div>
+                          <Input
+                            value={form.downloader?.downloadSubPath ?? ""}
+                            onChange={(e) => updateDownloader({ downloadSubPath: e.target.value })}
+                            className="w-48 text-xs h-7 font-mono shrink-0"
+                            placeholder="Downloads"
+                          />
+                        </div>
                       </div>
 
                       {effectiveDownloadPath && (
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/40 border border-border/40 text-[11px]">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40 text-[11px]">
                           <span className="text-muted-foreground shrink-0">{t("settings.effectiveDownloadPath")}:</span>
                           <span className="font-mono text-foreground font-medium truncate select-all" title={effectiveDownloadPath}>
                             {effectiveDownloadPath}
@@ -1285,7 +1282,6 @@ export function SettingsDialog({
                     </div>
                   ) : (
                     <SettingRow
-                      icon={<FolderOpen className="h-4 w-4 text-muted-foreground" />}
                       title={t("settings.downloadDir")}
                       description={t("settings.downloadDirHint")}
                       control={
@@ -1301,7 +1297,7 @@ export function SettingsDialog({
                             size="xs"
                             variant="outline"
                             onClick={() => void handleSelectDownloadDir()}
-                            className="h-7 text-xs shrink-0 cursor-pointer"
+                            className="h-7 px-2.5 text-xs shrink-0 cursor-pointer"
                           >
                             <FolderOpen className="h-3.5 w-3.5 mr-1" />
                             <span>{t("settings.browse")}</span>
@@ -1315,6 +1311,7 @@ export function SettingsDialog({
                     description={t("settings.downloadFormatHint")}
                     control={
                       <SegmentedControl
+                        size="sm"
                         value={form.downloader?.downloadFormat ?? "cbz"}
                         onChange={(val) => updateDownloader({ downloadFormat: val as "cbz" | "folder" })}
                         options={[
@@ -1339,7 +1336,7 @@ export function SettingsDialog({
                             updateDownloader({ maxConcurrentDownloads: val });
                           }
                         }}
-                        className="w-20 text-xs h-7.5 font-mono"
+                        className="w-20 text-xs h-7 font-mono text-center"
                       />
                     }
                   />
@@ -1358,7 +1355,7 @@ export function SettingsDialog({
                             updateDownloader({ maxImageConcurrency: val });
                           }
                         }}
-                        className="w-20 text-xs h-7.5 font-mono"
+                        className="w-20 text-xs h-7 font-mono text-center"
                       />
                     }
                   />
