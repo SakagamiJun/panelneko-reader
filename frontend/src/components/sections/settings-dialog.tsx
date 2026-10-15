@@ -36,12 +36,14 @@ import type {
   AppSettings,
   DuplicateMergeMode,
   LibrarySource,
+  Locale,
   ReaderDirection,
   ReaderFitMode,
   ReaderFilter,
   ReaderSpreadMode,
   ReaderSideClickMode,
   SourceType,
+  ThemeMode,
   ThumbnailQuality,
   UpdateCheckResult,
 } from "@/lib/contracts";
@@ -490,8 +492,57 @@ export function SettingsDialog({
             {activeTab === "general" && (
               <div className="space-y-5">
                 <SettingGroup
-                  title={t("settings.generalTab")}
-                  description={t("settings.subtitle")}
+                  title={t("settings.groupAppearance")}
+                  description={t("settings.groupAppearanceDesc")}
+                >
+                  <SettingRow
+                    title={t("settings.themeMode")}
+                    description={t("settings.themeModeHint")}
+                    control={
+                      <SegmentedControl<ThemeMode>
+                        size="sm"
+                        value={form.themeMode || "system"}
+                        onChange={(val) => updateField("themeMode", val)}
+                        options={[
+                          { value: "system", label: t("settings.system") },
+                          { value: "light", label: t("settings.light") },
+                          { value: "dark", label: t("settings.dark") },
+                        ]}
+                      />
+                    }
+                  />
+
+                  <SettingRow
+                    title={t("settings.locale")}
+                    description={t("settings.localeHint")}
+                    control={
+                      <SegmentedControl<string>
+                        size="sm"
+                        value={form.localeMode === "system" ? "system" : (form.locale || "zh-CN")}
+                        onChange={(val) => {
+                          if (val === "system") {
+                            updateFields({ localeMode: "system" });
+                          } else {
+                            updateFields({
+                              localeMode: "manual",
+                              locale: val as Locale,
+                            });
+                          }
+                        }}
+                        options={[
+                          { value: "system", label: t("settings.system") },
+                          { value: "zh-CN", label: t("settings.localeZhCN") },
+                          { value: "en", label: t("settings.localeEn") },
+                          { value: "ja", label: t("settings.localeJa") },
+                        ]}
+                      />
+                    }
+                  />
+                </SettingGroup>
+
+                <SettingGroup
+                  title={t("settings.groupReading")}
+                  description={t("settings.groupReadingDesc")}
                 >
                   <SettingRow
                     title={t("settings.autoRestoreReaderProgress")}
@@ -516,7 +567,7 @@ export function SettingsDialog({
                     description={t("settings.readerScrollCachePagesHint")}
                     control={
                       <Input
-                        className="w-20 h-7 text-xs text-center"
+                        className="w-20 h-7 text-xs text-center font-mono"
                         type="number"
                         min={1}
                         max={30}
@@ -536,6 +587,7 @@ export function SettingsDialog({
                     description={t("settings.thumbnailQualityDesc")}
                     control={
                       <SegmentedControl<ThumbnailQuality>
+                        size="sm"
                         value={
                           form.thumbnailQuality ??
                           (form.enableThumbnailCache === false ? "off" : "medium")

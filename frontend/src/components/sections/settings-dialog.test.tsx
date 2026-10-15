@@ -147,6 +147,37 @@ describe("SettingsDialog Component - Performance & Cache Settings", () => {
     expect(screen.getByRole("button", { name: /清空缓存|Clear Cache|キャッシュを削除/i })).toBeInTheDocument();
   });
 
+  it("renders appearance and language controls in general tab and triggers onSave", () => {
+    const onSave = vi.fn();
+
+    render(
+      <SettingsDialog
+        open={true}
+        onClose={vi.fn()}
+        settings={mockSettings}
+        onSave={onSave}
+        defaultTab="general"
+      />
+    );
+
+    expect(screen.getByText(/外观与语言|Appearance & Language|外観と言語/i)).toBeInTheDocument();
+    expect(screen.getByText(/主题模式|Theme mode|テーマモード/i)).toBeInTheDocument();
+
+    const darkOption = screen.getByRole("radio", { name: /深色|Dark/i });
+    fireEvent.click(darkOption);
+
+    expect(onSave).toHaveBeenCalled();
+    const lastCall = onSave.mock.calls[onSave.mock.calls.length - 1][0];
+    expect(lastCall.themeMode).toBe("dark");
+
+    const enOption = screen.getByRole("radio", { name: /English/i });
+    fireEvent.click(enOption);
+
+    const localeCall = onSave.mock.calls[onSave.mock.calls.length - 1][0];
+    expect(localeCall.localeMode).toBe("manual");
+    expect(localeCall.locale).toBe("en");
+  });
+
   it("calls onSave when selecting thumbnail quality in segmented control", async () => {
     const onSave = vi.fn();
 
