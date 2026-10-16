@@ -54,6 +54,9 @@ type Manager struct {
 	emitter            func(eventName string, payload any)
 	onDownloadFinished func(outputPath string)
 	totalBytesSec      atomic.Uint64
+	speedFormatted     atomic.Pointer[string]
+	bytesPerSec        atomic.Uint64
+	stopTicker         chan struct{}
 }
 
 func NewManager(
@@ -80,9 +83,54 @@ func NewManager(
 		chapterSem: make(chan struct{}, maxChapter),
 		imgSem:     make(chan struct{}, maxImg),
 		running:    make(map[string]*runningTask),
+		stopTicker: make(chan struct{}),
 	}
+	emptyStr := ""
+	mgr.speedFormatted.Store(&emptyStr)
+	go mgr.speedMonitorLoop()
 
 	return mgr
+}
+
+func (m *Manager) Close() {
+	select {
+	case <-m.stopTicker:
+	default:
+		close(m.stopTicker)
+	}
+}
+
+func (m *Manager) speedMonitorLoop() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.stopTicker:
+			return
+		case <-ticker.C:
+			secBytes := m.totalBytesSec.Swap(0)
+			m.bytesPerSec.Store(secBytes)
+
+			m.mu.RLock()
+			activeCount := len(m.running)
+			m.mu.RUnlock()
+
+			if activeCount > 0 && secBytes > 0 {
+				mb := float64(secBytes) / (1024.0 * 1024.0)
+				str := fmt.Sprintf("%.2f MB/s", mb)
+				m.speedFormatted.Store(&str)
+				m.emitProgress()
+			} else if activeCount > 0 {
+				str := "0.00 MB/s"
+				m.speedFormatted.Store(&str)
+				m.emitProgress()
+			} else {
+				empty := ""
+				m.speedFormatted.Store(&empty)
+			}
+		}
+	}
 }
 
 func (m *Manager) SetEmitter(fn func(eventName string, payload any)) {
@@ -327,7 +375,7 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 
 		rawURL := pageURLs[pageIndex]
 		var dlErr error
-		countWriter := &countingWriter{w: writer, written: &totalBytes}
+		countWriter := &countingWriter{w: writer, written: &totalBytes, manager: m}
 
 		if task.Source == copymanga.SiteName {
 			stripedURL := m.copyManga.GetStripedCDNURL(rawURL, pageIndex)
@@ -342,11 +390,15 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 		}
 
 		curr := int(downloadedCount.Add(1))
-		elapsed := time.Since(startTime).Seconds()
 		var speedStr string
-		if elapsed > 0 {
-			speedMB := (float64(totalBytes.Load()) / 1024.0 / 1024.0) / elapsed
-			speedStr = fmt.Sprintf("%.2f MB/s", speedMB)
+		if p := m.speedFormatted.Load(); p != nil && *p != "" {
+			speedStr = *p
+		} else {
+			elapsed := time.Since(startTime).Seconds()
+			if elapsed > 0 {
+				speedMB := (float64(totalBytes.Load()) / 1024.0 / 1024.0) / elapsed
+				speedStr = fmt.Sprintf("%.2f MB/s", speedMB)
+			}
 		}
 
 		_ = m.store.UpdateDownloadTaskProgress(task.ID, curr, totalPages, speedStr)
@@ -392,12 +444,18 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 type countingWriter struct {
 	w       io.Writer
 	written *atomic.Uint64
+	manager *Manager
 }
 
 func (c *countingWriter) Write(p []byte) (n int, err error) {
 	n, err = c.w.Write(p)
-	if n > 0 && c.written != nil {
-		c.written.Add(uint64(n))
+	if n > 0 {
+		if c.written != nil {
+			c.written.Add(uint64(n))
+		}
+		if c.manager != nil {
+			c.manager.totalBytesSec.Add(uint64(n))
+		}
 	}
 	return n, err
 }
@@ -525,11 +583,18 @@ func (m *Manager) GetProgress() contracts.DownloadProgress {
 		}
 	}
 
+	speedStr := ""
+	if p := m.speedFormatted.Load(); p != nil {
+		speedStr = *p
+	}
+
 	return contracts.DownloadProgress{
 		ActiveTasks:     activeCount,
 		TotalTasks:      len(tasks),
 		DownloadedPages: downloadedPages,
 		TotalPages:      totalPages,
+		SpeedFormatted:  speedStr,
+		BytesPerSec:     float64(m.bytesPerSec.Load()),
 	}
 }
 

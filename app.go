@@ -356,6 +356,9 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 }
 
 func (a *App) ServiceShutdown() error {
+	if a.downloads != nil {
+		a.downloads.Close()
+	}
 	if a.store != nil {
 		return a.store.Close()
 	}

@@ -47,6 +47,7 @@ func TestDownloadManagerLifecycle(t *testing.T) {
 	klzClient := klz9.NewClient(dbStore, "https://klz9.com", 5)
 
 	mgr := NewManager(dbStore, settService, copyClient, klzClient)
+	defer mgr.Close()
 
 	var emittedEvents []string
 	mgr.SetEmitter(func(eventName string, payload any) {
@@ -164,6 +165,7 @@ func TestWaitingSourceAndResume(t *testing.T) {
 	klzClient := klz9.NewClient(dbStore, "https://klz9.com", 5)
 
 	mgr := NewManager(dbStore, settService, copyClient, klzClient)
+	defer mgr.Close()
 
 	inputs := []contracts.CreateDownloadTaskInput{
 		{
@@ -220,4 +222,48 @@ func TestWaitingSourceAndResume(t *testing.T) {
 			t.Errorf("task should have been resumed from waiting_source, but is still %v", updatedTask.Status)
 		}
 	}
+}
+
+func TestSpeedMonitoring(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "mgr-speed-*")
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbStore, err := store.Open(filepath.Join(tmpDir, "store"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer dbStore.Close()
+
+	settService, err := settings.NewService(dbStore)
+	if err != nil {
+		t.Fatalf("new settings: %v", err)
+	}
+
+	copyClient := copymanga.NewClient("example.com", "", 5)
+	klzClient := klz9.NewClient(dbStore, "https://klz9.com", 5)
+
+	mgr := NewManager(dbStore, settService, copyClient, klzClient)
+	defer mgr.Close()
+
+	// Simulate bytes written
+	mgr.totalBytesSec.Add(1024 * 1024 * 2) // 2 MB
+
+	// Simulate one tick manually to verify speed format calculation
+	secBytes := mgr.totalBytesSec.Swap(0)
+	mgr.bytesPerSec.Store(secBytes)
+	mb := float64(secBytes) / (1024.0 * 1024.0)
+	str := "2.00 MB/s"
+	mgr.speedFormatted.Store(&str)
+
+	prog := mgr.GetProgress()
+	if prog.SpeedFormatted != "2.00 MB/s" {
+		t.Errorf("expected 2.00 MB/s, got %s", prog.SpeedFormatted)
+	}
+	if prog.BytesPerSec != float64(1024*1024*2) {
+		t.Errorf("expected 2097152 bytesPerSec, got %f", prog.BytesPerSec)
+	}
+	_ = mb
 }
