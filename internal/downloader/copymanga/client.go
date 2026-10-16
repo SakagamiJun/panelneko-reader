@@ -459,8 +459,11 @@ func (c *Client) GetChapterImageURLs(ctx context.Context, comicPathWord, chapter
 
 	urls := make([]string, 0, len(ch.Chapter.Contents))
 	for _, item := range ch.Chapter.Contents {
-		if strings.TrimSpace(item.URL) != "" {
-			urls = append(urls, strings.TrimSpace(item.URL))
+		raw := strings.TrimSpace(item.URL)
+		if raw != "" {
+			// Upgrade default 800px preview resolution to 1500px high quality image
+			hdURL := strings.ReplaceAll(raw, ".c800x.", ".c1500x.")
+			urls = append(urls, hdURL)
 		}
 	}
 	return urls, nil

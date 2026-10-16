@@ -140,3 +140,43 @@ func TestStreamSaveCBZWithComicInfo(t *testing.T) {
 		t.Fatalf("ComicInfo.xml was not created in cbz")
 	}
 }
+
+func TestGetChapterImageURLsHighResReplacement(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/v3/comic/one-piece/chapter2/ch1-uuid") {
+			resp := copyAPIResponse{
+				Code: 200,
+			}
+			data := chapterDetailData{}
+			data.Chapter.Contents = []struct {
+				URL string `json:"url"`
+			}{
+				{URL: "https://c1.mangafunc.fun/comic/op/001.c800x.webp"},
+				{URL: "https://c1.mangafunc.fun/comic/op/002.webp"},
+			}
+			raw, _ := json.Marshal(data)
+			resp.Results = raw
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	client := NewClient(host, "", 5)
+
+	urls, err := client.GetChapterImageURLs(context.Background(), "one-piece", "ch1-uuid")
+	if err != nil {
+		t.Fatalf("GetChapterImageURLs failed: %v", err)
+	}
+	if len(urls) != 2 {
+		t.Fatalf("expected 2 urls, got %d", len(urls))
+	}
+	if urls[0] != "https://c1.mangafunc.fun/comic/op/001.c1500x.webp" {
+		t.Errorf("expected .c1500x. in url, got %s", urls[0])
+	}
+	if urls[1] != "https://c1.mangafunc.fun/comic/op/002.webp" {
+		t.Errorf("expected untouched url for non-c800x, got %s", urls[1])
+	}
+}
