@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmented-control";
@@ -955,43 +956,16 @@ export function SettingsDialog({
                   )}
                 </div>
 
-                {sourceToDelete && (
-                  <div
-                    className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
-                    onClick={() => setSourceToDelete(null)}
-                  >
-                    <div
-                      className="w-full max-w-sm rounded-xl border border-border/80 bg-card p-4 space-y-3 shadow-xl"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <h4 className="text-sm font-bold text-foreground">
-                        {t("settings.sourceRemoveConfirmTitle", { name: sourceToDelete.name })}
-                      </h4>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        {t("settings.sourceRemoveConfirmDesc")}
-                      </p>
-                      <div className="flex items-center justify-end gap-2 pt-2">
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => setSourceToDelete(null)}
-                        >
-                          {t("library.cancel")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="primary"
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          onClick={handleConfirmDeleteSource}
-                        >
-                          {t("settings.sourceRemove")}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <ConfirmDialog
+                  open={Boolean(sourceToDelete)}
+                  title={sourceToDelete ? t("settings.sourceRemoveConfirmTitle", { name: sourceToDelete.name }) : ""}
+                  description={t("settings.sourceRemoveConfirmDesc")}
+                  confirmLabel={t("settings.sourceRemove")}
+                  cancelLabel={t("library.cancel")}
+                  confirmVariant="primary"
+                  onConfirm={handleConfirmDeleteSource}
+                  onCancel={() => setSourceToDelete(null)}
+                />
 
                 <div className="pt-2">
                   <SettingGroup
@@ -1007,6 +981,7 @@ export function SettingsDialog({
                       }
                       control={
                         <SegmentedControl<DuplicateMergeMode>
+                          size="sm"
                           value={form.duplicateMergeMode ?? "separate"}
                           onChange={(mode) => updateField("duplicateMergeMode", mode)}
                           options={[
