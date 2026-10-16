@@ -1593,7 +1593,7 @@ export function SettingsDialog({
                         size="xs"
                         variant="outline"
                         onClick={() => appAdapter.openURL(APP_LINKS.REPO)}
-                        className="gap-1 text-xs"
+                        className="h-7 px-2.5 text-xs gap-1.5 cursor-pointer"
                       >
                         <ExternalLink className="h-3 w-3" />
                         <span>{t("settings.visitRepo")}</span>
@@ -1611,7 +1611,7 @@ export function SettingsDialog({
                           size="xs"
                           variant="outline"
                           onClick={() => appAdapter.openURL(APP_LINKS.BUG_REPORT)}
-                          className="gap-1 text-xs"
+                          className="h-7 px-2.5 text-xs gap-1.5 cursor-pointer"
                         >
                           <ExternalLink className="h-3 w-3" />
                           <span>{t("settings.reportBug")}</span>
@@ -1621,7 +1621,7 @@ export function SettingsDialog({
                           size="xs"
                           variant="outline"
                           onClick={() => appAdapter.openURL(APP_LINKS.FEATURE_REQUEST)}
-                          className="gap-1 text-xs"
+                          className="h-7 px-2.5 text-xs gap-1.5 cursor-pointer"
                         >
                           <ExternalLink className="h-3 w-3" />
                           <span>{t("settings.suggestFeature")}</span>
@@ -1680,7 +1680,7 @@ export function SettingsDialog({
                             size="xs"
                             variant="outline"
                             onClick={() => appAdapter.openURL(updateResult.releaseURL)}
-                            className="gap-1 text-xs text-primary border-primary/40 hover:bg-primary/10"
+                            className="h-7 px-2.5 text-xs gap-1.5 cursor-pointer text-primary border-primary/40 hover:bg-primary/10"
                           >
                             <ExternalLink className="h-3 w-3" />
                             <span>{t("settings.viewRelease")}</span>
@@ -1692,12 +1692,12 @@ export function SettingsDialog({
                           variant="outline"
                           disabled={isCheckingUpdate}
                           onClick={handleCheckUpdate}
-                          className="gap-1 text-xs"
+                          className="h-7 px-2.5 text-xs gap-1.5 cursor-pointer"
                         >
                           {isCheckingUpdate ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
-                            <RefreshCw className="h-3 w-3" />
+                            <RefreshCw className="h-3.5 w-3.5" />
                           )}
                           <span>
                             {isCheckingUpdate
@@ -1733,9 +1733,9 @@ export function SettingsDialog({
                         size="xs"
                         variant="outline"
                         onClick={() => void appAdapter.openLogDirectory()}
-                        className="gap-1 text-xs cursor-pointer"
+                        className="h-7 px-2.5 text-xs gap-1.5 cursor-pointer"
                       >
-                        <FolderOpen className="h-3 w-3" />
+                        <FolderOpen className="h-3.5 w-3.5" />
                         <span>{t("settings.openLogDirectory")}</span>
                       </Button>
                     }
@@ -1828,9 +1828,9 @@ function ShortcutItem({
           type="button"
           onClick={() => setEditing(true)}
           className={cn(
-            "flex items-center justify-center min-w-[5.5rem] h-7 px-2.5 rounded-lg border text-xs font-mono transition-all",
+            "flex items-center justify-center min-w-[5.5rem] h-7 px-2.5 rounded-lg border text-xs font-mono transition-all cursor-pointer",
             editing
-              ? "border-primary bg-primary/10 text-primary font-bold animate-pulse"
+              ? "border-primary ring-1 ring-primary/40 bg-primary/10 text-primary font-semibold"
               : "border-border/70 bg-muted/40 hover:bg-muted text-foreground"
           )}
         >
