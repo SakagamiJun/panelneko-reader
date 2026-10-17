@@ -1286,21 +1286,56 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 		return 0, fmt.Errorf("get local manifest: %w", err)
 	}
 
-	localNumbers := make(map[float64]bool)
-	var maxLocalNumber float64 = -1
-	for _, ch := range manifest.Chapters {
-		localNumbers[ch.Number] = true
-		if ch.Number > maxLocalNumber {
-			maxLocalNumber = ch.Number
-		}
-	}
-
-	// Filter tasks already queued
+	// Filter tasks already queued and collect downloaded groups
 	existingTasks, _ := a.downloads.GetTasks()
 	existingTaskChapters := make(map[string]bool)
+	downloadedGroups := make(map[string]bool)
 	for _, t := range existingTasks {
 		if t.Source == link.OnlineSource && t.MangaID == link.OnlineComicID {
 			existingTaskChapters[t.ChapterID] = true
+			grp := strings.TrimSpace(t.ChapterGroup)
+			if t.Status == contracts.DownloadStatusCompleted && grp != "" {
+				downloadedGroups[grp] = true
+			}
+		}
+	}
+
+	groupLocalNumbers := make(map[string]map[float64]bool)
+	groupMaxNumber := make(map[string]float64)
+	allLocalNumbers := make(map[float64]bool)
+	var globalMaxLocalNumber float64 = -1
+
+	// Collect known groups from online chapters
+	knownGroups := make(map[string]bool)
+	for _, ch := range onlineChapters {
+		g := strings.TrimSpace(ch.Group)
+		if g != "" {
+			knownGroups[g] = true
+		}
+	}
+
+	for _, ch := range manifest.Chapters {
+		allLocalNumbers[ch.Number] = true
+		if ch.Number > globalMaxLocalNumber {
+			globalMaxLocalNumber = ch.Number
+		}
+
+		var matchedGroup string
+		for g := range knownGroups {
+			if strings.Contains(ch.LocalPath, g) || strings.Contains(ch.Title, g) {
+				matchedGroup = g
+				break
+			}
+		}
+		if matchedGroup != "" {
+			downloadedGroups[matchedGroup] = true
+			if groupLocalNumbers[matchedGroup] == nil {
+				groupLocalNumbers[matchedGroup] = make(map[float64]bool)
+			}
+			groupLocalNumbers[matchedGroup][ch.Number] = true
+			if ch.Number > groupMaxNumber[matchedGroup] {
+				groupMaxNumber[matchedGroup] = ch.Number
+			}
 		}
 	}
 
@@ -1312,13 +1347,26 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 			continue
 		}
 
+		grp := strings.TrimSpace(ch.Group)
+		// If user previously downloaded specific groups, only auto-follow new chapters in those groups
+		if len(downloadedGroups) > 0 && grp != "" && !downloadedGroups[grp] {
+			continue
+		}
+
+		locNums := groupLocalNumbers[grp]
+		maxNum, hasGroupMax := groupMaxNumber[grp]
+		if !hasGroupMax {
+			locNums = allLocalNumbers
+			maxNum = globalMaxLocalNumber
+		}
+
 		shouldDownload := false
 		if link.FollowPolicy == "fill_gaps" {
-			if !localNumbers[ch.Number] {
+			if locNums == nil || !locNums[ch.Number] {
 				shouldDownload = true
 			}
 		} else { // latest_only default
-			if ch.Number > maxLocalNumber {
+			if ch.Number > maxNum {
 				shouldDownload = true
 			}
 		}
@@ -1365,9 +1413,11 @@ func (a *App) CheckAllFollowedUpdates() (int, error) {
 	totalQueued := 0
 	for _, link := range links {
 		n, err := a.CheckMangaUpdates(link.MangaID)
-		if err == nil {
-			totalQueued += n
+		if err != nil {
+			logger.Get().Warn("Failed to check updates for followed manga %s (%s): %v", link.MangaID, link.OnlineTitle, err)
+			continue
 		}
+		totalQueued += n
 		time.Sleep(1500 * time.Millisecond)
 	}
 

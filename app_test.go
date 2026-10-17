@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,9 +13,13 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
+	"github.com/sakagamijun/panelneko-reader/internal/downloader"
+	"github.com/sakagamijun/panelneko-reader/internal/downloader/copymanga"
+	"github.com/sakagamijun/panelneko-reader/internal/downloader/klz9"
 	"github.com/sakagamijun/panelneko-reader/internal/library"
 	"github.com/sakagamijun/panelneko-reader/internal/settings"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
@@ -1197,5 +1202,129 @@ func TestMangaOnlineLinkingAndDownloaderRPC(t *testing.T) {
 	}
 	if fetchedAfter.OnlineComicID != "" {
 		t.Fatalf("expected empty link after unlink, got %+v", fetchedAfter)
+	}
+}
+
+func TestCheckMangaUpdatesGroupAware(t *testing.T) {
+	// Mock CopyManga API Server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(r.URL.Path, "/api/v3/comic2/onepiece") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 200,
+				"results": map[string]any{
+					"comic": map[string]any{
+						"name":      "海贼王",
+						"path_word": "onepiece",
+					},
+					"groups": map[string]any{
+						"default": map[string]any{
+							"name":      "话",
+							"path_word": "default",
+						},
+						"tankobon": map[string]any{
+							"name":      "卷",
+							"path_word": "tankobon",
+						},
+					},
+				},
+			})
+			return
+		}
+		if strings.Contains(r.URL.Path, "/group/default/chapters") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 200,
+				"results": map[string]any{
+					"total": 2,
+					"list": []map[string]any{
+						{"uuid": "ch-1", "name": "第1话", "index": 1.0},
+						{"uuid": "ch-2", "name": "第2话", "index": 2.0},
+					},
+				},
+			})
+			return
+		}
+		if strings.Contains(r.URL.Path, "/group/tankobon/chapters") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 200,
+				"results": map[string]any{
+					"total": 1,
+					"list": []map[string]any{
+						{"uuid": "vol-1", "name": "第1卷", "index": 1.0},
+					},
+				},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	libraryRoot := t.TempDir()
+	mangaDir := filepath.Join(libraryRoot, "海贼王")
+	if err := os.MkdirAll(mangaDir, 0o755); err != nil {
+		t.Fatalf("mkdir mangaDir: %v", err)
+	}
+	// Create local chapter 1 with title containing group "话"
+	ch1Path := filepath.Join(mangaDir, "001 - 第1话.cbz")
+	writeZipArchiveForAppTest(t, ch1Path, map[string]string{
+		"001.png": "bytes",
+	})
+
+	app, cleanup := newAssetTestApp(t, libraryRoot)
+	defer cleanup()
+
+	// Initial Scan
+	mangas, err := app.ScanLibrary()
+	if err != nil || len(mangas) == 0 {
+		t.Fatalf("scan library failed: %v", err)
+	}
+
+	targetMangaID := mangas[0].ID
+
+	// Setup CopyManga client pointed at test server
+	serverHost := strings.TrimPrefix(server.URL, "http://")
+	app.copyManga = copymanga.NewClient(serverHost, "", 5)
+	app.klz9 = klz9.NewClient(app.store, "https://klz9.com", 5)
+	app.downloads = downloader.NewManager(app.store, app.settings, app.copyManga, app.klz9)
+	defer app.downloads.Close()
+
+	// Link manga with online onepiece
+	link := contracts.MangaOnlineLink{
+		MangaID:       targetMangaID,
+		OnlineSource:  copymanga.SiteName,
+		OnlineComicID: "onepiece",
+		OnlineTitle:   "海贼王",
+		AutoFollow:    true,
+		FollowPolicy:  "latest_only",
+	}
+	if err := app.LinkMangaOnline(link); err != nil {
+		t.Fatalf("LinkMangaOnline failed: %v", err)
+	}
+
+	// Check updates - group "话" has local chapter 1. It should queue chapter 2 ("第2话") only, NOT volume 1 ("第1卷")!
+	queued, err := app.CheckMangaUpdates(targetMangaID)
+	if err != nil {
+		t.Fatalf("CheckMangaUpdates failed: %v", err)
+	}
+	if queued != 1 {
+		t.Fatalf("expected 1 queued chapter for group '话', got %d", queued)
+	}
+
+	tasks, err := app.GetDownloadTasks()
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("expected 1 task in queue, got %d", len(tasks))
+	}
+	if tasks[0].ChapterID != "ch-2" || tasks[0].ChapterTitle != "第2话" {
+		t.Errorf("expected task for ch-2 第2话, got %+v", tasks[0])
+	}
+
+	// Now test CheckAllFollowedUpdates: ch-2 is already queued, so no new tasks should be created
+	allQueued, err := app.CheckAllFollowedUpdates()
+	if err != nil {
+		t.Fatalf("CheckAllFollowedUpdates failed: %v", err)
+	}
+	if allQueued != 0 {
+		t.Fatalf("expected 0 new queued chapters since ch-2 was already queued, got %d", allQueued)
 	}
 }
