@@ -109,6 +109,7 @@ func DefaultSettings() contracts.AppSettings {
 			DownloadFormat:         "cbz",
 			MaxConcurrentDownloads: 3,
 			MaxImageConcurrency:    10,
+			ChapterIntervalSec:     0,
 			AutoCheckComicUpdates:  false,
 			AutoFollowPolicy:       "latest_only",
 		},
@@ -451,6 +452,12 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 		dl.MaxImageConcurrency = 10
 	} else if dl.MaxImageConcurrency > 30 {
 		dl.MaxImageConcurrency = 30
+	}
+
+	if dl.ChapterIntervalSec < 0 {
+		dl.ChapterIntervalSec = 0
+	} else if dl.ChapterIntervalSec > 60 {
+		dl.ChapterIntervalSec = 60
 	}
 
 	if targetSourcePath != "" {

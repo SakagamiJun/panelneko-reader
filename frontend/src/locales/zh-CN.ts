@@ -181,6 +181,8 @@ export const zhCN = {
     maxConcurrentDownloadsHint: "同时下载的章节数量 (1 - 10，默认 3)。",
     maxImageConcurrency: "单章节图片并发数",
     maxImageConcurrencyHint: "单章节内同时并发拉取图片的分片数 (1 - 30，默认 10)。",
+    chapterIntervalSec: "章节下载间隔 (秒)",
+    chapterIntervalSecHint: "每个章节下载完成后的冷却等待时间 (0 - 60 秒，默认 0)，可有效降低被官方风控封禁的风险。",
     addSource: "添加目录",
     addSourceDialogTitle: "添加漫画库目录",
     addSourceDialogDesc: "选择或输入要挂载的本地文件夹或网络共享路径。",

@@ -181,6 +181,8 @@ export const en = {
     maxConcurrentDownloadsHint: "Number of chapters to download simultaneously (1 - 10, default 3).",
     maxImageConcurrency: "Max Concurrent Images",
     maxImageConcurrencyHint: "Image chunk concurrency per chapter (1 - 30, default 10).",
+    chapterIntervalSec: "Chapter Download Interval (s)",
+    chapterIntervalSecHint: "Cooling interval after completing each chapter (0 - 60s, default 0) to reduce rate-limit risk.",
     addSource: "Add Directory",
     addSourceDialogTitle: "Add Library Directory",
     addSourceDialogDesc: "Select or enter a local folder or network share path to mount.",

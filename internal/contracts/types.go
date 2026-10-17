@@ -142,6 +142,7 @@ type DownloaderSettings struct {
 	DownloadFormat         string   `json:"downloadFormat,omitempty"` // "cbz" or "folder"
 	MaxConcurrentDownloads int      `json:"maxConcurrentDownloads,omitempty"`
 	MaxImageConcurrency    int      `json:"maxImageConcurrency,omitempty"`
+	ChapterIntervalSec     int      `json:"chapterIntervalSec,omitempty"`
 	AutoCheckComicUpdates  bool     `json:"autoCheckComicUpdates,omitempty"`
 	AutoFollowPolicy       string   `json:"autoFollowPolicy,omitempty"` // "latest_only" | "fill_gaps"
 }

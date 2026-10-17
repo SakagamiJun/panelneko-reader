@@ -67,6 +67,7 @@ export interface DownloaderSettings {
   downloadFormat?: "cbz" | "folder";
   maxConcurrentDownloads?: number;
   maxImageConcurrency?: number;
+  chapterIntervalSec?: number;
   autoCheckComicUpdates?: boolean;
   autoFollowPolicy?: "latest_only" | "fill_gaps";
 }

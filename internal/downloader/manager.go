@@ -257,6 +257,13 @@ func (m *Manager) startWorker(task contracts.DownloadTask) {
 		}
 	} else {
 		_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusCompleted, "")
+		interval := m.settings.Get().Downloader.ChapterIntervalSec
+		if interval > 0 && ctx.Err() == nil {
+			select {
+			case <-time.After(time.Duration(interval) * time.Second):
+			case <-ctx.Done():
+			}
+		}
 	}
 }
 

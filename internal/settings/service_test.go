@@ -157,6 +157,38 @@ func TestNormalizeAutoCheckUpdates(t *testing.T) {
 	}
 }
 
+func TestNormalizeChapterIntervalSec(t *testing.T) {
+	sqliteStore, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	input := DefaultSettings()
+	input.Downloader.ChapterIntervalSec = -5
+	normalized, err := service.Normalize(input)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if normalized.Downloader.ChapterIntervalSec != 0 {
+		t.Fatalf("expected negative interval clamped to 0, got %d", normalized.Downloader.ChapterIntervalSec)
+	}
+
+	input.Downloader.ChapterIntervalSec = 99
+	normalized, err = service.Normalize(input)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if normalized.Downloader.ChapterIntervalSec != 60 {
+		t.Fatalf("expected over 60 interval clamped to 60, got %d", normalized.Downloader.ChapterIntervalSec)
+	}
+}
+
 func TestNormalizeEnableThumbnailCache(t *testing.T) {
 	sqliteStore, err := store.Open(t.TempDir())
 	if err != nil {

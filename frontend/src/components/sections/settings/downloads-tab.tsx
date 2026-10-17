@@ -377,6 +377,25 @@ export function DownloadsTab({
             />
           }
         />
+        <SettingRow
+          title={t("settings.chapterIntervalSec")}
+          description={t("settings.chapterIntervalSecHint")}
+          control={
+            <Input
+              type="number"
+              min={0}
+              max={60}
+              value={form.downloader?.chapterIntervalSec ?? 0}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                if (!isNaN(val) && val >= 0 && val <= 60) {
+                  updateDownloader({ chapterIntervalSec: val });
+                }
+              }}
+              className="w-20 text-xs h-7 font-mono text-center"
+            />
+          }
+        />
       </SettingGroup>
     </div>
   );
