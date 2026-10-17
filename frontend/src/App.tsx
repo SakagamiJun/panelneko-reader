@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UpdateToast } from "@/components/ui/update-toast";
 import { OfflineToast } from "@/components/ui/offline-toast";
-import { DownloadWidget } from "@/components/ui/download-widget";
 import { appAdapter } from "@/lib/api";
 import {
   type AppSettings,
@@ -662,6 +661,31 @@ export default function App() {
             setOnlineSearchOpen(true);
           }}
           onOpenSettingsTab={(tab) => openSettingsWithTab(tab)}
+          downloadTasks={downloadTasks}
+          downloadProgress={downloadProgress}
+          onPauseTask={(id) => void appAdapter.pauseDownloadTask(id)}
+          onResumeTask={(id) => {
+            const task = downloadTasks.find((t) => t.id === id);
+            if (task && (task.status === "failed" || task.status === "waiting_source")) {
+              void appAdapter.retryDownloadTask(id);
+            } else {
+              void appAdapter.resumeDownloadTask(id);
+            }
+          }}
+          onCancelTask={(id) => void appAdapter.cancelDownloadTask(id)}
+          onClearCompleted={() => {
+            void appAdapter.clearCompletedDownloadTasks().then(() => {
+              void appAdapter.getDownloadTasks().then(setDownloadTasks);
+            });
+          }}
+          onCheckAllUpdates={async () => {
+            const queuedCount = await appAdapter.checkAllFollowedUpdates();
+            const tasks = await appAdapter.getDownloadTasks();
+            setDownloadTasks(tasks);
+            const prog = await appAdapter.getDownloadProgress();
+            setDownloadProgress(prog);
+            return queuedCount;
+          }}
         />
       )}
 
@@ -823,36 +847,10 @@ export default function App() {
         }}
       />
 
-      {/* Unified Bottom-Right Notification & Widget Dock */}
+      {/* Unified Bottom-Right Notification Dock */}
       {(updateNotification ||
-        (showOfflineToast && offlineSourcesCount > 0 && !selectedCollectionPath && !selectedLibraryID) ||
-        (downloadTasks.length > 0 && !selectedLibraryID)) && (
+        (showOfflineToast && offlineSourcesCount > 0 && !selectedCollectionPath && !selectedLibraryID)) && (
         <div className="fixed bottom-5 right-5 z-50 flex flex-col-reverse gap-2.5 pointer-events-none items-end max-w-[calc(100vw-2.5rem)]">
-          {/* Collapsible Download Progress Widget */}
-          {downloadTasks.length > 0 && !selectedLibraryID && (
-            <div className="pointer-events-auto">
-              <DownloadWidget
-                tasks={downloadTasks}
-                progress={downloadProgress}
-                onPauseTask={(id) => void appAdapter.pauseDownloadTask(id)}
-                onResumeTask={(id) => {
-                  const task = downloadTasks.find((t) => t.id === id);
-                  if (task && (task.status === "failed" || task.status === "waiting_source")) {
-                    void appAdapter.retryDownloadTask(id);
-                  } else {
-                    void appAdapter.resumeDownloadTask(id);
-                  }
-                }}
-                onCancelTask={(id) => void appAdapter.cancelDownloadTask(id)}
-                onClearCompleted={() => {
-                  void appAdapter.clearCompletedDownloadTasks().then(() => {
-                    void appAdapter.getDownloadTasks().then(setDownloadTasks);
-                  });
-                }}
-              />
-            </div>
-          )}
-
           {/* Update Toast */}
           {updateNotification && (
             <UpdateToast

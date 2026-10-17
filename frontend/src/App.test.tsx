@@ -511,9 +511,18 @@ describe("App Collection View in Duplicate Merge Mode", () => {
 
     renderApp();
 
-    // Verify download widget rendered
+    // Verify download trigger rendered in header and toggles popover
+    const downloadTrigger = await screen.findByRole("button", {
+      name: /下载管理|Download Manager|ダウンロード管理/i,
+    });
+    expect(downloadTrigger).toBeInTheDocument();
+
+    fireEvent.click(downloadTrigger);
+
     await waitFor(() => {
-      expect(screen.getByRole("region", { name: /下载管理|Download Manager|ダウンロード管理/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("region", { name: /下载管理|Download Manager|ダウンロード管理/i })
+      ).toBeInTheDocument();
     });
   });
 });

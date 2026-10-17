@@ -21,7 +21,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Kbd } from "@/components/ui/kbd";
-import type { AppSettings, LibraryManga } from "@/lib/contracts";
+import { DownloadPopover } from "@/components/download-popover";
+import type { AppSettings, DownloadProgress, DownloadTask, LibraryManga } from "@/lib/contracts";
 import { isMacPlatform } from "@/lib/system";
 import { useHasTrafficLights } from "@/hooks/use-traffic-lights";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,13 @@ interface AppHeaderProps {
   onSelectLocalManga?: (id: string) => void;
   onOpenOnlineSearch?: (source: "copymanga" | "klz9", query: string) => void;
   onOpenSettingsTab?: (tab: "general" | "sources" | "downloads" | "reader" | "shortcuts" | "about") => void;
+  downloadTasks?: DownloadTask[];
+  downloadProgress?: DownloadProgress;
+  onPauseTask?: (id: string) => void;
+  onResumeTask?: (id: string) => void;
+  onCancelTask?: (id: string) => void;
+  onClearCompleted?: () => void;
+  onCheckAllUpdates?: () => Promise<number | void>;
 }
 
 export function AppHeader({
@@ -80,21 +88,33 @@ export function AppHeader({
   onSelectLocalManga,
   onOpenOnlineSearch,
   onOpenSettingsTab,
+  downloadTasks = [],
+  downloadProgress,
+  onPauseTask,
+  onResumeTask,
+  onCancelTask,
+  onClearCompleted,
+  onCheckAllUpdates,
 }: AppHeaderProps) {
   const { t } = useTranslation();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const sourceMenuRef = useRef<HTMLDivElement>(null);
   const offlineMenuRef = useRef<HTMLDivElement>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false);
   const [isOfflineMenuOpen, setIsOfflineMenuOpen] = useState(false);
+  const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
   const isMac = isMacPlatform();
   const hasTrafficLights = useHasTrafficLights();
 
   const isAllSources = !selectedSourceId || selectedSourceId === "all";
   const activeSource = settings?.librarySources?.find((s) => s.id === selectedSourceId);
+  const activeDownloadsCount =
+    downloadProgress?.activeTasks ??
+    downloadTasks.filter((t) => t.status === "downloading" || t.status === "pending").length;
 
   const themeIcon =
     settings?.themeMode === "dark" ? (
@@ -196,6 +216,27 @@ export function AppHeader({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isSearchFocused]);
+
+  // Click outside or Escape to dismiss download dropdown popover
+  useEffect(() => {
+    if (!isDownloadMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(e.target as Node)) {
+        setIsDownloadMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsDownloadMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isDownloadMenuOpen]);
 
   useEffect(() => {
     setHighlightedIndex(-1);
@@ -577,8 +618,9 @@ export function AppHeader({
         )}
       </div>
 
-      {/* Middle section: Instant search filter with composite dropdown */}
-      <div ref={searchContainerRef} className="app-window-no-drag relative flex items-center max-w-sm flex-1 mx-2">
+      {/* Middle section: Instant search filter with composite dropdown & Download Manager */}
+      <div className="app-window-no-drag relative flex items-center max-w-sm sm:max-w-md flex-1 mx-2 gap-1.5">
+        <div ref={searchContainerRef} className="relative flex items-center flex-1 min-w-0">
         <div className="relative w-full">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/70 pointer-events-none" />
           <input
@@ -765,6 +807,73 @@ export function AppHeader({
           </div>
         )}
       </div>
+
+      {/* Download Manager Icon Button & Dropdown Popover */}
+      <div ref={downloadMenuRef} className="relative shrink-0">
+        <Button
+          type="button"
+          size="xs"
+          variant="ghost"
+          onClick={() => {
+            setIsDownloadMenuOpen((prev) => !prev);
+            setIsSearchFocused(false);
+          }}
+          className={cn(
+            "relative h-7 px-2 text-xs gap-1.5 transition-colors border outline-none select-none cursor-pointer",
+            isDownloadMenuOpen
+              ? "bg-primary/10 text-primary border-primary/30 font-semibold shadow-xs"
+              : activeDownloadsCount > 0
+              ? "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+              : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          )}
+          title={t("downloader.managerTitle")}
+          aria-label={t("downloader.managerTitle")}
+        >
+          <div className="relative flex items-center justify-center">
+            <Download className="h-3.5 w-3.5" />
+            {activeDownloadsCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+              </span>
+            )}
+          </div>
+          {activeDownloadsCount > 0 && (
+            <span className="font-mono text-[11px] font-semibold text-primary">
+              {activeDownloadsCount}
+            </span>
+          )}
+        </Button>
+
+        {isDownloadMenuOpen && (
+          <div className="absolute right-0 top-full mt-1.5 z-50 origin-top-right">
+            <DownloadPopover
+              tasks={downloadTasks}
+              progress={
+                downloadProgress ?? {
+                  activeTasks: 0,
+                  totalTasks: 0,
+                  downloadedPages: 0,
+                  totalPages: 0,
+                  speedFormatted: "",
+                  bytesPerSec: 0,
+                }
+              }
+              onPauseTask={onPauseTask}
+              onResumeTask={onResumeTask}
+              onCancelTask={onCancelTask}
+              onClearCompleted={onClearCompleted}
+              onCheckAllUpdates={onCheckAllUpdates}
+              onOpenSettings={() => {
+                setIsDownloadMenuOpen(false);
+                onOpenSettingsTab?.("downloads");
+              }}
+              onClose={() => setIsDownloadMenuOpen(false)}
+            />
+          </div>
+        )}
+      </div>
+    </div>
 
       {/* Right section: Theme, Language, Settings */}
       <div className="app-window-no-drag flex items-center gap-1.5 shrink-0">
