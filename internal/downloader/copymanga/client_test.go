@@ -180,3 +180,35 @@ func TestGetChapterImageURLsHighResReplacement(t *testing.T) {
 		t.Errorf("expected untouched url for non-c800x, got %s", urls[1])
 	}
 }
+
+func TestDownloadImageStreamInStreamRetry(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			// First attempt fails with 502 Bad Gateway
+			http.Error(w, "bad gateway", http.StatusBadGateway)
+			return
+		}
+		// Second attempt succeeds
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write([]byte("valid-image-bytes"))
+	}))
+	defer server.Close()
+
+	client := NewClient("example.com", "", 5)
+
+	var buf strings.Builder
+	err := client.DownloadImageStream(context.Background(), server.URL, &buf)
+	if err != nil {
+		t.Fatalf("expected DownloadImageStream to succeed via in-stream retry, got: %v", err)
+	}
+
+	if attempts != 2 {
+		t.Errorf("expected 2 attempts, got %d", attempts)
+	}
+
+	if buf.String() != "valid-image-bytes" {
+		t.Errorf("expected 'valid-image-bytes', got %s", buf.String())
+	}
+}

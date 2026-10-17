@@ -108,6 +108,7 @@ export interface DownloaderSettings {
     "downloadFormat"?: string;
     "maxConcurrentDownloads"?: number;
     "maxImageConcurrency"?: number;
+    "chapterIntervalSec"?: number;
     "autoCheckComicUpdates"?: boolean;
 
     /**

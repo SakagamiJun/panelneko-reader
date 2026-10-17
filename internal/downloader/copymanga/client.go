@@ -38,6 +38,13 @@ var bufferPool = sync.Pool{
 	},
 }
 
+var pageBufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 256*1024) // 256KB buffer for atomic page buffering
+		return bytes.NewBuffer(b)
+	},
+}
+
 type CDNNode struct {
 	Host         string
 	Failures     atomic.Int32
@@ -516,39 +523,66 @@ func (c *Client) RecordCDNResult(usedURL string, success bool) {
 	}
 }
 
-// DownloadImageStream downloads an image into writer using buffer pool without allocating entire image
+// DownloadImageStream downloads an image into writer with buffer pool and in-stream elastic retries
 func (c *Client) DownloadImageStream(ctx context.Context, targetURL string, writer io.Writer) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
-	if err != nil {
-		return err
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(1<<attempt) * 300 * time.Millisecond):
+			}
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("User-Agent", UserAgent)
+		req.Header.Set("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")
+		req.Header.Set("Referer", "https://copymanga.tv/")
+
+		resp, err := c.imgClient.Do(req)
+		if err != nil {
+			c.RecordCDNResult(targetURL, false)
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_ = resp.Body.Close()
+			c.RecordCDNResult(targetURL, false)
+			lastErr = fmt.Errorf("image fetch status %d", resp.StatusCode)
+			continue
+		}
+
+		pageBuf := pageBufferPool.Get().(*bytes.Buffer)
+		pageBuf.Reset()
+
+		bufPtr := bufferPool.Get().(*[]byte)
+		_, err = io.CopyBuffer(pageBuf, resp.Body, *bufPtr)
+		bufferPool.Put(bufPtr)
+		_ = resp.Body.Close()
+
+		if err != nil {
+			pageBufferPool.Put(pageBuf)
+			c.RecordCDNResult(targetURL, false)
+			lastErr = err
+			continue
+		}
+
+		_, err = pageBuf.WriteTo(writer)
+		pageBufferPool.Put(pageBuf)
+		if err != nil {
+			return err
+		}
+
+		c.RecordCDNResult(targetURL, true)
+		return nil
 	}
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")
-	req.Header.Set("Referer", "https://copymanga.tv/")
 
-	resp, err := c.imgClient.Do(req)
-	if err != nil {
-		c.RecordCDNResult(targetURL, false)
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		c.RecordCDNResult(targetURL, false)
-		return fmt.Errorf("image fetch status %d", resp.StatusCode)
-	}
-
-	bufPtr := bufferPool.Get().(*[]byte)
-	defer bufferPool.Put(bufPtr)
-
-	_, err = io.CopyBuffer(writer, resp.Body, *bufPtr)
-	if err != nil {
-		c.RecordCDNResult(targetURL, false)
-		return err
-	}
-
-	c.RecordCDNResult(targetURL, true)
-	return nil
+	return fmt.Errorf("download image failed after 3 attempts: %w", lastErr)
 }
 
 type ComicInfoXML struct {

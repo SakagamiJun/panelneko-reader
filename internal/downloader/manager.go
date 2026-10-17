@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -26,6 +27,13 @@ var bufferPool = sync.Pool{
 	New: func() any {
 		b := make([]byte, 64*1024)
 		return &b
+	},
+}
+
+var pageBufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 256*1024)
+		return bytes.NewBuffer(b)
 	},
 }
 
@@ -422,6 +430,14 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 				return ctx.Err()
 			}
 			imgFile := filepath.Join(finalFilePath, fmt.Sprintf("%03d.webp", i+1))
+			// Resume already downloaded valid pages in folder mode
+			if fi, err := os.Stat(imgFile); err == nil && fi.Size() > 0 {
+				curr := int(downloadedCount.Add(1))
+				_ = m.store.UpdateDownloadTaskProgress(task.ID, curr, totalPages, "")
+				m.emitProgress()
+				continue
+			}
+
 			f, fErr := os.Create(imgFile)
 			if fErr != nil {
 				return fErr
@@ -429,6 +445,7 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 			dlErr := fetchImage(ctx, i, f)
 			_ = f.Close()
 			if dlErr != nil {
+				_ = os.Remove(imgFile)
 				return dlErr
 			}
 		}
@@ -468,27 +485,58 @@ func (c *countingWriter) Write(p []byte) (n int, err error) {
 }
 
 func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 PanelNeko/1.0")
-	req.Header.Set("Referer", "https://klz9.com/")
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(1<<attempt) * 300 * time.Millisecond):
+			}
+		}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 PanelNeko/1.0")
+		req.Header.Set("Referer", "https://klz9.com/")
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("direct image status %d", resp.StatusCode)
-	}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
 
-	buf := bufferPool.Get().(*[]byte)
-	defer bufferPool.Put(buf)
-	_, err = io.CopyBuffer(w, resp.Body, *buf)
-	return err
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_ = resp.Body.Close()
+			lastErr = fmt.Errorf("direct image status %d", resp.StatusCode)
+			continue
+		}
+
+		pageBuf := pageBufferPool.Get().(*bytes.Buffer)
+		pageBuf.Reset()
+
+		buf := bufferPool.Get().(*[]byte)
+		_, err = io.CopyBuffer(pageBuf, resp.Body, *buf)
+		bufferPool.Put(buf)
+		_ = resp.Body.Close()
+
+		if err != nil {
+			pageBufferPool.Put(pageBuf)
+			lastErr = err
+			continue
+		}
+
+		_, err = pageBuf.WriteTo(w)
+		pageBufferPool.Put(pageBuf)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+	return fmt.Errorf("direct image failed after 3 attempts: %w", lastErr)
 }
 
 func (m *Manager) PauseTask(taskID string) error {
