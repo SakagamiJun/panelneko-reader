@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCopyMangaSearchAndStriping(t *testing.T) {
@@ -197,6 +198,7 @@ func TestDownloadImageStreamInStreamRetry(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient("example.com", "", 5)
+	client.SetRetryBackoffs([]time.Duration{10 * time.Millisecond, 20 * time.Millisecond})
 
 	var buf strings.Builder
 	err := client.DownloadImageStream(context.Background(), server.URL, &buf)

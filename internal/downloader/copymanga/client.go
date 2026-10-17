@@ -76,13 +76,14 @@ func (n *CDNNode) RecordSuccess() {
 }
 
 type Client struct {
-	httpClient *http.Client
-	imgClient  *http.Client
-	apiDomain  string
-	token      string
-	cdnMode    string // "official" | "striped"
-	cdnNodes   []*CDNNode
-	mu         sync.RWMutex
+	httpClient    *http.Client
+	imgClient     *http.Client
+	apiDomain     string
+	token         string
+	cdnMode       string // "official" | "striped"
+	cdnNodes      []*CDNNode
+	retryBackoffs []time.Duration
+	mu            sync.RWMutex
 }
 
 func NewClient(apiDomain string, token string, timeoutSeconds int) *Client {
@@ -120,8 +121,15 @@ func NewClient(apiDomain string, token string, timeoutSeconds int) *Client {
 			{Host: "c3.mangafunc.fun"},
 			{Host: "c4.mangafunc.fun"},
 		},
+		retryBackoffs: []time.Duration{15 * time.Second, 30 * time.Second},
 	}
 	return client
+}
+
+func (c *Client) SetRetryBackoffs(backoffs []time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.retryBackoffs = backoffs
 }
 
 func (c *Client) SetCDNSettings(mode string, customCDNs []string) {
@@ -523,15 +531,24 @@ func (c *Client) RecordCDNResult(usedURL string, success bool) {
 	}
 }
 
-// DownloadImageStream downloads an image into writer with buffer pool and in-stream elastic retries
+// DownloadImageStream downloads an image into writer with buffer pool and server-friendly in-stream retries
 func (c *Client) DownloadImageStream(ctx context.Context, targetURL string, writer io.Writer) error {
+	c.mu.RLock()
+	backoffs := c.retryBackoffs
+	if len(backoffs) == 0 {
+		backoffs = []time.Duration{15 * time.Second, 30 * time.Second}
+	}
+	c.mu.RUnlock()
+
+	maxAttempts := len(backoffs) + 1
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
+			backoff := backoffs[attempt-1]
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(time.Duration(1<<attempt) * 300 * time.Millisecond):
+			case <-time.After(backoff):
 			}
 		}
 
@@ -548,6 +565,12 @@ func (c *Client) DownloadImageStream(ctx context.Context, targetURL string, writ
 			c.RecordCDNResult(targetURL, false)
 			lastErr = err
 			continue
+		}
+
+		// Fail fast on 404 Not Found to avoid wasteful retries against missing assets
+		if resp.StatusCode == http.StatusNotFound {
+			_ = resp.Body.Close()
+			return fmt.Errorf("image not found (404): %s", targetURL)
 		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -582,7 +605,7 @@ func (c *Client) DownloadImageStream(ctx context.Context, targetURL string, writ
 		return nil
 	}
 
-	return fmt.Errorf("download image failed after 3 attempts: %w", lastErr)
+	return fmt.Errorf("download image failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 type ComicInfoXML struct {

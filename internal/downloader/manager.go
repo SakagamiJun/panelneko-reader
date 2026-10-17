@@ -484,14 +484,18 @@ func (c *countingWriter) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
+var directImageBackoffs = []time.Duration{15 * time.Second, 30 * time.Second}
+
 func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error {
+	maxAttempts := len(directImageBackoffs) + 1
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
+			backoff := directImageBackoffs[attempt-1]
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(time.Duration(1<<attempt) * 300 * time.Millisecond):
+			case <-time.After(backoff):
 			}
 		}
 
@@ -506,6 +510,11 @@ func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error 
 		if err != nil {
 			lastErr = err
 			continue
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			_ = resp.Body.Close()
+			return fmt.Errorf("direct image not found (404): %s", imgURL)
 		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -536,7 +545,7 @@ func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error 
 
 		return nil
 	}
-	return fmt.Errorf("direct image failed after 3 attempts: %w", lastErr)
+	return fmt.Errorf("direct image failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func (m *Manager) PauseTask(taskID string) error {
