@@ -288,3 +288,79 @@ func TestSQLitePragmasConfiguration(t *testing.T) {
 		t.Fatalf("expected busy_timeout >= 5000, got %d", busyTimeout)
 	}
 }
+
+func TestCopyMangaAccountsRoundTrip(t *testing.T) {
+	sqliteStore, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	// Initial query should be empty
+	initial, err := sqliteStore.GetCopyMangaAccounts()
+	if err != nil {
+		t.Fatalf("get copymanga accounts: %v", err)
+	}
+	if len(initial) != 0 {
+		t.Fatalf("expected empty accounts, got %d", len(initial))
+	}
+
+	// Save accounts
+	acc1 := contracts.CopyMangaAccount{
+		Username:      "user1",
+		Password:      "pass1",
+		Token:         "token1",
+		LimitedAt:     100,
+		LastCheckedAt: 200,
+	}
+	acc2 := contracts.CopyMangaAccount{
+		Username:      "user2",
+		Password:      "pass2",
+		Token:         "token2",
+		LimitedAt:     50,
+		LastCheckedAt: 250,
+	}
+
+	if err := sqliteStore.SaveCopyMangaAccount(acc1); err != nil {
+		t.Fatalf("save acc1: %v", err)
+	}
+	if err := sqliteStore.SaveCopyMangaAccount(acc2); err != nil {
+		t.Fatalf("save acc2: %v", err)
+	}
+
+	// Should be ordered by limited_at ASC (acc2 with 50 first, then acc1 with 100)
+	list, err := sqliteStore.GetCopyMangaAccounts()
+	if err != nil {
+		t.Fatalf("get accounts: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("expected 2 accounts, got %d", len(list))
+	}
+	if list[0].Username != "user2" || list[1].Username != "user1" {
+		t.Fatalf("expected acc2 then acc1, got %+v", list)
+	}
+
+	// Update limited_at
+	if err := sqliteStore.UpdateCopyMangaAccountLimited("user2", 300); err != nil {
+		t.Fatalf("update limited: %v", err)
+	}
+	listAfterLim, err := sqliteStore.GetCopyMangaAccounts()
+	if err != nil {
+		t.Fatalf("get accounts after limited: %v", err)
+	}
+	if listAfterLim[0].Username != "user1" || listAfterLim[1].Username != "user2" {
+		t.Fatalf("expected acc1 (100) then acc2 (300), got %+v", listAfterLim)
+	}
+
+	// Update token
+	if err := sqliteStore.UpdateCopyMangaAccountToken("user1", "newtoken1", 400); err != nil {
+		t.Fatalf("update token: %v", err)
+	}
+	listAfterToken, err := sqliteStore.GetCopyMangaAccounts()
+	if err != nil {
+		t.Fatalf("get accounts after token: %v", err)
+	}
+	if listAfterToken[0].Token != "newtoken1" || listAfterToken[0].LastCheckedAt != 400 {
+		t.Fatalf("expected newtoken1 and 400, got %+v", listAfterToken[0])
+	}
+}

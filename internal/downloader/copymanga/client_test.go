@@ -11,8 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 )
 
 func TestCopyMangaSearchAndStriping(t *testing.T) {
@@ -212,5 +215,224 @@ func TestDownloadImageStreamInStreamRetry(t *testing.T) {
 
 	if buf.String() != "valid-image-bytes" {
 		t.Errorf("expected 'valid-image-bytes', got %s", buf.String())
+	}
+}
+
+type mockAccountStore struct {
+	mu       sync.Mutex
+	accounts []contracts.CopyMangaAccount
+}
+
+func (m *mockAccountStore) GetCopyMangaAccounts() ([]contracts.CopyMangaAccount, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	res := make([]contracts.CopyMangaAccount, len(m.accounts))
+	copy(res, m.accounts)
+	return res, nil
+}
+
+func (m *mockAccountStore) SaveCopyMangaAccount(acc contracts.CopyMangaAccount) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, a := range m.accounts {
+		if a.Username == acc.Username {
+			m.accounts[i] = acc
+			return nil
+		}
+	}
+	m.accounts = append(m.accounts, acc)
+	return nil
+}
+
+func (m *mockAccountStore) UpdateCopyMangaAccountLimited(username string, limitedAt int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, a := range m.accounts {
+		if a.Username == username {
+			m.accounts[i].LimitedAt = limitedAt
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *mockAccountStore) UpdateCopyMangaAccountToken(username string, token string, lastCheckedAt int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, a := range m.accounts {
+		if a.Username == username {
+			m.accounts[i].Token = token
+			m.accounts[i].LastCheckedAt = lastCheckedAt
+			return nil
+		}
+	}
+	return nil
+}
+
+func TestCopyMangaUserConfiguredTokenPrecedence(t *testing.T) {
+	mockStore := &mockAccountStore{
+		accounts: []contracts.CopyMangaAccount{
+			{Username: "auto_user", Token: "auto_token", LimitedAt: 0},
+		},
+	}
+	client := NewClient("127.0.0.1", "custom_user_token", 5)
+	client.SetStore(mockStore)
+
+	token, username, err := client.acquireToken(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if token != "custom_user_token" {
+		t.Errorf("expected custom_user_token, got %s", token)
+	}
+	if username != "" {
+		t.Errorf("expected empty username for custom token, got %s", username)
+	}
+}
+
+func TestCopyMangaAccountPoolRotationOn210(t *testing.T) {
+	mockStore := &mockAccountStore{
+		accounts: []contracts.CopyMangaAccount{
+			{Username: "user1", Token: "token1", LimitedAt: 0},
+			{Username: "user2", Token: "token2", LimitedAt: 0},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("authorization")
+		if auth == "Token token1" {
+			// Account 1 hits rate limit 210
+			w.WriteHeader(210)
+			_ = json.NewEncoder(w).Encode(copyAPIResponse{Code: 210, Message: "rate limit"})
+			return
+		}
+		if auth == "Token token2" {
+			// Account 2 succeeds
+			data := searchResultsData{
+				Total: 1,
+				List: []searchComicItem{
+					{Name: "Success Comic", PathWord: "success-comic"},
+				},
+			}
+			raw, _ := json.Marshal(data)
+			_ = json.NewEncoder(w).Encode(copyAPIResponse{Code: 200, Results: raw})
+			return
+		}
+		http.Error(w, "unexpected token", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	client := NewClient(host, "", 5)
+	client.SetStore(mockStore)
+
+	res, err := client.SearchManga(context.Background(), "test", 1, 10)
+	if err != nil {
+		t.Fatalf("expected SearchManga to succeed after rotating to token2, got err: %v", err)
+	}
+	if len(res.Items) != 1 || res.Items[0].Title != "Success Comic" {
+		t.Errorf("unexpected results: %+v", res)
+	}
+
+	// Verify user1 was marked limited in store
+	accounts, _ := mockStore.GetCopyMangaAccounts()
+	var user1 contracts.CopyMangaAccount
+	for _, a := range accounts {
+		if a.Username == "user1" {
+			user1 = a
+		}
+	}
+	if user1.LimitedAt == 0 {
+		t.Errorf("expected user1 LimitedAt to be updated, got 0")
+	}
+}
+
+func TestCopyMangaLazyRefreshTokenOn401(t *testing.T) {
+	mockStore := &mockAccountStore{
+		accounts: []contracts.CopyMangaAccount{
+			{Username: "user1", Password: "pwd1", Token: "expired_token", LimitedAt: 0},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v3/login" {
+			_ = json.NewEncoder(w).Encode(copyAPIResponse{
+				Code:    200,
+				Results: json.RawMessage(`{"token":"refreshed_fresh_token"}`),
+			})
+			return
+		}
+
+		if r.URL.Path == "/api/v3/search/comic" {
+			auth := r.Header.Get("authorization")
+			if auth == "Token expired_token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if auth == "Token refreshed_fresh_token" {
+				data := searchResultsData{
+					Total: 1,
+					List: []searchComicItem{
+						{Name: "Refreshed Manga", PathWord: "refreshed-manga"},
+					},
+				}
+				raw, _ := json.Marshal(data)
+				_ = json.NewEncoder(w).Encode(copyAPIResponse{Code: 200, Results: raw})
+				return
+			}
+			http.Error(w, "unexpected token", http.StatusUnauthorized)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	client := NewClient(host, "", 5)
+	client.SetStore(mockStore)
+
+	res, err := client.SearchManga(context.Background(), "test", 1, 10)
+	if err != nil {
+		t.Fatalf("expected SearchManga to succeed after lazy token refresh, got: %v", err)
+	}
+	if len(res.Items) != 1 || res.Items[0].Title != "Refreshed Manga" {
+		t.Errorf("unexpected results: %+v", res)
+	}
+
+	// Verify token updated in store
+	accounts, _ := mockStore.GetCopyMangaAccounts()
+	if len(accounts) != 1 || accounts[0].Token != "refreshed_fresh_token" {
+		t.Errorf("expected token in store to be refreshed_fresh_token, got %+v", accounts)
+	}
+}
+
+func TestCopyMangaAccountPoolMaxCapThree(t *testing.T) {
+	now := time.Now().Unix()
+	mockStore := &mockAccountStore{
+		accounts: []contracts.CopyMangaAccount{
+			{Username: "u1", Token: "tok1", LimitedAt: now - 30},
+			{Username: "u2", Token: "tok2", LimitedAt: now - 40},
+			{Username: "u3", Token: "tok3", LimitedAt: now - 50},
+		},
+	}
+
+	client := NewClient("127.0.0.1", "", 5)
+	client.SetStore(mockStore)
+
+	// Since 3 accounts exist and all are within 60s cooldown,
+	// acquireToken should NOT call registration.
+	// We cancel context after 50ms and verify error is context canceled.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, _, err := client.acquireToken(ctx)
+	if err == nil {
+		t.Fatalf("expected context timeout while waiting for cooldown")
+	}
+
+	// Store accounts count must still be strictly 3 (no 4th account registered!)
+	accounts, _ := mockStore.GetCopyMangaAccounts()
+	if len(accounts) != 3 {
+		t.Errorf("expected strictly 3 accounts in pool, got %d", len(accounts))
 	}
 }

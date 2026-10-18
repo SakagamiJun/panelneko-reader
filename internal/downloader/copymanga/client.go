@@ -75,15 +75,26 @@ func (n *CDNNode) RecordSuccess() {
 	n.Failures.Store(0)
 }
 
+type AccountStore interface {
+	GetCopyMangaAccounts() ([]contracts.CopyMangaAccount, error)
+	SaveCopyMangaAccount(acc contracts.CopyMangaAccount) error
+	UpdateCopyMangaAccountLimited(username string, limitedAt int64) error
+	UpdateCopyMangaAccountToken(username string, token string, lastCheckedAt int64) error
+}
+
 type Client struct {
-	httpClient    *http.Client
-	imgClient     *http.Client
-	apiDomain     string
-	token         string
-	cdnMode       string // "official" | "striped"
-	cdnNodes      []*CDNNode
-	retryBackoffs []time.Duration
-	mu            sync.RWMutex
+	httpClient          *http.Client
+	imgClient           *http.Client
+	apiDomain           string
+	userConfiguredToken string
+	token               string
+	cdnMode             string // "official" | "striped"
+	cdnNodes            []*CDNNode
+	retryBackoffs       []time.Duration
+	store               AccountStore
+	accountLock         sync.Mutex
+	lastReqTime         time.Time
+	mu                  sync.RWMutex
 }
 
 func NewClient(apiDomain string, token string, timeoutSeconds int) *Client {
@@ -112,9 +123,10 @@ func NewClient(apiDomain string, token string, timeoutSeconds int) *Client {
 			Timeout:   time.Duration(timeoutSeconds*2) * time.Second,
 			Transport: transport,
 		},
-		apiDomain: apiDomain,
-		token:     token,
-		cdnMode:   "official",
+		apiDomain:           apiDomain,
+		userConfiguredToken: token,
+		token:               token,
+		cdnMode:             "official",
 		cdnNodes: []*CDNNode{
 			{Host: "c1.mangafunc.fun"},
 			{Host: "c2.mangafunc.fun"},
@@ -124,6 +136,12 @@ func NewClient(apiDomain string, token string, timeoutSeconds int) *Client {
 		retryBackoffs: []time.Duration{15 * time.Second, 30 * time.Second},
 	}
 	return client
+}
+
+func (c *Client) SetStore(s AccountStore) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.store = s
 }
 
 func (c *Client) SetRetryBackoffs(backoffs []time.Duration) {
@@ -192,7 +210,7 @@ func (c *Client) getToken() string {
 	return c.token
 }
 
-func (c *Client) defaultHeaders(req *http.Request) {
+func (c *Client) defaultHeaders(req *http.Request, explicitToken string) {
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("version", "2025.08.15")
@@ -200,7 +218,10 @@ func (c *Client) defaultHeaders(req *http.Request) {
 	req.Header.Set("webp", "1")
 	req.Header.Set("region", "1")
 
-	tok := c.getToken()
+	tok := explicitToken
+	if tok == "" {
+		tok = c.getToken()
+	}
 	if tok != "" {
 		req.Header.Set("authorization", "Token "+tok)
 	}
@@ -212,8 +233,23 @@ type copyAPIResponse struct {
 	Results json.RawMessage `json:"results"`
 }
 
+func (c *Client) paceRequest(domain string) {
+	if strings.HasPrefix(domain, "127.0.0.1") || strings.HasPrefix(domain, "localhost") {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	elapsed := time.Since(c.lastReqTime)
+	if elapsed < 1500*time.Millisecond {
+		time.Sleep(1500*time.Millisecond - elapsed)
+	}
+	c.lastReqTime = time.Now()
+}
+
 func (c *Client) getJSON(ctx context.Context, endpoint string, query url.Values, target any) error {
 	domain := c.getDomain()
+	c.paceRequest(domain)
+
 	scheme := "https"
 	if strings.HasPrefix(domain, "127.0.0.1") || strings.HasPrefix(domain, "localhost") {
 		scheme = "http"
@@ -223,40 +259,62 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, query url.Values,
 		fullURL += "?" + query.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
-	if err != nil {
-		return err
-	}
-	c.defaultHeaders(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 210 {
-		// Risk control triggered
-		return fmt.Errorf("risk control 210: account rate-limited")
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("copymanga api error status %d", resp.StatusCode)
-	}
-
-	var base copyAPIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&base); err != nil {
-		return fmt.Errorf("decode copymanga response: %w", err)
-	}
-	if base.Code != 200 {
-		return fmt.Errorf("copymanga api code %d: %s", base.Code, base.Message)
-	}
-
-	if target != nil && len(base.Results) > 0 {
-		if err := json.Unmarshal(base.Results, target); err != nil {
-			return fmt.Errorf("decode copymanga results: %w", err)
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		token, username, err := c.acquireToken(ctx)
+		if err != nil {
+			return err
 		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+		if err != nil {
+			return err
+		}
+		c.defaultHeaders(req, token)
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return err
+		}
+
+		if resp.StatusCode == 210 {
+			_ = resp.Body.Close()
+			c.markAccountLimited(username)
+			lastErr = fmt.Errorf("risk control 210: account rate-limited")
+			continue
+		}
+
+		if resp.StatusCode == 401 && username != "" {
+			_ = resp.Body.Close()
+			_, _ = c.lazyRefreshToken(ctx, username)
+			lastErr = fmt.Errorf("token expired (401)")
+			continue
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_ = resp.Body.Close()
+			return fmt.Errorf("copymanga api error status %d", resp.StatusCode)
+		}
+
+		var base copyAPIResponse
+		err = json.NewDecoder(resp.Body).Decode(&base)
+		_ = resp.Body.Close()
+		if err != nil {
+			return fmt.Errorf("decode copymanga response: %w", err)
+		}
+		if base.Code != 200 {
+			return fmt.Errorf("copymanga api code %d: %s", base.Code, base.Message)
+		}
+
+		if target != nil && len(base.Results) > 0 {
+			if err := json.Unmarshal(base.Results, target); err != nil {
+				return fmt.Errorf("decode copymanga results: %w", err)
+			}
+		}
+		return nil
 	}
-	return nil
+
+	return lastErr
 }
 
 type searchComicItem struct {
@@ -704,38 +762,13 @@ func StreamSaveCBZ(finalFilePath string, xmlMetadata []byte, totalPages int, fet
 	return nil
 }
 
-// RegisterTemporaryAccount allows generating a guest account if risk control 210 occurs
-func (c *Client) RegisterTemporaryAccount(ctx context.Context) (string, error) {
-	randNum := rand.Intn(90000) + 10000
-	username := fmt.Sprintf("pneko%d", randNum)
-	password := fmt.Sprintf("pwd%d", randNum)
-
-	form := url.Values{}
-	form.Set("username", username)
-	form.Set("password", password)
-	form.Set("source", "freeSite")
-
+func (c *Client) loginWithAccount(ctx context.Context, username, password string) (string, error) {
 	scheme := "https"
 	domain := c.getDomain()
 	if strings.HasPrefix(domain, "127.0.0.1") || strings.HasPrefix(domain, "localhost") {
 		scheme = "http"
 	}
-	regURL := fmt.Sprintf("%s://%s/api/v3/register", scheme, domain)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, regURL, strings.NewReader(form.Encode()))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	c.defaultHeaders(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	// Perform login
 	encodedPwd := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s-%d", password, Salt)))
 	loginForm := url.Values{}
 	loginForm.Set("username", username)
@@ -748,7 +781,7 @@ func (c *Client) RegisterTemporaryAccount(ctx context.Context) (string, error) {
 		return "", err
 	}
 	lreq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	c.defaultHeaders(lreq)
+	c.defaultHeaders(lreq, "")
 
 	lresp, err := c.httpClient.Do(lreq)
 	if err != nil {
@@ -768,9 +801,163 @@ func (c *Client) RegisterTemporaryAccount(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	if loginData.Token != "" {
-		c.SetToken(loginData.Token)
-		return loginData.Token, nil
+	if loginData.Token == "" {
+		return "", fmt.Errorf("login failed: empty token")
 	}
-	return "", fmt.Errorf("login failed: empty token")
+
+	return loginData.Token, nil
+}
+
+func (c *Client) registerAndSaveNewAccount(ctx context.Context) (contracts.CopyMangaAccount, error) {
+	randNum := rand.Intn(90000) + 10000
+	username := fmt.Sprintf("pneko%d", randNum)
+	password := fmt.Sprintf("pwd%d", randNum)
+
+	scheme := "https"
+	domain := c.getDomain()
+	if strings.HasPrefix(domain, "127.0.0.1") || strings.HasPrefix(domain, "localhost") {
+		scheme = "http"
+	}
+	regURL := fmt.Sprintf("%s://%s/api/v3/register", scheme, domain)
+
+	form := url.Values{}
+	form.Set("username", username)
+	form.Set("password", password)
+	form.Set("source", "freeSite")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, regURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return contracts.CopyMangaAccount{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	c.defaultHeaders(req, "")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return contracts.CopyMangaAccount{}, err
+	}
+	_ = resp.Body.Close()
+
+	token, err := c.loginWithAccount(ctx, username, password)
+	if err != nil {
+		return contracts.CopyMangaAccount{}, err
+	}
+
+	acc := contracts.CopyMangaAccount{
+		Username:      username,
+		Password:      password,
+		Token:         token,
+		LimitedAt:     0,
+		LastCheckedAt: time.Now().Unix(),
+	}
+
+	if c.store != nil {
+		_ = c.store.SaveCopyMangaAccount(acc)
+	}
+
+	return acc, nil
+}
+
+// RegisterTemporaryAccount allows generating a guest account if risk control 210 occurs
+func (c *Client) RegisterTemporaryAccount(ctx context.Context) (string, error) {
+	acc, err := c.registerAndSaveNewAccount(ctx)
+	if err != nil {
+		return "", err
+	}
+	c.SetToken(acc.Token)
+	return acc.Token, nil
+}
+
+func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
+	c.mu.RLock()
+	userToken := c.userConfiguredToken
+	c.mu.RUnlock()
+	if userToken != "" {
+		return userToken, "", nil
+	}
+
+	c.accountLock.Lock()
+	defer c.accountLock.Unlock()
+
+	if c.store == nil {
+		c.mu.RLock()
+		tok := c.token
+		c.mu.RUnlock()
+		return tok, "", nil
+	}
+
+	accounts, err := c.store.GetCopyMangaAccounts()
+	if err != nil {
+		return "", "", err
+	}
+
+	now := time.Now().Unix()
+
+	// 1. Look for an available account whose 60s cooldown has passed
+	for _, a := range accounts {
+		if now-a.LimitedAt > 60 {
+			return a.Token, a.Username, nil
+		}
+	}
+
+	// 2. If no available account, and pool hasn't reached the 3-account cap:
+	if len(accounts) < 3 {
+		acc, err := c.registerAndSaveNewAccount(ctx)
+		if err != nil {
+			return "", "", err
+		}
+		return acc.Token, acc.Username, nil
+	}
+
+	// 3. Pool has reached the hard cap of 3 accounts. Do NOT register any new accounts!
+	// Find the account that unfreezes earliest
+	earliestIdx := 0
+	for i := 1; i < len(accounts); i++ {
+		if accounts[i].LimitedAt < accounts[earliestIdx].LimitedAt {
+			earliestIdx = i
+		}
+	}
+	earliest := accounts[earliestIdx]
+
+	waitTime := time.Duration(60-(now-earliest.LimitedAt)+1) * time.Second
+	if waitTime < 1*time.Second {
+		waitTime = 1 * time.Second
+	} else if waitTime > 60*time.Second {
+		waitTime = 60 * time.Second
+	}
+
+	select {
+	case <-ctx.Done():
+		return "", "", ctx.Err()
+	case <-time.After(waitTime):
+	}
+
+	return earliest.Token, earliest.Username, nil
+}
+
+func (c *Client) markAccountLimited(username string) {
+	if c.store != nil && username != "" {
+		_ = c.store.UpdateCopyMangaAccountLimited(username, time.Now().Unix())
+	}
+}
+
+func (c *Client) lazyRefreshToken(ctx context.Context, username string) (string, error) {
+	if c.store == nil || username == "" {
+		return "", nil
+	}
+	accounts, err := c.store.GetCopyMangaAccounts()
+	if err != nil {
+		return "", err
+	}
+	for _, a := range accounts {
+		if a.Username == username {
+			newToken, err := c.loginWithAccount(ctx, a.Username, a.Password)
+			if err != nil {
+				return "", err
+			}
+			_ = c.store.UpdateCopyMangaAccountToken(username, newToken, time.Now().Unix())
+			return newToken, nil
+		}
+	}
+	return "", fmt.Errorf("account not found: %s", username)
 }

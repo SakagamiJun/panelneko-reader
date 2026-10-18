@@ -240,6 +240,14 @@ type MangaOnlineLink struct {
 	LastNotifiedChapter string `json:"lastNotifiedChapter,omitempty"`
 }
 
+type CopyMangaAccount struct {
+	Username      string `json:"username"`
+	Password      string `json:"password"`
+	Token         string `json:"token"`
+	LimitedAt     int64  `json:"limitedAt"`
+	LastCheckedAt int64  `json:"lastCheckedAt"`
+}
+
 type SiteProfile struct {
 	Site             string            `json:"site"`
 	BundleURL        string            `json:"bundleURL"`

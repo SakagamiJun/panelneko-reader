@@ -400,6 +400,7 @@ func (a *App) bootstrap() error {
 	logger.Get().Info("PanelNeko Reader initialized. Version: %s (%s)", ver.Version, ver.Commit)
 
 	copyClient := copymanga.NewClient(st.Downloader.CopyMangaAPIDomain, st.Downloader.CopyMangaToken, 15)
+	copyClient.SetStore(storeValue)
 	copyClient.SetCDNSettings(st.Downloader.CopyMangaCDNMode, st.Downloader.CopyMangaCustomCDNs)
 	klzClient := klz9.NewClient(storeValue, st.Downloader.RawMangaBaseURL, 20)
 	downloadMgr := downloader.NewManager(storeValue, settingsService, copyClient, klzClient)

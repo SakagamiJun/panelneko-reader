@@ -134,6 +134,13 @@ func (s *SQLiteStore) init() error {
 			last_checked_at TEXT NOT NULL DEFAULT '',
 			last_notified_chapter TEXT NOT NULL DEFAULT ''
 		);`,
+		`CREATE TABLE IF NOT EXISTS copymanga_accounts (
+			username TEXT PRIMARY KEY,
+			password TEXT NOT NULL,
+			token TEXT NOT NULL,
+			limited_at INTEGER NOT NULL DEFAULT 0,
+			last_checked_at INTEGER NOT NULL DEFAULT 0
+		);`,
 	}
 
 	for _, statement := range statements {
@@ -754,4 +761,55 @@ func (s *SQLiteStore) DeleteMangaOnlineLink(mangaID string) error {
 	const query = `DELETE FROM manga_online_links WHERE manga_id = ?`
 	_, err := s.db.Exec(query, mangaID)
 	return err
+}
+
+func (s *SQLiteStore) GetCopyMangaAccounts() ([]contracts.CopyMangaAccount, error) {
+	rows, err := s.db.Query(`SELECT username, password, token, limited_at, last_checked_at FROM copymanga_accounts ORDER BY limited_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("query copymanga accounts: %w", err)
+	}
+	defer rows.Close()
+
+	var list []contracts.CopyMangaAccount
+	for rows.Next() {
+		var a contracts.CopyMangaAccount
+		if err := rows.Scan(&a.Username, &a.Password, &a.Token, &a.LimitedAt, &a.LastCheckedAt); err != nil {
+			return nil, fmt.Errorf("scan copymanga account: %w", err)
+		}
+		list = append(list, a)
+	}
+	return list, rows.Err()
+}
+
+func (s *SQLiteStore) SaveCopyMangaAccount(a contracts.CopyMangaAccount) error {
+	const query = `
+		INSERT INTO copymanga_accounts (username, password, token, limited_at, last_checked_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(username) DO UPDATE SET
+			password = excluded.password,
+			token = excluded.token,
+			limited_at = excluded.limited_at,
+			last_checked_at = excluded.last_checked_at
+	`
+	_, err := s.db.Exec(query, a.Username, a.Password, a.Token, a.LimitedAt, a.LastCheckedAt)
+	if err != nil {
+		return fmt.Errorf("save copymanga account: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) UpdateCopyMangaAccountLimited(username string, limitedAt int64) error {
+	_, err := s.db.Exec(`UPDATE copymanga_accounts SET limited_at = ? WHERE username = ?`, limitedAt, username)
+	if err != nil {
+		return fmt.Errorf("update copymanga account limited: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) UpdateCopyMangaAccountToken(username string, token string, lastCheckedAt int64) error {
+	_, err := s.db.Exec(`UPDATE copymanga_accounts SET token = ?, last_checked_at = ? WHERE username = ?`, token, lastCheckedAt, username)
+	if err != nil {
+		return fmt.Errorf("update copymanga account token: %w", err)
+	}
+	return nil
 }
