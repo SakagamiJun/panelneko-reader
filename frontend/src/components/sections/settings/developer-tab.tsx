@@ -87,7 +87,7 @@ export function DeveloperTab() {
   return (
     <div className="space-y-6">
       {/* Encryption & Security Status */}
-      <SettingGroup title={t("settings.devSecurityTitle")} icon={<ShieldCheck className="h-4 w-4" />}>
+      <SettingGroup title={t("settings.devSecurityTitle")}>
         <SettingRow
           title={t("settings.devKeySource")}
           description={t("settings.devKeySourceHint")}
@@ -122,7 +122,7 @@ export function DeveloperTab() {
       </SettingGroup>
 
       {/* CopyManga Account Pool Management */}
-      <SettingGroup title={t("settings.devAccountPoolTitle")} icon={<Users className="h-4 w-4" />}>
+      <SettingGroup title={t("settings.devAccountPoolTitle")}>
         <div className="p-3 bg-muted/20 border border-border/50 rounded-lg space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-xs text-muted-foreground">
@@ -140,7 +140,7 @@ export function DeveloperTab() {
                 {t("settings.refresh")}
               </Button>
               <Button
-                variant="default"
+                variant="primary"
                 size="sm"
                 className="h-7 text-xs px-2"
                 onClick={() => setShowAddForm(!showAddForm)}

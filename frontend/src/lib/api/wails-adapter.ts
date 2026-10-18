@@ -284,56 +284,31 @@ export class WailsAdapter implements AppAdapter {
   }
 
   async loginCopyManga(username: string, password: string): Promise<CopyMangaLoginResult> {
-    const fn = (App as any).LoginCopyManga;
-    if (typeof fn === "function") {
-      return (await fn(username, password)) as CopyMangaLoginResult;
-    }
-    return { success: false, isDevMode: false };
+    return (await App.LoginCopyManga(username, password)) as CopyMangaLoginResult;
   }
 
   async logoutCopyManga(): Promise<void> {
-    const fn = (App as any).LogoutCopyManga;
-    if (typeof fn === "function") {
-      await fn();
-    }
+    await App.LogoutCopyManga();
   }
 
   async getIsDevMode(): Promise<boolean> {
-    const fn = (App as any).GetIsDevMode;
-    if (typeof fn === "function") {
-      return (await fn()) ?? false;
-    }
-    return false;
+    return (await App.GetIsDevMode()) ?? false;
   }
 
   async getDevInfo(): Promise<DevInfo> {
-    const fn = (App as any).GetDevInfo;
-    if (typeof fn === "function") {
-      return (await fn()) as DevInfo;
-    }
-    return { isDevMode: false, keySource: "", keyFingerprint: "", accountCount: 0 };
+    return (await App.GetDevInfo()) as DevInfo;
   }
 
   async getCopyMangaAccounts(): Promise<CopyMangaAccount[]> {
-    const fn = (App as any).GetCopyMangaAccounts;
-    if (typeof fn === "function") {
-      return ((await fn()) ?? []) as CopyMangaAccount[];
-    }
-    return [];
+    return ((await App.GetCopyMangaAccounts()) ?? []) as CopyMangaAccount[];
   }
 
   async addCopyMangaAccount(username: string, password: string, token: string): Promise<void> {
-    const fn = (App as any).AddCopyMangaAccount;
-    if (typeof fn === "function") {
-      await fn(username, password, token);
-    }
+    await App.AddCopyMangaAccount(username, password, token);
   }
 
   async deleteCopyMangaAccount(username: string): Promise<void> {
-    const fn = (App as any).DeleteCopyMangaAccount;
-    if (typeof fn === "function") {
-      await fn(username);
-    }
+    await App.DeleteCopyMangaAccount(username);
   }
 
   subscribe(eventName: string, callback: (payload: unknown) => void) {

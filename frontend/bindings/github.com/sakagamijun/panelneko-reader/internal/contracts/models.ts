@@ -31,6 +31,22 @@ export interface AppVersionInfo {
     "commit"?: string;
 }
 
+export interface CopyMangaAccount {
+    "username": string;
+    "password": string;
+    "token": string;
+    "limitedAt": number;
+    "lastCheckedAt": number;
+}
+
+export interface CopyMangaLoginResult {
+    "success": boolean;
+    "username"?: string;
+    "token"?: string;
+    "isDevMode": boolean;
+    "message"?: string;
+}
+
 export interface CreateDownloadTaskInput {
     "source": string;
     "mangaID": string;
@@ -41,6 +57,14 @@ export interface CreateDownloadTaskInput {
     "chapterNumber": number;
     "chapterGroup"?: string;
     "targetSourceID"?: string;
+}
+
+export interface DevInfo {
+    "isDevMode": boolean;
+    "keySource": string;
+    "keyFingerprint": string;
+    "machineId"?: string;
+    "accountCount": number;
 }
 
 export interface DownloadProgress {
@@ -89,6 +113,8 @@ export enum DownloadTaskStatus {
 export interface DownloaderSettings {
     "enableCopyManga": boolean;
     "copyMangaApiDomain"?: string;
+    "copyMangaUsername"?: string;
+    "copyMangaPasswordEncrypted"?: string;
     "copyMangaToken"?: string;
 
     /**

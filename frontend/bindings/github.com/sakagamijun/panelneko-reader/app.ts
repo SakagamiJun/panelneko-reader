@@ -9,6 +9,10 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as contracts$0 from "./internal/contracts/models.js";
 
+export function AddCopyMangaAccount(username: string, password: string, token: string): $CancellablePromise<void> {
+    return $Call.ByID(3732476098, username, password, token);
+}
+
 export function AddLibrarySource(source: contracts$0.LibrarySource): $CancellablePromise<contracts$0.AppSettings> {
     return $Call.ByID(3053176450, source);
 }
@@ -41,6 +45,10 @@ export function CreateDownloadTasks(inputs: contracts$0.CreateDownloadTaskInput[
     return $Call.ByID(2151602833, inputs);
 }
 
+export function DeleteCopyMangaAccount(username: string): $CancellablePromise<void> {
+    return $Call.ByID(4152057768, username);
+}
+
 export function GetAllMangaOnlineLinks(): $CancellablePromise<contracts$0.MangaOnlineLink[] | null> {
     return $Call.ByID(1961264694);
 }
@@ -49,12 +57,24 @@ export function GetAppVersion(): $CancellablePromise<contracts$0.AppVersionInfo>
     return $Call.ByID(1780012486);
 }
 
+export function GetCopyMangaAccounts(): $CancellablePromise<contracts$0.CopyMangaAccount[] | null> {
+    return $Call.ByID(1868486418);
+}
+
+export function GetDevInfo(): $CancellablePromise<contracts$0.DevInfo> {
+    return $Call.ByID(851352478);
+}
+
 export function GetDownloadProgress(): $CancellablePromise<contracts$0.DownloadProgress> {
     return $Call.ByID(1305665572);
 }
 
 export function GetDownloadTasks(): $CancellablePromise<contracts$0.DownloadTask[] | null> {
     return $Call.ByID(3990232731);
+}
+
+export function GetIsDevMode(): $CancellablePromise<boolean> {
+    return $Call.ByID(2397861529);
 }
 
 export function GetMangaOnlineLink(mangaID: string): $CancellablePromise<contracts$0.MangaOnlineLink> {
@@ -87,6 +107,14 @@ export function LinkMangaOnline(input: contracts$0.MangaOnlineLink): $Cancellabl
 
 export function ListLibraryManga(): $CancellablePromise<contracts$0.LibraryManga[] | null> {
     return $Call.ByID(3843098540);
+}
+
+export function LoginCopyManga(username: string, password: string): $CancellablePromise<contracts$0.CopyMangaLoginResult> {
+    return $Call.ByID(359310417, username, password);
+}
+
+export function LogoutCopyManga(): $CancellablePromise<void> {
+    return $Call.ByID(634478102);
 }
 
 export function MatchLocalManga(mangaID: string, provider: string): $CancellablePromise<contracts$0.OnlineMangaItem[] | null> {

@@ -19,7 +19,10 @@ export {
 export type {
     AppSettings,
     AppVersionInfo,
+    CopyMangaAccount,
+    CopyMangaLoginResult,
     CreateDownloadTaskInput,
+    DevInfo,
     DownloadProgress,
     DownloadTask,
     DownloaderSettings,
