@@ -363,4 +363,16 @@ func TestCopyMangaAccountsRoundTrip(t *testing.T) {
 	if listAfterToken[0].Token != "newtoken1" || listAfterToken[0].LastCheckedAt != 400 {
 		t.Fatalf("expected newtoken1 and 400, got %+v", listAfterToken[0])
 	}
+
+	// Delete account
+	if err := sqliteStore.DeleteCopyMangaAccount("user1"); err != nil {
+		t.Fatalf("delete user1: %v", err)
+	}
+	listAfterDelete, err := sqliteStore.GetCopyMangaAccounts()
+	if err != nil {
+		t.Fatalf("get accounts after delete: %v", err)
+	}
+	if len(listAfterDelete) != 1 || listAfterDelete[0].Username != "user2" {
+		t.Fatalf("expected only user2 remaining, got %+v", listAfterDelete)
+	}
 }

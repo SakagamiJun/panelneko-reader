@@ -54,6 +54,8 @@ export interface AppSettings {
 export interface DownloaderSettings {
   enableCopyManga: boolean;
   copyMangaApiDomain?: string;
+  copyMangaUsername?: string;
+  copyMangaPasswordEncrypted?: string;
   copyMangaToken?: string;
   enableRawManga: boolean;
   rawMangaBaseUrl?: string;
@@ -236,3 +238,28 @@ export const EVENTS = {
   DOWNLOAD_PROGRESS: BindingsEvents.DownloadProgress,
   DOWNLOAD_TASKS_UPDATED: BindingsEvents.DownloadTasksUpdated,
 } as const;
+
+export interface CopyMangaLoginResult {
+  success: boolean;
+  username?: string;
+  token?: string;
+  isDevMode: boolean;
+  message?: string;
+}
+
+export interface DevInfo {
+  isDevMode: boolean;
+  keySource: string;
+  keyFingerprint: string;
+  machineId?: string;
+  accountCount: number;
+}
+
+export interface CopyMangaAccount {
+  username: string;
+  password?: string;
+  token: string;
+  limitedAt: number;
+  lastCheckedAt: number;
+}
+

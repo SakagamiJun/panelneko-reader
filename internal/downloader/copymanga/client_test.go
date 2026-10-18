@@ -269,6 +269,19 @@ func (m *mockAccountStore) UpdateCopyMangaAccountToken(username string, token st
 	return nil
 }
 
+func (m *mockAccountStore) DeleteCopyMangaAccount(username string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	newList := make([]contracts.CopyMangaAccount, 0, len(m.accounts))
+	for _, a := range m.accounts {
+		if a.Username != username {
+			newList = append(newList, a)
+		}
+	}
+	m.accounts = newList
+	return nil
+}
+
 func TestCopyMangaUserConfiguredTokenPrecedence(t *testing.T) {
 	mockStore := &mockAccountStore{
 		accounts: []contracts.CopyMangaAccount{
@@ -434,5 +447,32 @@ func TestCopyMangaAccountPoolMaxCapThree(t *testing.T) {
 	accounts, _ := mockStore.GetCopyMangaAccounts()
 	if len(accounts) != 3 {
 		t.Errorf("expected strictly 3 accounts in pool, got %d", len(accounts))
+	}
+}
+
+func TestCopyMangaPersonalAccountRelayToPoolOn210(t *testing.T) {
+	mockStore := &mockAccountStore{
+		accounts: []contracts.CopyMangaAccount{
+			{Username: "pool_user1", Token: "pool_token1", LimitedAt: 0},
+		},
+	}
+
+	client := NewClient("127.0.0.1", "personal_token", 5)
+	client.SetUserCredentials("personal_user", "enc_pwd")
+	client.SetStore(mockStore)
+
+	// Initially, acquireToken returns personal token
+	tok, user, err := client.acquireToken(context.Background())
+	if err != nil || tok != "personal_token" || user != "personal_user" {
+		t.Fatalf("expected personal token initially, got: tok=%s user=%s err=%v", tok, user, err)
+	}
+
+	// Personal account hits 210
+	client.markAccountLimited("personal_user")
+
+	// Next acquireToken must smoothly relay to pool account!
+	tok2, user2, err2 := client.acquireToken(context.Background())
+	if err2 != nil || tok2 != "pool_token1" || user2 != "pool_user1" {
+		t.Fatalf("expected pool token on personal cooldown, got: tok=%s user=%s err=%v", tok2, user2, err2)
 	}
 }

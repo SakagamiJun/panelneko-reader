@@ -129,22 +129,24 @@ type AppSettings struct {
 }
 
 type DownloaderSettings struct {
-	EnableCopyManga        bool     `json:"enableCopyManga"`
-	CopyMangaAPIDomain     string   `json:"copyMangaApiDomain,omitempty"`
-	CopyMangaToken         string   `json:"copyMangaToken,omitempty"`
-	CopyMangaCDNMode       string   `json:"copyMangaCdnMode,omitempty"` // "official" | "striped"
-	CopyMangaCustomCDNs    []string `json:"copyMangaCustomCdns,omitempty"`
-	EnableRawManga         bool     `json:"enableRawManga"`
-	RawMangaBaseURL        string   `json:"rawMangaBaseUrl,omitempty"`
-	TargetSourceID         string   `json:"targetSourceId,omitempty"`
-	DownloadSubPath        string   `json:"downloadSubPath,omitempty"`
-	DownloadDir            string   `json:"downloadDir,omitempty"`
-	DownloadFormat         string   `json:"downloadFormat,omitempty"` // "cbz" or "folder"
-	MaxConcurrentDownloads int      `json:"maxConcurrentDownloads,omitempty"`
-	MaxImageConcurrency    int      `json:"maxImageConcurrency,omitempty"`
-	ChapterIntervalSec     int      `json:"chapterIntervalSec,omitempty"`
-	AutoCheckComicUpdates  bool     `json:"autoCheckComicUpdates,omitempty"`
-	AutoFollowPolicy       string   `json:"autoFollowPolicy,omitempty"` // "latest_only" | "fill_gaps"
+	EnableCopyManga            bool     `json:"enableCopyManga"`
+	CopyMangaAPIDomain         string   `json:"copyMangaApiDomain,omitempty"`
+	CopyMangaUsername          string   `json:"copyMangaUsername,omitempty"`
+	CopyMangaPasswordEncrypted string   `json:"copyMangaPasswordEncrypted,omitempty"`
+	CopyMangaToken             string   `json:"copyMangaToken,omitempty"`
+	CopyMangaCDNMode           string   `json:"copyMangaCdnMode,omitempty"` // "official" | "striped"
+	CopyMangaCustomCDNs        []string `json:"copyMangaCustomCdns,omitempty"`
+	EnableRawManga             bool     `json:"enableRawManga"`
+	RawMangaBaseURL            string   `json:"rawMangaBaseUrl,omitempty"`
+	TargetSourceID             string   `json:"targetSourceId,omitempty"`
+	DownloadSubPath            string   `json:"downloadSubPath,omitempty"`
+	DownloadDir                string   `json:"downloadDir,omitempty"`
+	DownloadFormat             string   `json:"downloadFormat,omitempty"` // "cbz" or "folder"
+	MaxConcurrentDownloads     int      `json:"maxConcurrentDownloads,omitempty"`
+	MaxImageConcurrency        int      `json:"maxImageConcurrency,omitempty"`
+	ChapterIntervalSec         int      `json:"chapterIntervalSec,omitempty"`
+	AutoCheckComicUpdates      bool     `json:"autoCheckComicUpdates,omitempty"`
+	AutoFollowPolicy           string   `json:"autoFollowPolicy,omitempty"` // "latest_only" | "fill_gaps"
 }
 
 type OnlineMangaItem struct {
@@ -246,6 +248,22 @@ type CopyMangaAccount struct {
 	Token         string `json:"token"`
 	LimitedAt     int64  `json:"limitedAt"`
 	LastCheckedAt int64  `json:"lastCheckedAt"`
+}
+
+type CopyMangaLoginResult struct {
+	Success   bool   `json:"success"`
+	Username  string `json:"username,omitempty"`
+	Token     string `json:"token,omitempty"`
+	IsDevMode bool   `json:"isDevMode"`
+	Message   string `json:"message,omitempty"`
+}
+
+type DevInfo struct {
+	IsDevMode      bool   `json:"isDevMode"`
+	KeySource      string `json:"keySource"`
+	KeyFingerprint string `json:"keyFingerprint"`
+	MachineID      string `json:"machineId,omitempty"`
+	AccountCount   int    `json:"accountCount"`
 }
 
 type SiteProfile struct {

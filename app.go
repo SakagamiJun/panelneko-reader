@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
+	"github.com/sakagamijun/panelneko-reader/internal/crypto"
 	"github.com/sakagamijun/panelneko-reader/internal/downloader"
 	"github.com/sakagamijun/panelneko-reader/internal/downloader/copymanga"
 	"github.com/sakagamijun/panelneko-reader/internal/downloader/klz9"
@@ -337,6 +338,8 @@ type App struct {
 	updater         *updater.Updater
 	updaterProvider updater.Provider
 	isHomebrewFn    func() bool
+	isDevMode       bool
+	devModeLock     sync.RWMutex
 }
 
 func NewApp() *App {
@@ -402,6 +405,9 @@ func (a *App) bootstrap() error {
 	copyClient := copymanga.NewClient(st.Downloader.CopyMangaAPIDomain, st.Downloader.CopyMangaToken, 15)
 	copyClient.SetStore(storeValue)
 	copyClient.SetCDNSettings(st.Downloader.CopyMangaCDNMode, st.Downloader.CopyMangaCustomCDNs)
+	if st.Downloader.CopyMangaUsername != "" && st.Downloader.CopyMangaPasswordEncrypted != "" {
+		copyClient.SetUserCredentials(st.Downloader.CopyMangaUsername, st.Downloader.CopyMangaPasswordEncrypted)
+	}
 	klzClient := klz9.NewClient(storeValue, st.Downloader.RawMangaBaseURL, 20)
 	downloadMgr := downloader.NewManager(storeValue, settingsService, copyClient, klzClient)
 	downloadMgr.SetEmitter(a.emit)
@@ -1469,4 +1475,156 @@ func (a *App) GetAllMangaOnlineLinks() ([]contracts.MangaOnlineLink, error) {
 		return nil, err
 	}
 	return a.store.GetAllMangaOnlineLinks()
+}
+
+func (a *App) LoginCopyManga(username string, password string) (contracts.CopyMangaLoginResult, error) {
+	username = strings.TrimSpace(username)
+	password = strings.TrimSpace(password)
+
+	// Local Developer Mode: root / dev activates in-memory dev mode without network requests
+	if username == "root" && password == "dev" {
+		a.devModeLock.Lock()
+		a.isDevMode = true
+		a.devModeLock.Unlock()
+		logger.Get().Info("Local Developer Mode unlocked via root/dev credentials")
+		return contracts.CopyMangaLoginResult{
+			Success:   true,
+			IsDevMode: true,
+			Message:   "developer_mode_activated",
+		}, nil
+	}
+
+	if username == "" || password == "" {
+		return contracts.CopyMangaLoginResult{Success: false}, fmt.Errorf("username and password cannot be empty")
+	}
+
+	if err := a.ensureReady(); err != nil {
+		return contracts.CopyMangaLoginResult{Success: false}, err
+	}
+
+	token, err := a.copyManga.LoginUser(context.Background(), username, password)
+	if err != nil {
+		return contracts.CopyMangaLoginResult{Success: false}, fmt.Errorf("login failed: %w", err)
+	}
+
+	machineID := crypto.GetMachineID()
+	encPwd, err := crypto.EncryptPassword(password, machineID, username)
+	if err != nil {
+		logger.Get().Warn("Failed to encrypt password: %v", err)
+		encPwd = ""
+	}
+
+	if a.settings != nil {
+		st := a.settings.Get()
+		st.Downloader.CopyMangaUsername = username
+		st.Downloader.CopyMangaPasswordEncrypted = encPwd
+		st.Downloader.CopyMangaToken = token
+		_, _ = a.settings.Update(st)
+	}
+
+	if a.copyManga != nil {
+		a.copyManga.SetToken(token)
+		a.copyManga.SetUserCredentials(username, encPwd)
+	}
+
+	return contracts.CopyMangaLoginResult{
+		Success:   true,
+		Username:  username,
+		Token:     token,
+		IsDevMode: a.GetIsDevMode(),
+		Message:   "login_success",
+	}, nil
+}
+
+func (a *App) LogoutCopyManga() error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	if a.settings != nil {
+		st := a.settings.Get()
+		st.Downloader.CopyMangaUsername = ""
+		st.Downloader.CopyMangaPasswordEncrypted = ""
+		st.Downloader.CopyMangaToken = ""
+		_, _ = a.settings.Update(st)
+	}
+	if a.copyManga != nil {
+		a.copyManga.SetToken("")
+		a.copyManga.SetUserCredentials("", "")
+	}
+	return nil
+}
+
+func (a *App) GetIsDevMode() bool {
+	a.devModeLock.RLock()
+	defer a.devModeLock.RUnlock()
+	return a.isDevMode
+}
+
+func (a *App) GetDevInfo() (contracts.DevInfo, error) {
+	a.devModeLock.RLock()
+	isDev := a.isDevMode
+	a.devModeLock.RUnlock()
+
+	machineID := crypto.GetMachineID()
+	keySource, keyFingerprint := crypto.GetKeyFingerprint(machineID, "root")
+	accountCount := 0
+	if a.store != nil {
+		accounts, _ := a.store.GetCopyMangaAccounts()
+		accountCount = len(accounts)
+	}
+
+	return contracts.DevInfo{
+		IsDevMode:      isDev,
+		KeySource:      keySource,
+		KeyFingerprint: keyFingerprint,
+		MachineID:      machineID,
+		AccountCount:   accountCount,
+	}, nil
+}
+
+func (a *App) GetCopyMangaAccounts() ([]contracts.CopyMangaAccount, error) {
+	if err := a.ensureReady(); err != nil {
+		return nil, err
+	}
+	return a.store.GetCopyMangaAccounts()
+}
+
+func (a *App) AddCopyMangaAccount(username string, password string, token string) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	username = strings.TrimSpace(username)
+	password = strings.TrimSpace(password)
+	token = strings.TrimSpace(token)
+
+	if username == "" {
+		return fmt.Errorf("username cannot be empty")
+	}
+
+	if token == "" && password != "" {
+		tok, err := a.copyManga.LoginUser(context.Background(), username, password)
+		if err == nil {
+			token = tok
+		}
+	}
+
+	machineID := crypto.GetMachineID()
+	encPwd, _ := crypto.EncryptPassword(password, machineID, username)
+
+	acc := contracts.CopyMangaAccount{
+		Username:      username,
+		Password:      encPwd,
+		Token:         token,
+		LimitedAt:     0,
+		LastCheckedAt: time.Now().Unix(),
+	}
+
+	return a.store.SaveCopyMangaAccount(acc)
+}
+
+func (a *App) DeleteCopyMangaAccount(username string) error {
+	if err := a.ensureReady(); err != nil {
+		return err
+	}
+	return a.store.DeleteCopyMangaAccount(strings.TrimSpace(username))
 }

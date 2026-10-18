@@ -13,6 +13,9 @@ import type {
   ReaderManifest,
   ReaderProgress,
   UpdateCheckResult,
+  CopyMangaLoginResult,
+  DevInfo,
+  CopyMangaAccount,
 } from "@/lib/contracts";
 import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 import { isWailsEnvironment } from "@/lib/runtime";
@@ -278,6 +281,59 @@ export class WailsAdapter implements AppAdapter {
       return ((await fn()) ?? []) as MangaOnlineLink[];
     }
     return [];
+  }
+
+  async loginCopyManga(username: string, password: string): Promise<CopyMangaLoginResult> {
+    const fn = (App as any).LoginCopyManga;
+    if (typeof fn === "function") {
+      return (await fn(username, password)) as CopyMangaLoginResult;
+    }
+    return { success: false, isDevMode: false };
+  }
+
+  async logoutCopyManga(): Promise<void> {
+    const fn = (App as any).LogoutCopyManga;
+    if (typeof fn === "function") {
+      await fn();
+    }
+  }
+
+  async getIsDevMode(): Promise<boolean> {
+    const fn = (App as any).GetIsDevMode;
+    if (typeof fn === "function") {
+      return (await fn()) ?? false;
+    }
+    return false;
+  }
+
+  async getDevInfo(): Promise<DevInfo> {
+    const fn = (App as any).GetDevInfo;
+    if (typeof fn === "function") {
+      return (await fn()) as DevInfo;
+    }
+    return { isDevMode: false, keySource: "", keyFingerprint: "", accountCount: 0 };
+  }
+
+  async getCopyMangaAccounts(): Promise<CopyMangaAccount[]> {
+    const fn = (App as any).GetCopyMangaAccounts;
+    if (typeof fn === "function") {
+      return ((await fn()) ?? []) as CopyMangaAccount[];
+    }
+    return [];
+  }
+
+  async addCopyMangaAccount(username: string, password: string, token: string): Promise<void> {
+    const fn = (App as any).AddCopyMangaAccount;
+    if (typeof fn === "function") {
+      await fn(username, password, token);
+    }
+  }
+
+  async deleteCopyMangaAccount(username: string): Promise<void> {
+    const fn = (App as any).DeleteCopyMangaAccount;
+    if (typeof fn === "function") {
+      await fn(username);
+    }
   }
 
   subscribe(eventName: string, callback: (payload: unknown) => void) {

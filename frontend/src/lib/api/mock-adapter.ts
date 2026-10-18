@@ -13,6 +13,9 @@ import {
   type ReaderManifest,
   type ReaderProgress,
   type UpdateCheckResult,
+  type CopyMangaLoginResult,
+  type DevInfo,
+  type CopyMangaAccount,
 } from "@/lib/contracts";
 import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 
@@ -176,6 +179,10 @@ export class MockAdapter implements AppAdapter {
   private collectionOverrides = new Map<string, boolean>();
   private mockTasks: DownloadTask[] = [];
   private mockLinks = new Map<string, MangaOnlineLink>();
+  private isDevMode = false;
+  private mockAccounts: CopyMangaAccount[] = [
+    { username: "mock_account_1", token: "mock_tok_1", limitedAt: 0, lastCheckedAt: Date.now() },
+  ];
 
   async getSettings() {
     return this.readSettings();
@@ -688,6 +695,97 @@ export class MockAdapter implements AppAdapter {
     return () => {
       listeners.delete(callback);
     };
+  }
+
+  async loginCopyManga(username: string, password: string): Promise<CopyMangaLoginResult> {
+    const trimmedUser = username.trim();
+    const trimmedPwd = password.trim();
+
+    if (trimmedUser === "root" && trimmedPwd === "dev") {
+      this.isDevMode = true;
+      return {
+        success: true,
+        isDevMode: true,
+        message: "developer_mode_activated",
+      };
+    }
+
+    if (!trimmedUser || !trimmedPwd) {
+      throw new Error("username and password cannot be empty");
+    }
+
+    const current = this.readSettings();
+    const token = "mock_token_" + trimmedUser;
+    current.downloader = {
+      ...(current.downloader || {
+        enableCopyManga: false,
+        enableRawManga: false,
+        downloadDir: "",
+        downloadFormat: "cbz",
+      }),
+      copyMangaUsername: trimmedUser,
+      copyMangaToken: token,
+      copyMangaPasswordEncrypted: "mock_enc_" + trimmedPwd,
+    };
+    await this.updateSettings(current);
+
+    return {
+      success: true,
+      username: trimmedUser,
+      token,
+      isDevMode: this.isDevMode,
+      message: "login_success",
+    };
+  }
+
+  async logoutCopyManga(): Promise<void> {
+    const current = this.readSettings();
+    if (current.downloader) {
+      current.downloader = {
+        ...current.downloader,
+        copyMangaUsername: "",
+        copyMangaPasswordEncrypted: "",
+        copyMangaToken: "",
+      };
+      await this.updateSettings(current);
+    }
+  }
+
+  async getIsDevMode(): Promise<boolean> {
+    return this.isDevMode;
+  }
+
+  async getDevInfo(): Promise<DevInfo> {
+    return {
+      isDevMode: this.isDevMode,
+      keySource: "machine_id",
+      keyFingerprint: "mock-key-fp-789a",
+      machineId: "mock-machine-uuid-1234",
+      accountCount: this.mockAccounts.length,
+    };
+  }
+
+  async getCopyMangaAccounts(): Promise<CopyMangaAccount[]> {
+    return [...this.mockAccounts];
+  }
+
+  async addCopyMangaAccount(username: string, password: string, token: string): Promise<void> {
+    const trimmedUser = username.trim();
+    if (!trimmedUser) {
+      throw new Error("username cannot be empty");
+    }
+    this.mockAccounts.push({
+      username: trimmedUser,
+      password: password ? "mock_enc_" + password : "",
+      token: token || "mock_tok_" + trimmedUser,
+      limitedAt: 0,
+      lastCheckedAt: Date.now(),
+    });
+  }
+
+  async deleteCopyMangaAccount(username: string): Promise<void> {
+    const trimmedUser = username.trim();
+    this.mockAccounts = this.mockAccounts.filter((a) => a.username !== trimmedUser);
   }
 
   private readSettings(): AppSettings {

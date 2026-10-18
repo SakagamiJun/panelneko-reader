@@ -13,6 +13,9 @@ import type {
   ReaderManifest,
   ReaderProgress,
   UpdateCheckResult,
+  CopyMangaLoginResult,
+  DevInfo,
+  CopyMangaAccount,
 } from "@/lib/contracts";
 
 export interface SelectDirectoryOptions {
@@ -65,4 +68,11 @@ export interface AppAdapter {
   openLogDirectory(): Promise<void>;
   toggleMangaAutoFollow(mangaID: string): Promise<boolean>;
   getAllMangaOnlineLinks(): Promise<MangaOnlineLink[]>;
+  loginCopyManga(username: string, password: string): Promise<CopyMangaLoginResult>;
+  logoutCopyManga(): Promise<void>;
+  getIsDevMode(): Promise<boolean>;
+  getDevInfo(): Promise<DevInfo>;
+  getCopyMangaAccounts(): Promise<CopyMangaAccount[]>;
+  addCopyMangaAccount(username: string, password: string, token: string): Promise<void>;
+  deleteCopyMangaAccount(username: string): Promise<void>;
 }

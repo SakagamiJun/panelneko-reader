@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
+	"github.com/sakagamijun/panelneko-reader/internal/crypto"
 )
 
 const (
@@ -80,6 +81,7 @@ type AccountStore interface {
 	SaveCopyMangaAccount(acc contracts.CopyMangaAccount) error
 	UpdateCopyMangaAccountLimited(username string, limitedAt int64) error
 	UpdateCopyMangaAccountToken(username string, token string, lastCheckedAt int64) error
+	DeleteCopyMangaAccount(username string) error
 }
 
 type Client struct {
@@ -87,6 +89,9 @@ type Client struct {
 	imgClient           *http.Client
 	apiDomain           string
 	userConfiguredToken string
+	userUsername        string
+	userPasswordEnc     string
+	userLimitedAt       int64
 	token               string
 	cdnMode             string // "official" | "striped"
 	cdnNodes            []*CDNNode
@@ -142,6 +147,17 @@ func (c *Client) SetStore(s AccountStore) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.store = s
+}
+
+func (c *Client) SetUserCredentials(username, encPassword string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.userUsername = username
+	c.userPasswordEnc = encPassword
+}
+
+func (c *Client) LoginUser(ctx context.Context, username, password string) (string, error) {
+	return c.loginWithAccount(ctx, username, password)
 }
 
 func (c *Client) SetRetryBackoffs(backoffs []time.Duration) {
@@ -871,9 +887,15 @@ func (c *Client) RegisterTemporaryAccount(ctx context.Context) (string, error) {
 func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 	c.mu.RLock()
 	userToken := c.userConfiguredToken
+	userUsername := c.userUsername
+	userLimitedAt := c.userLimitedAt
 	c.mu.RUnlock()
-	if userToken != "" {
-		return userToken, "", nil
+
+	now := time.Now().Unix()
+
+	// 1. If personal account is configured, check if its 60s cooldown has passed
+	if userToken != "" && (userLimitedAt == 0 || now-userLimitedAt > 60) {
+		return userToken, userUsername, nil
 	}
 
 	c.accountLock.Lock()
@@ -891,16 +913,14 @@ func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 		return "", "", err
 	}
 
-	now := time.Now().Unix()
-
-	// 1. Look for an available account whose 60s cooldown has passed
+	// 2. Look for an available pool account whose 60s cooldown has passed
 	for _, a := range accounts {
 		if now-a.LimitedAt > 60 {
 			return a.Token, a.Username, nil
 		}
 	}
 
-	// 2. If no available account, and pool hasn't reached the 3-account cap:
+	// 3. If no available account, and pool hasn't reached the 3-account cap:
 	if len(accounts) < 3 {
 		acc, err := c.registerAndSaveNewAccount(ctx)
 		if err != nil {
@@ -909,8 +929,8 @@ func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 		return acc.Token, acc.Username, nil
 	}
 
-	// 3. Pool has reached the hard cap of 3 accounts. Do NOT register any new accounts!
-	// Find the account that unfreezes earliest
+	// 4. Pool has reached the hard cap of 3 accounts. Do NOT register any new accounts!
+	// Find the account that unfreezes earliest (including personal account if closer)
 	earliestIdx := 0
 	for i := 1; i < len(accounts); i++ {
 		if accounts[i].LimitedAt < accounts[earliestIdx].LimitedAt {
@@ -918,8 +938,17 @@ func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 		}
 	}
 	earliest := accounts[earliestIdx]
+	earliestLimitedAt := earliest.LimitedAt
+	tokenToReturn := earliest.Token
+	usernameToReturn := earliest.Username
 
-	waitTime := time.Duration(60-(now-earliest.LimitedAt)+1) * time.Second
+	if userToken != "" && userLimitedAt > 0 && userLimitedAt < earliestLimitedAt {
+		earliestLimitedAt = userLimitedAt
+		tokenToReturn = userToken
+		usernameToReturn = userUsername
+	}
+
+	waitTime := time.Duration(60-(now-earliestLimitedAt)+1) * time.Second
 	if waitTime < 1*time.Second {
 		waitTime = 1 * time.Second
 	} else if waitTime > 60*time.Second {
@@ -932,17 +961,47 @@ func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 	case <-time.After(waitTime):
 	}
 
-	return earliest.Token, earliest.Username, nil
+	return tokenToReturn, usernameToReturn, nil
 }
 
 func (c *Client) markAccountLimited(username string) {
+	c.mu.Lock()
+	if c.userUsername != "" && c.userUsername == username {
+		c.userLimitedAt = time.Now().Unix()
+	}
+	c.mu.Unlock()
+
 	if c.store != nil && username != "" {
 		_ = c.store.UpdateCopyMangaAccountLimited(username, time.Now().Unix())
 	}
 }
 
 func (c *Client) lazyRefreshToken(ctx context.Context, username string) (string, error) {
-	if c.store == nil || username == "" {
+	if username == "" {
+		return "", nil
+	}
+
+	c.mu.RLock()
+	isUserAcc := (c.userUsername != "" && c.userUsername == username)
+	encPwd := c.userPasswordEnc
+	c.mu.RUnlock()
+
+	if isUserAcc && encPwd != "" {
+		machineID := crypto.GetMachineID()
+		plainPwd, err := crypto.DecryptPassword(encPwd, machineID, username)
+		if err == nil && plainPwd != "" {
+			newToken, err := c.loginWithAccount(ctx, username, plainPwd)
+			if err == nil && newToken != "" {
+				c.mu.Lock()
+				c.userConfiguredToken = newToken
+				c.token = newToken
+				c.mu.Unlock()
+				return newToken, nil
+			}
+		}
+	}
+
+	if c.store == nil {
 		return "", nil
 	}
 	accounts, err := c.store.GetCopyMangaAccounts()
@@ -951,7 +1010,12 @@ func (c *Client) lazyRefreshToken(ctx context.Context, username string) (string,
 	}
 	for _, a := range accounts {
 		if a.Username == username {
-			newToken, err := c.loginWithAccount(ctx, a.Username, a.Password)
+			password := a.Password
+			machineID := crypto.GetMachineID()
+			if decrypted, decErr := crypto.DecryptPassword(password, machineID, username); decErr == nil && decrypted != "" {
+				password = decrypted
+			}
+			newToken, err := c.loginWithAccount(ctx, a.Username, password)
 			if err != nil {
 				return "", err
 			}

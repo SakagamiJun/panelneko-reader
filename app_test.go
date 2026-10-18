@@ -1328,3 +1328,71 @@ func TestCheckMangaUpdatesGroupAware(t *testing.T) {
 		t.Fatalf("expected 0 new queued chapters since ch-2 was already queued, got %d", allQueued)
 	}
 }
+
+func TestLoginCopyMangaDeveloperModeAndAccounts(t *testing.T) {
+	app := &App{}
+
+	// Initially dev mode is false
+	if app.GetIsDevMode() {
+		t.Fatal("expected dev mode to be false initially")
+	}
+
+	// Login with root / dev activates dev mode without network call
+	res, err := app.LoginCopyManga("root", "dev")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Success || !res.IsDevMode {
+		t.Fatalf("expected dev mode activated, got %+v", res)
+	}
+	if !app.GetIsDevMode() {
+		t.Fatal("expected GetIsDevMode to return true")
+	}
+
+	// Verify DevInfo
+	info, err := app.GetDevInfo()
+	if err != nil {
+		t.Fatalf("GetDevInfo failed: %v", err)
+	}
+	if !info.IsDevMode || info.KeySource == "" || info.KeyFingerprint == "" {
+		t.Errorf("unexpected DevInfo: %+v", info)
+	}
+
+	// Verify Account operations with a store
+	tempDir := t.TempDir()
+	sqliteStore, err := store.Open(tempDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer sqliteStore.Close()
+	app.store = sqliteStore
+
+	settingsService, err := settings.NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+	app.settings = settingsService
+	app.copyManga = copymanga.NewClient("127.0.0.1", "", 5)
+
+	// Add manual account
+	err = app.AddCopyMangaAccount("dev_acc1", "plain_password", "token_dev1")
+	if err != nil {
+		t.Fatalf("AddCopyMangaAccount failed: %v", err)
+	}
+
+	accounts, err := app.GetCopyMangaAccounts()
+	if err != nil || len(accounts) != 1 || accounts[0].Username != "dev_acc1" {
+		t.Fatalf("expected dev_acc1, got %+v", accounts)
+	}
+
+	// Delete account
+	err = app.DeleteCopyMangaAccount("dev_acc1")
+	if err != nil {
+		t.Fatalf("DeleteCopyMangaAccount failed: %v", err)
+	}
+
+	accountsAfter, err := app.GetCopyMangaAccounts()
+	if err != nil || len(accountsAfter) != 0 {
+		t.Fatalf("expected 0 accounts after deletion, got %+v", accountsAfter)
+	}
+}

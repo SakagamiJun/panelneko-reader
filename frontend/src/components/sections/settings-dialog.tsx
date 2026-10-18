@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   BookOpen,
   Check,
+  Code2,
   Download,
   Folder,
   Info,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { appAdapter } from "@/lib/api";
 import type { AppSettings } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 import { GeneralTab } from "./settings/general-tab";
@@ -21,8 +23,9 @@ import { DownloadsTab } from "./settings/downloads-tab";
 import { ReaderTab } from "./settings/reader-tab";
 import { ShortcutsTab } from "./settings/shortcuts-tab";
 import { AboutTab } from "./settings/about-tab";
+import { DeveloperTab } from "./settings/developer-tab";
 
-export type SettingsTab = "general" | "sources" | "downloads" | "reader" | "shortcuts" | "about";
+export type SettingsTab = "general" | "sources" | "downloads" | "reader" | "shortcuts" | "about" | "developer";
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -49,8 +52,15 @@ export function SettingsDialog({
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
   const [form, setForm] = useState<AppSettings>(settings);
   const [isSavedRecently, setIsSavedRecently] = useState(false);
+  const [isDevMode, setIsDevMode] = useState(false);
 
   const saveTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      appAdapter.getIsDevMode().then(setIsDevMode).catch(() => {});
+    }
+  }, [open]);
 
   useEffect(() => {
     if (settings) {
@@ -144,6 +154,9 @@ export function SettingsDialog({
     { id: "reader", label: t("settings.readerPreferences"), icon: <BookOpen className="h-4 w-4" /> },
     { id: "shortcuts", label: t("settings.shortcuts"), icon: <Keyboard className="h-4 w-4" /> },
     { id: "about", label: t("settings.aboutTab"), icon: <Info className="h-4 w-4" /> },
+    ...(isDevMode
+      ? [{ id: "developer" as SettingsTab, label: t("settings.developerTab"), icon: <Code2 className="h-4 w-4" /> }]
+      : []),
   ];
 
   const handleClose = () => {
@@ -262,6 +275,10 @@ export function SettingsDialog({
                 form={form}
                 updateDownloader={updateDownloader}
                 onOpenBatchLink={onOpenBatchLink}
+                onDevModeUnlocked={() => {
+                  setIsDevMode(true);
+                  setActiveTab("developer");
+                }}
               />
             )}
 
@@ -287,6 +304,8 @@ export function SettingsDialog({
                 commit={commit}
               />
             )}
+
+            {activeTab === "developer" && <DeveloperTab />}
           </main>
         </div>
       </div>

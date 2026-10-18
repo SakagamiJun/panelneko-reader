@@ -137,4 +137,25 @@ export const appAdapter: AppAdapter = {
   getAllMangaOnlineLinks() {
     return currentAdapter().getAllMangaOnlineLinks();
   },
+  loginCopyManga(username, password) {
+    return currentAdapter().loginCopyManga(username, password);
+  },
+  logoutCopyManga() {
+    return currentAdapter().logoutCopyManga();
+  },
+  getIsDevMode() {
+    return currentAdapter().getIsDevMode();
+  },
+  getDevInfo() {
+    return currentAdapter().getDevInfo();
+  },
+  getCopyMangaAccounts() {
+    return currentAdapter().getCopyMangaAccounts();
+  },
+  addCopyMangaAccount(username, password, token) {
+    return currentAdapter().addCopyMangaAccount(username, password, token);
+  },
+  deleteCopyMangaAccount(username) {
+    return currentAdapter().deleteCopyMangaAccount(username);
+  },
 };

@@ -813,3 +813,11 @@ func (s *SQLiteStore) UpdateCopyMangaAccountToken(username string, token string,
 	}
 	return nil
 }
+
+func (s *SQLiteStore) DeleteCopyMangaAccount(username string) error {
+	_, err := s.db.Exec(`DELETE FROM copymanga_accounts WHERE username = ?`, username)
+	if err != nil {
+		return fmt.Errorf("delete copymanga account: %w", err)
+	}
+	return nil
+}

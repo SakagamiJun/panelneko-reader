@@ -1,5 +1,16 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, FolderOpen, HardDrive, Link2, Network } from "lucide-react";
+import {
+  Check,
+  Eye,
+  EyeOff,
+  FolderOpen,
+  HardDrive,
+  Link2,
+  LogOut,
+  Network,
+  UserCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -13,14 +24,21 @@ export interface DownloadsTabProps {
   form: AppSettings;
   updateDownloader: (patch: Partial<NonNullable<AppSettings["downloader"]>>) => void;
   onOpenBatchLink?: () => void;
+  onDevModeUnlocked?: () => void;
 }
 
 export function DownloadsTab({
   form,
   updateDownloader,
   onOpenBatchLink,
+  onDevModeUnlocked,
 }: DownloadsTabProps) {
   const { t } = useTranslation();
+  const [usernameInput, setUsernameInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginStatusMessage, setLoginStatusMessage] = useState("");
 
   const selectedTargetSourceId = form.downloader?.targetSourceId || form.librarySources?.[0]?.id;
   const selectedTargetSource = form.librarySources?.find((s) => s.id === selectedTargetSourceId);
@@ -42,6 +60,50 @@ export function DownloadsTab({
       }
     } catch (err) {
       console.error("Failed to select download directory:", err);
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!usernameInput.trim() || !passwordInput.trim()) return;
+    setIsLoggingIn(true);
+    setLoginStatusMessage("");
+    try {
+      const res = await appAdapter.loginCopyManga(usernameInput, passwordInput);
+      if (res.isDevMode) {
+        setLoginStatusMessage(t("settings.devModeActivated"));
+        onDevModeUnlocked?.();
+        setUsernameInput("");
+        setPasswordInput("");
+        return;
+      }
+      if (res.success) {
+        updateDownloader({
+          copyMangaUsername: res.username,
+          copyMangaToken: res.token,
+        });
+        setUsernameInput("");
+        setPasswordInput("");
+      }
+    } catch (err: any) {
+      setLoginStatusMessage(err?.message || t("settings.loginFailed"));
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setIsLoggingIn(true);
+    try {
+      await appAdapter.logoutCopyManga();
+      updateDownloader({
+        copyMangaUsername: "",
+        copyMangaToken: "",
+        copyMangaPasswordEncrypted: "",
+      });
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -76,18 +138,79 @@ export function DownloadsTab({
                 />
               }
             />
-            <SettingRow
-              title={t("settings.copyMangaToken")}
-              description={t("settings.copyMangaTokenHint")}
-              control={
-                <Input
-                  value={form.downloader?.copyMangaToken ?? ""}
-                  onChange={(e) => updateDownloader({ copyMangaToken: e.target.value })}
-                  className="w-56 text-xs h-7"
-                  placeholder="Optional authorization token"
-                />
-              }
-            />
+            {form.downloader?.copyMangaUsername ? (
+              <SettingRow
+                title={t("settings.copyMangaAccount")}
+                description={t("settings.copyMangaAccountHint")}
+                control={
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-border/60 bg-muted/30 text-xs">
+                      <UserCheck className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-medium text-foreground">{form.downloader.copyMangaUsername}</span>
+                      <span className="text-[10px] text-muted-foreground">({t("settings.copyMangaAuthorized")})</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                      onClick={handleLogout}
+                      disabled={isLoggingIn}
+                    >
+                      <LogOut className="h-3.5 w-3.5 mr-1" />
+                      {t("settings.logout")}
+                    </Button>
+                  </div>
+                }
+              />
+            ) : (
+              <SettingRow
+                title={t("settings.copyMangaAccount")}
+                description={t("settings.copyMangaLoginHint")}
+                control={
+                  <div className="flex flex-col gap-1.5 w-72">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={usernameInput}
+                        onChange={(e) => setUsernameInput(e.target.value)}
+                        placeholder={t("settings.usernamePlaceholder")}
+                        className="text-xs h-7 flex-1"
+                        disabled={isLoggingIn}
+                      />
+                      <div className="relative flex-1">
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          value={passwordInput}
+                          onChange={(e) => setPasswordInput(e.target.value)}
+                          placeholder={t("settings.passwordPlaceholder")}
+                          className="text-xs h-7 pr-7"
+                          disabled={isLoggingIn}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-muted-foreground truncate max-w-[190px]">
+                        {loginStatusMessage}
+                      </div>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs px-3 shrink-0"
+                        onClick={handleLogin}
+                        disabled={isLoggingIn || !usernameInput.trim() || !passwordInput.trim()}
+                      >
+                        {isLoggingIn ? t("settings.loggingIn") : t("settings.login")}
+                      </Button>
+                    </div>
+                  </div>
+                }
+              />
+            )}
             <SettingRow
               title={t("settings.copyMangaCDNMode")}
               description={t("settings.copyMangaCDNModeHint")}

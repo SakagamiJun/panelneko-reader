@@ -264,5 +264,48 @@ describe("MockAdapter Pin Functionality", () => {
     const linkAfter = await adapter.getMangaOnlineLink("mock-1");
     expect(linkAfter.onlineComicId).toBeUndefined();
   });
+
+  it("handles CopyManga login, developer mode, and account pool in mock mode", async () => {
+    // 1. Initially dev mode is false
+    expect(await adapter.getIsDevMode()).toBe(false);
+
+    // 2. Unlocking developer mode via root / dev
+    const devRes = await adapter.loginCopyManga("root", "dev");
+    expect(devRes.success).toBe(true);
+    expect(devRes.isDevMode).toBe(true);
+    expect(await adapter.getIsDevMode()).toBe(true);
+
+    const devInfo = await adapter.getDevInfo();
+    expect(devInfo.isDevMode).toBe(true);
+    expect(devInfo.keySource).toBe("machine_id");
+
+    // 3. Normal user login
+    const userRes = await adapter.loginCopyManga("testuser", "testpassword");
+    expect(userRes.success).toBe(true);
+    expect(userRes.username).toBe("testuser");
+    expect(userRes.token).toBe("mock_token_testuser");
+
+    const settings = await adapter.getSettings();
+    expect(settings.downloader?.copyMangaUsername).toBe("testuser");
+    expect(settings.downloader?.copyMangaToken).toBe("mock_token_testuser");
+
+    // 4. Logout
+    await adapter.logoutCopyManga();
+    const settingsAfterLogout = await adapter.getSettings();
+    expect(settingsAfterLogout.downloader?.copyMangaUsername).toBe("");
+
+    // 5. Account pool operations
+    const accounts = await adapter.getCopyMangaAccounts();
+    expect(accounts.length).toBeGreaterThan(0);
+
+    await adapter.addCopyMangaAccount("extra_acc", "extra_pwd", "extra_tok");
+    const accountsAfterAdd = await adapter.getCopyMangaAccounts();
+    expect(accountsAfterAdd.some((a) => a.username === "extra_acc")).toBe(true);
+
+    await adapter.deleteCopyMangaAccount("extra_acc");
+    const accountsAfterDel = await adapter.getCopyMangaAccounts();
+    expect(accountsAfterDel.some((a) => a.username === "extra_acc")).toBe(false);
+  });
 });
+
 
