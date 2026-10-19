@@ -1355,8 +1355,22 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 		}
 
 		grp := strings.TrimSpace(ch.Group)
-		// If user previously downloaded specific groups, only auto-follow new chapters in those groups
-		if len(downloadedGroups) > 0 && grp != "" && !downloadedGroups[grp] {
+		targetGroup := strings.TrimSpace(link.TargetGroup)
+		if targetGroup != "" && !strings.EqualFold(targetGroup, "all") {
+			// If user explicitly configured TargetGroup, strictly match it!
+			matched := false
+			if strings.EqualFold(targetGroup, "default") || targetGroup == "话" {
+				matched = strings.EqualFold(grp, "default") || grp == "话" || grp == ""
+			} else if strings.EqualFold(targetGroup, "tankobon") || targetGroup == "单行本" {
+				matched = strings.EqualFold(grp, "tankobon") || grp == "单行本"
+			} else {
+				matched = strings.EqualFold(grp, targetGroup)
+			}
+			if !matched {
+				continue
+			}
+		} else if len(downloadedGroups) > 0 && grp != "" && !downloadedGroups[grp] {
+			// If user previously downloaded specific groups, only auto-follow new chapters in those groups
 			continue
 		}
 

@@ -240,6 +240,7 @@ type MangaOnlineLink struct {
 	FollowPolicy        string `json:"followPolicy"` // "latest_only" | "fill_gaps"
 	LastCheckedAt       string `json:"lastCheckedAt"`
 	LastNotifiedChapter string `json:"lastNotifiedChapter,omitempty"`
+	TargetGroup         string `json:"targetGroup,omitempty"`
 }
 
 type CopyMangaAccount struct {

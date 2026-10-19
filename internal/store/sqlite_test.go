@@ -376,3 +376,58 @@ func TestCopyMangaAccountsRoundTrip(t *testing.T) {
 		t.Fatalf("expected only user2 remaining, got %+v", listAfterDelete)
 	}
 }
+
+func TestMangaOnlineLinksWithTargetGroup(t *testing.T) {
+	tempDir := t.TempDir()
+	sqliteStore, err := Open(tempDir)
+	if err != nil {
+		t.Fatalf("failed to init sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	link := contracts.MangaOnlineLink{
+		MangaID:             "manga-1",
+		OnlineSource:        "copymanga",
+		OnlineComicID:       "comic-1",
+		OnlineTitle:         "Comic Title",
+		AutoFollow:          true,
+		FollowPolicy:        "latest_only",
+		LastCheckedAt:       "2026-01-01T00:00:00Z",
+		LastNotifiedChapter: "Chapter 1",
+		TargetGroup:         "单行本",
+	}
+
+	if err := sqliteStore.SaveMangaOnlineLink(link); err != nil {
+		t.Fatalf("save link failed: %v", err)
+	}
+
+	got, found, err := sqliteStore.GetMangaOnlineLink("manga-1")
+	if err != nil || !found {
+		t.Fatalf("get link failed: %v, found: %v", err, found)
+	}
+	if got.TargetGroup != "单行本" {
+		t.Fatalf("expected TargetGroup '单行本', got %q", got.TargetGroup)
+	}
+
+	// Test GetAllMangaOnlineLinks
+	all, err := sqliteStore.GetAllMangaOnlineLinks()
+	if err != nil {
+		t.Fatalf("get all links failed: %v", err)
+	}
+	if len(all) != 1 || all[0].TargetGroup != "单行本" {
+		t.Fatalf("expected 1 link with TargetGroup '单行本', got %+v", all)
+	}
+
+	// Test update TargetGroup
+	link.TargetGroup = "话"
+	if err := sqliteStore.SaveMangaOnlineLink(link); err != nil {
+		t.Fatalf("update link failed: %v", err)
+	}
+	got2, found, err := sqliteStore.GetMangaOnlineLink("manga-1")
+	if err != nil || !found {
+		t.Fatalf("get link after update failed: %v, found: %v", err, found)
+	}
+	if got2.TargetGroup != "话" {
+		t.Fatalf("expected TargetGroup '话', got %q", got2.TargetGroup)
+	}
+}
