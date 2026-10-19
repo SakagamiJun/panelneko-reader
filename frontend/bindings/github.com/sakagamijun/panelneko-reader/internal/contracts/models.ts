@@ -212,6 +212,7 @@ export interface MangaOnlineLink {
     "followPolicy": string;
     "lastCheckedAt": string;
     "lastNotifiedChapter"?: string;
+    "targetGroup"?: string;
 }
 
 export interface OnlineMangaChapter {
