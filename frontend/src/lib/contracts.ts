@@ -156,6 +156,7 @@ export interface MangaOnlineLink {
   followPolicy: "latest_only" | "fill_gaps";
   lastCheckedAt?: string;
   lastNotifiedChapter?: string;
+  targetGroup?: string;
 }
 
 export interface LibraryManga {

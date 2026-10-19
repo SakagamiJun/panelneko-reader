@@ -433,5 +433,12 @@ export const en = {
     filterLinked: "Linked",
     filterUnlinked: "Unlinked",
     allSources: "All Directories",
+    targetGroup: "Target Group",
+    groupAuto: "Auto Detect",
+    groupSerial: "Serialized",
+    groupTankobon: "Volumes",
+    groupExtra: "Extras",
+    groupAll: "All",
+    filterSourceDirectory: "Filter Directory",
   },
 };

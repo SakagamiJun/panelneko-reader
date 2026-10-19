@@ -433,5 +433,12 @@ export const zhCN = {
     filterLinked: "已关联",
     filterUnlinked: "未关联",
     allSources: "全部目录",
+    targetGroup: "追踪分组",
+    groupAuto: "自动嗅探",
+    groupSerial: "连载话",
+    groupTankobon: "单行本",
+    groupExtra: "番外篇",
+    groupAll: "全部",
+    filterSourceDirectory: "筛选目录",
   },
 };

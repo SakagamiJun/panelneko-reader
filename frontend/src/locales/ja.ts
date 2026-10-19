@@ -433,5 +433,12 @@ export const ja = {
     filterLinked: "紐付け済",
     filterUnlinked: "未紐付け",
     allSources: "すべてのディレクトリ",
+    targetGroup: "追跡グループ",
+    groupAuto: "自動検出",
+    groupSerial: "本編話",
+    groupTankobon: "単行本",
+    groupExtra: "番外編",
+    groupAll: "すべて",
+    filterSourceDirectory: "ディレクトリ絞り込み",
   },
 };
