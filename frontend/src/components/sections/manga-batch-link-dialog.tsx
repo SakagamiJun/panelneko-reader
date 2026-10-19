@@ -1,12 +1,14 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
   BookOpen,
   Check,
   CheckSquare,
+  ChevronDown,
   Folder,
   Globe,
+  Layers,
   Link2,
   Loader2,
   RefreshCw,
@@ -57,6 +59,33 @@ export function MangaBatchLinkDialog({
   const [submittingIds, setSubmittingIds] = useState<Set<string>>(new Set());
 
   const [batchPolicy, setBatchPolicy] = useState<"latest_only" | "fill_gaps">("latest_only");
+  const [batchGroup, setBatchGroup] = useState<string>("");
+  const [mangaGroups, setMangaGroups] = useState<Map<string, string>>(new Map());
+  const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false);
+  const [openGroupMenuMangaId, setOpenGroupMenuMangaId] = useState<string | null>(null);
+
+  const sourceMenuRef = useRef<HTMLDivElement>(null);
+
+  const groupOptions = useMemo(
+    () => [
+      { value: "", label: t("batchLink.groupAuto") },
+      { value: "话", label: t("batchLink.groupSerial") },
+      { value: "单行本", label: t("batchLink.groupTankobon") },
+      { value: "番外", label: t("batchLink.groupExtra") },
+    ],
+    [t]
+  );
+
+  const getGroupLabel = useCallback(
+    (group?: string) => {
+      if (!group) return t("batchLink.groupAuto");
+      if (group === "话" || group === "default") return t("batchLink.groupSerial");
+      if (group === "单行本" || group === "tankobon") return t("batchLink.groupTankobon");
+      if (group === "番外") return t("batchLink.groupExtra");
+      return group;
+    },
+    [t]
+  );
 
   // Load existing links
   const loadLinks = useCallback(async () => {
@@ -81,11 +110,39 @@ export function MangaBatchLinkDialog({
       setSelectedIds(new Set());
       setMatchResults(new Map());
       setSelectedMatch(new Map());
+      setMangaGroups(new Map());
       setFilterQuery("");
       setLinkFilter("all");
       setSourceFilter("all");
+      setIsSourceMenuOpen(false);
+      setOpenGroupMenuMangaId(null);
     }
   }, [open, loadLinks]);
+
+  // Click outside to close source filter menu
+  useEffect(() => {
+    if (!isSourceMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sourceMenuRef.current && !sourceMenuRef.current.contains(e.target as Node)) {
+        setIsSourceMenuOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [isSourceMenuOpen]);
+
+  // Click outside to close per-manga group selection menu
+  useEffect(() => {
+    if (!openGroupMenuMangaId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-group-menu]")) {
+        setOpenGroupMenuMangaId(null);
+      }
+    };
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [openGroupMenuMangaId]);
 
   // Handle escape key
   useEffect(() => {
@@ -170,6 +227,7 @@ export function MangaBatchLinkDialog({
         onlineTitle: matched.title,
         autoFollow: true,
         followPolicy: batchPolicy,
+        targetGroup: mangaGroups.get(manga.id) || batchGroup,
       });
       await loadLinks();
       onLinksChanged?.();
@@ -179,6 +237,30 @@ export function MangaBatchLinkDialog({
       setSubmittingIds((prev) => {
         const next = new Set(prev);
         next.delete(manga.id);
+        return next;
+      });
+    }
+  };
+
+  // Update target group on an already linked manga
+  const handleUpdateGroup = async (mangaId: string, newGroup: string) => {
+    const existing = linksMap.get(mangaId);
+    if (!existing) return;
+    setOpenGroupMenuMangaId(null);
+    setSubmittingIds((prev) => new Set(prev).add(mangaId));
+    try {
+      await appAdapter.linkMangaOnline({
+        ...existing,
+        targetGroup: newGroup,
+      });
+      await loadLinks();
+      onLinksChanged?.();
+    } catch (err) {
+      console.error("Update group error:", err);
+    } finally {
+      setSubmittingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(mangaId);
         return next;
       });
     }
@@ -224,6 +306,7 @@ export function MangaBatchLinkDialog({
           onlineTitle: item.match.title,
           autoFollow: true,
           followPolicy: batchPolicy,
+          targetGroup: mangaGroups.get(item.manga.id) || batchGroup,
         });
       }
     }
@@ -361,19 +444,86 @@ export function MangaBatchLinkDialog({
 
               {/* Source Filter (if sources provided) */}
               {(sources?.length ?? 0) > 1 && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <select
-                    value={sourceFilter}
-                    onChange={(e) => setSourceFilter(e.target.value)}
-                    className="h-8 px-2.5 rounded-lg border border-border/70 bg-card text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+                <div className="relative shrink-0" ref={sourceMenuRef}>
+                  <button
+                    type="button"
+                    data-testid="source-filter-button"
+                    aria-haspopup="menu"
+                    aria-expanded={isSourceMenuOpen}
+                    onClick={() => setIsSourceMenuOpen(!isSourceMenuOpen)}
+                    className="h-8 px-2.5 rounded-lg border border-border/70 bg-card text-xs font-medium text-foreground hover:bg-muted/60 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    title={t("batchLink.filterSourceDirectory")}
                   >
-                    <option value="all">{t("batchLink.allSources")}</option>
-                    {sources?.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
+                    <Folder className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="truncate max-w-[130px]">
+                      {sourceFilter === "all"
+                        ? t("batchLink.allSources")
+                        : sources?.find((s) => s.id === sourceFilter)?.name || t("batchLink.allSources")}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        "h-3 w-3 text-muted-foreground/70 transition-transform duration-150 shrink-0",
+                        isSourceMenuOpen && "rotate-180"
+                      )}
+                    />
+                  </button>
+
+                  {isSourceMenuOpen && (
+                    <div
+                      className="absolute left-0 top-full mt-1.5 w-56 rounded-xl border border-border/80 bg-card/95 backdrop-blur-md shadow-xl p-1 z-50 animate-in fade-in-0 zoom-in-95 origin-top-left"
+                      role="menu"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setSourceFilter("all");
+                          setIsSourceMenuOpen(false);
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                          sourceFilter === "all"
+                            ? "bg-primary/10 text-primary font-medium"
+                            : "text-foreground hover:bg-muted/60"
+                        )}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <Folder className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate">{t("batchLink.allSources")}</span>
+                        </div>
+                        {sourceFilter === "all" && <Check className="h-3.5 w-3.5 shrink-0 text-primary ml-2" />}
+                      </button>
+
+                      <div className="h-px bg-border/40 my-1 mx-1" />
+
+                      {sources?.map((s) => {
+                        const isSelected = sourceFilter === s.id;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setSourceFilter(s.id);
+                              setIsSourceMenuOpen(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                              isSelected
+                                ? "bg-primary/10 text-primary font-medium"
+                                : "text-foreground hover:bg-muted/60"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <Folder className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="truncate">{s.name || s.path}</span>
+                            </div>
+                            {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary ml-2" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -512,16 +662,69 @@ export function MangaBatchLinkDialog({
                   </div>
 
                   {/* Middle: Linked status or Match Candidate Picker */}
-                  <div className="flex items-center gap-2 min-w-0 max-w-sm">
+                  <div className="flex items-center gap-2 min-w-0 max-w-md">
                     {isLinked ? (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-                        <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                        <span className="font-medium truncate max-w-[220px]" title={link?.onlineTitle}>
-                          {link?.onlineTitle}
-                        </span>
-                        <span className="text-[9px] font-mono uppercase opacity-75">
-                          {link?.onlineSource}
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                          <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                          <span className="font-medium truncate max-w-[180px]" title={link?.onlineTitle}>
+                            {link?.onlineTitle}
+                          </span>
+                          <span className="text-[9px] font-mono uppercase opacity-75">
+                            {link?.onlineSource}
+                          </span>
+                        </div>
+                        {/* Target Group Selector Dropdown for Linked Manga */}
+                        <div className="relative shrink-0" data-group-menu>
+                          <button
+                            type="button"
+                            onClick={() => setOpenGroupMenuMangaId(openGroupMenuMangaId === manga.id ? null : manga.id)}
+                            className="h-6 px-2 rounded-md border border-border/70 bg-muted/40 hover:bg-muted/70 text-[11px] font-medium text-foreground flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                            title={t("batchLink.targetGroup")}
+                          >
+                            <Layers className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span className="truncate max-w-[65px]">
+                              {getGroupLabel(link?.targetGroup)}
+                            </span>
+                            <ChevronDown
+                              className={cn(
+                                "h-2.5 w-2.5 text-muted-foreground/70 transition-transform duration-150 shrink-0",
+                                openGroupMenuMangaId === manga.id && "rotate-180"
+                              )}
+                            />
+                          </button>
+
+                          {openGroupMenuMangaId === manga.id && (
+                            <div
+                              className="absolute right-0 top-full mt-1 w-36 rounded-xl border border-border/80 bg-card/95 backdrop-blur-md shadow-xl p-1 z-50 animate-in fade-in-0 zoom-in-95 origin-top-right text-foreground"
+                              role="menu"
+                            >
+                              <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                {t("batchLink.targetGroup")}
+                              </div>
+                              {groupOptions.map((opt) => {
+                                const isCurrent = (link?.targetGroup || "") === opt.value;
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => void handleUpdateGroup(manga.id, opt.value)}
+                                    className={cn(
+                                      "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                                      isCurrent
+                                        ? "bg-primary/10 text-primary font-medium"
+                                        : "text-foreground hover:bg-muted/60"
+                                    )}
+                                  >
+                                    <span>{opt.label}</span>
+                                    {isCurrent && <Check className="h-3 w-3 shrink-0 text-primary ml-2" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : isMatching ? (
                       <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
@@ -538,7 +741,7 @@ export function MangaBatchLinkDialog({
                               setSelectedMatch((prev) => new Map(prev).set(manga.id, found));
                             }
                           }}
-                          className="h-7 px-2 rounded-md border border-border/60 bg-muted/40 text-[11px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 truncate max-w-[200px] cursor-pointer"
+                          className="h-7 px-2 rounded-md border border-border/70 bg-card text-[11px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 truncate max-w-[170px] cursor-pointer"
                         >
                           {candidates.map((c) => (
                             <option key={c.id} value={c.id} className="bg-popover text-popover-foreground">
@@ -549,6 +752,61 @@ export function MangaBatchLinkDialog({
                         <Badge tone="default" className="text-[9px] font-mono shrink-0">
                           {picked.status === "completed" ? t("downloader.statusFinished") : t("downloader.statusOngoing")}
                         </Badge>
+                        {/* Target Group Selector for Candidate */}
+                        <div className="relative shrink-0" data-group-menu>
+                          <button
+                            type="button"
+                            onClick={() => setOpenGroupMenuMangaId(openGroupMenuMangaId === manga.id ? null : manga.id)}
+                            className="h-6 px-2 rounded-md border border-border/70 bg-muted/40 hover:bg-muted/70 text-[11px] font-medium text-foreground flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                            title={t("batchLink.targetGroup")}
+                          >
+                            <Layers className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span className="truncate max-w-[65px]">
+                              {getGroupLabel(mangaGroups.get(manga.id) || batchGroup)}
+                            </span>
+                            <ChevronDown
+                              className={cn(
+                                "h-2.5 w-2.5 text-muted-foreground/70 transition-transform duration-150 shrink-0",
+                                openGroupMenuMangaId === manga.id && "rotate-180"
+                              )}
+                            />
+                          </button>
+
+                          {openGroupMenuMangaId === manga.id && (
+                            <div
+                              className="absolute right-0 top-full mt-1 w-36 rounded-xl border border-border/80 bg-card/95 backdrop-blur-md shadow-xl p-1 z-50 animate-in fade-in-0 zoom-in-95 origin-top-right text-foreground"
+                              role="menu"
+                            >
+                              <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                {t("batchLink.targetGroup")}
+                              </div>
+                              {groupOptions.map((opt) => {
+                                const current = mangaGroups.get(manga.id) ?? batchGroup;
+                                const isCurrent = current === opt.value;
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => {
+                                      setMangaGroups((prev) => new Map(prev).set(manga.id, opt.value));
+                                      setOpenGroupMenuMangaId(null);
+                                    }}
+                                    className={cn(
+                                      "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                                      isCurrent
+                                        ? "bg-primary/10 text-primary font-medium"
+                                        : "text-foreground hover:bg-muted/60"
+                                    )}
+                                  >
+                                    <span>{opt.label}</span>
+                                    {isCurrent && <Check className="h-3 w-3 shrink-0 text-primary ml-2" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <span className="text-[11px] text-muted-foreground/60 italic">
@@ -621,6 +879,18 @@ export function MangaBatchLinkDialog({
                 options={[
                   { value: "latest_only", label: t("settings.policyLatestOnly") },
                   { value: "fill_gaps", label: t("settings.policyFillGaps") },
+                ]}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-muted-foreground">{t("batchLink.targetGroup")}:</span>
+              <SegmentedControl
+                value={batchGroup}
+                onChange={(val) => setBatchGroup(val)}
+                options={[
+                  { value: "", label: t("batchLink.groupAuto") },
+                  { value: "话", label: t("batchLink.groupSerial") },
+                  { value: "单行本", label: t("batchLink.groupTankobon") },
                 ]}
               />
             </div>

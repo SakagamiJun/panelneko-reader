@@ -147,15 +147,54 @@ describe("MangaBatchLinkDialog Component", () => {
       expect(screen.getByText("One Piece")).toBeInTheDocument();
     });
 
-    const select = screen.getByRole("combobox");
-    expect(select).toBeInTheDocument();
+    const filterBtn = screen.getByTestId("source-filter-button");
+    expect(filterBtn).toBeInTheDocument();
+
+    // Open source directory menu
+    fireEvent.click(filterBtn);
 
     // Select "NAS Storage" (src-2) which only contains Naruto
-    fireEvent.change(select, { target: { value: "src-2" } });
+    const nasItem = await screen.findByRole("menuitem", { name: /NAS Storage/i });
+    fireEvent.click(nasItem);
 
     expect(screen.queryByText("One Piece")).not.toBeInTheDocument();
     expect(screen.getByText("Naruto")).toBeInTheDocument();
     expect(screen.queryByText("Bleach")).not.toBeInTheDocument();
+  });
+
+  it("supports updating tracking group for a linked comic", async () => {
+    const linkSpy = vi.spyOn(appAdapter, "linkMangaOnline").mockResolvedValue();
+
+    render(
+      <MangaBatchLinkDialog
+        open={true}
+        onClose={vi.fn()}
+        mangas={mockMangas}
+        sources={mockSources}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("One Piece")).toBeInTheDocument();
+    });
+
+    // One Piece is linked, open its target group dropdown
+    const groupButtons = screen.getAllByTitle(/追踪分组|Target Group|追跡グループ/i);
+    expect(groupButtons.length).toBeGreaterThan(0);
+    fireEvent.click(groupButtons[0]);
+
+    // Select "单行本" (Volumes)
+    const tankobonItem = await screen.findByRole("menuitem", { name: /单行本|Volumes|単行本/i });
+    fireEvent.click(tankobonItem);
+
+    await waitFor(() => {
+      expect(linkSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mangaId: "manga-1",
+          targetGroup: "单行本",
+        })
+      );
+    });
   });
 
   it("supports batch unlinking for selected linked comics", async () => {
