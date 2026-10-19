@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 	"github.com/sakagamijun/panelneko-reader/internal/downloader/copymanga"
@@ -95,7 +96,15 @@ func TestDownloadManagerLifecycle(t *testing.T) {
 		t.Errorf("pause task failed: %v", err)
 	}
 
-	tPaused, found, _ := dbStore.GetDownloadTask(taskID)
+	var tPaused contracts.DownloadTask
+	var found bool
+	for i := 0; i < 20; i++ {
+		tPaused, found, _ = dbStore.GetDownloadTask(taskID)
+		if found && tPaused.Status == contracts.DownloadStatusPaused {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if !found || tPaused.Status != contracts.DownloadStatusPaused {
 		t.Errorf("expected task to be paused, got %v", tPaused.Status)
 	}

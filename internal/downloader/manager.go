@@ -247,6 +247,10 @@ func (m *Manager) startWorker(task contracts.DownloadTask) {
 		return
 	}
 
+	if ctx.Err() != nil {
+		return
+	}
+
 	_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusDownloading, "")
 	m.emit(contracts.EventDownloadTasksUpdated, nil)
 	m.emitProgress()
