@@ -533,6 +533,10 @@ export class MockAdapter implements AppAdapter {
     })).reverse();
   }
 
+  async getOnlineMangaGroups(_source: string, _mangaID: string): Promise<string[]> {
+    return ["话", "单行本"];
+  }
+
   async createDownloadTasks(inputs: CreateDownloadTaskInput[]): Promise<DownloadTask[]> {
     const now = new Date().toISOString();
     const created: DownloadTask[] = inputs.map((inTask) => ({

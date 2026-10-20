@@ -59,29 +59,61 @@ export function MangaBatchLinkDialog({
   const [submittingIds, setSubmittingIds] = useState<Set<string>>(new Set());
 
   const [batchPolicy, setBatchPolicy] = useState<"latest_only" | "fill_gaps">("latest_only");
-  const [batchGroup, setBatchGroup] = useState<string>("");
   const [mangaGroups, setMangaGroups] = useState<Map<string, string>>(new Map());
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false);
   const [openGroupMenuMangaId, setOpenGroupMenuMangaId] = useState<string | null>(null);
+  const [groupsCache, setGroupsCache] = useState<Map<string, string[]>>(new Map());
+  const [loadingGroupsId, setLoadingGroupsId] = useState<string | null>(null);
 
   const sourceMenuRef = useRef<HTMLDivElement>(null);
 
-  const groupOptions = useMemo(
-    () => [
-      { value: "", label: t("batchLink.groupAuto") },
-      { value: "话", label: t("batchLink.groupSerial") },
-      { value: "单行本", label: t("batchLink.groupTankobon") },
-      { value: "番外", label: t("batchLink.groupExtra") },
-    ],
-    [t]
+  const fetchGroupsForComic = useCallback(
+    async (comicId: string) => {
+      if (!comicId || groupsCache.has(comicId)) return;
+      setLoadingGroupsId(comicId);
+      try {
+        const realGroups = await appAdapter.getOnlineMangaGroups(activeSource, comicId);
+        setGroupsCache((prev) => new Map(prev).set(comicId, realGroups));
+      } catch (err) {
+        console.error("Failed to fetch online groups for comic:", comicId, err);
+      } finally {
+        setLoadingGroupsId(null);
+      }
+    },
+    [activeSource, groupsCache]
   );
+
+  const getOptionsForComic = useCallback(
+    (onlineComicId?: string, currentGroup?: string) => {
+      const real = (onlineComicId ? groupsCache.get(onlineComicId) : null) ?? [];
+      const opts: { value: string; label: string }[] = [
+        { value: "", label: t("batchLink.groupAuto") },
+      ];
+      for (const g of real) {
+        opts.push({ value: g, label: g });
+      }
+      if (currentGroup && !opts.some((o) => o.value === currentGroup)) {
+        opts.push({ value: currentGroup, label: currentGroup });
+      }
+      return opts;
+    },
+    [groupsCache, t]
+  );
+
+  const handleOpenGroupMenu = (mangaId: string, onlineComicId?: string) => {
+    if (openGroupMenuMangaId === mangaId) {
+      setOpenGroupMenuMangaId(null);
+    } else {
+      setOpenGroupMenuMangaId(mangaId);
+      if (onlineComicId) {
+        void fetchGroupsForComic(onlineComicId);
+      }
+    }
+  };
 
   const getGroupLabel = useCallback(
     (group?: string) => {
       if (!group) return t("batchLink.groupAuto");
-      if (group === "话" || group === "default") return t("batchLink.groupSerial");
-      if (group === "单行本" || group === "tankobon") return t("batchLink.groupTankobon");
-      if (group === "番外") return t("batchLink.groupExtra");
       return group;
     },
     [t]
@@ -227,7 +259,7 @@ export function MangaBatchLinkDialog({
         onlineTitle: matched.title,
         autoFollow: true,
         followPolicy: batchPolicy,
-        targetGroup: mangaGroups.get(manga.id) || batchGroup,
+        targetGroup: mangaGroups.get(manga.id) || "",
       });
       await loadLinks();
       onLinksChanged?.();
@@ -306,7 +338,7 @@ export function MangaBatchLinkDialog({
           onlineTitle: item.match.title,
           autoFollow: true,
           followPolicy: batchPolicy,
-          targetGroup: mangaGroups.get(item.manga.id) || batchGroup,
+          targetGroup: mangaGroups.get(item.manga.id) || "",
         });
       }
     }
@@ -678,7 +710,7 @@ export function MangaBatchLinkDialog({
                         <div className="relative shrink-0" data-group-menu>
                           <button
                             type="button"
-                            onClick={() => setOpenGroupMenuMangaId(openGroupMenuMangaId === manga.id ? null : manga.id)}
+                            onClick={() => handleOpenGroupMenu(manga.id, link?.onlineComicId)}
                             className="h-6 px-2 rounded-md border border-border/70 bg-muted/40 hover:bg-muted/70 text-[11px] font-medium text-foreground flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                             title={t("batchLink.targetGroup")}
                           >
@@ -702,26 +734,33 @@ export function MangaBatchLinkDialog({
                               <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                                 {t("batchLink.targetGroup")}
                               </div>
-                              {groupOptions.map((opt) => {
-                                const isCurrent = (link?.targetGroup || "") === opt.value;
-                                return (
-                                  <button
-                                    key={opt.value}
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => void handleUpdateGroup(manga.id, opt.value)}
-                                    className={cn(
-                                      "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
-                                      isCurrent
-                                        ? "bg-primary/10 text-primary font-medium"
-                                        : "text-foreground hover:bg-muted/60"
-                                    )}
-                                  >
-                                    <span>{opt.label}</span>
-                                    {isCurrent && <Check className="h-3 w-3 shrink-0 text-primary ml-2" />}
-                                  </button>
-                                );
-                              })}
+                              {loadingGroupsId === link?.onlineComicId && !groupsCache.has(link?.onlineComicId || "") ? (
+                                <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground">
+                                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                                  <span>{t("batchLink.loadingGroups")}</span>
+                                </div>
+                              ) : (
+                                getOptionsForComic(link?.onlineComicId, link?.targetGroup).map((opt) => {
+                                  const isCurrent = (link?.targetGroup || "") === opt.value;
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => void handleUpdateGroup(manga.id, opt.value)}
+                                      className={cn(
+                                        "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                                        isCurrent
+                                          ? "bg-primary/10 text-primary font-medium"
+                                          : "text-foreground hover:bg-muted/60"
+                                      )}
+                                    >
+                                      <span>{opt.label}</span>
+                                      {isCurrent && <Check className="h-3 w-3 shrink-0 text-primary ml-2" />}
+                                    </button>
+                                  );
+                                })
+                              )}
                             </div>
                           )}
                         </div>
@@ -756,13 +795,13 @@ export function MangaBatchLinkDialog({
                         <div className="relative shrink-0" data-group-menu>
                           <button
                             type="button"
-                            onClick={() => setOpenGroupMenuMangaId(openGroupMenuMangaId === manga.id ? null : manga.id)}
+                            onClick={() => handleOpenGroupMenu(manga.id, picked.id)}
                             className="h-6 px-2 rounded-md border border-border/70 bg-muted/40 hover:bg-muted/70 text-[11px] font-medium text-foreground flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                             title={t("batchLink.targetGroup")}
                           >
                             <Layers className="h-3 w-3 text-muted-foreground shrink-0" />
                             <span className="truncate max-w-[65px]">
-                              {getGroupLabel(mangaGroups.get(manga.id) || batchGroup)}
+                              {getGroupLabel(mangaGroups.get(manga.id))}
                             </span>
                             <ChevronDown
                               className={cn(
@@ -780,30 +819,37 @@ export function MangaBatchLinkDialog({
                               <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                                 {t("batchLink.targetGroup")}
                               </div>
-                              {groupOptions.map((opt) => {
-                                const current = mangaGroups.get(manga.id) ?? batchGroup;
-                                const isCurrent = current === opt.value;
-                                return (
-                                  <button
-                                    key={opt.value}
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => {
-                                      setMangaGroups((prev) => new Map(prev).set(manga.id, opt.value));
-                                      setOpenGroupMenuMangaId(null);
-                                    }}
-                                    className={cn(
-                                      "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
-                                      isCurrent
-                                        ? "bg-primary/10 text-primary font-medium"
-                                        : "text-foreground hover:bg-muted/60"
-                                    )}
-                                  >
-                                    <span>{opt.label}</span>
-                                    {isCurrent && <Check className="h-3 w-3 shrink-0 text-primary ml-2" />}
-                                  </button>
-                                );
-                              })}
+                              {loadingGroupsId === picked.id && !groupsCache.has(picked.id) ? (
+                                <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground">
+                                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                                  <span>{t("batchLink.loadingGroups")}</span>
+                                </div>
+                              ) : (
+                                getOptionsForComic(picked.id, mangaGroups.get(manga.id)).map((opt) => {
+                                  const current = mangaGroups.get(manga.id) || "";
+                                  const isCurrent = current === opt.value;
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => {
+                                        setMangaGroups((prev) => new Map(prev).set(manga.id, opt.value));
+                                        setOpenGroupMenuMangaId(null);
+                                      }}
+                                      className={cn(
+                                        "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                                        isCurrent
+                                          ? "bg-primary/10 text-primary font-medium"
+                                          : "text-foreground hover:bg-muted/60"
+                                      )}
+                                    >
+                                      <span>{opt.label}</span>
+                                      {isCurrent && <Check className="h-3 w-3 shrink-0 text-primary ml-2" />}
+                                    </button>
+                                  );
+                                })
+                              )}
                             </div>
                           )}
                         </div>
@@ -879,18 +925,6 @@ export function MangaBatchLinkDialog({
                 options={[
                   { value: "latest_only", label: t("settings.policyLatestOnly") },
                   { value: "fill_gaps", label: t("settings.policyFillGaps") },
-                ]}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted-foreground">{t("batchLink.targetGroup")}:</span>
-              <SegmentedControl
-                value={batchGroup}
-                onChange={(val) => setBatchGroup(val)}
-                options={[
-                  { value: "", label: t("batchLink.groupAuto") },
-                  { value: "话", label: t("batchLink.groupSerial") },
-                  { value: "单行本", label: t("batchLink.groupTankobon") },
                 ]}
               />
             </div>

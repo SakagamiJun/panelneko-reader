@@ -440,5 +440,6 @@ export const en = {
     groupExtra: "Extras",
     groupAll: "All",
     filterSourceDirectory: "Filter Directory",
+    loadingGroups: "Loading groups…",
   },
 };

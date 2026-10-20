@@ -476,3 +476,49 @@ func TestCopyMangaPersonalAccountRelayToPoolOn210(t *testing.T) {
 		t.Fatalf("expected pool token on personal cooldown, got: tok=%s user=%s err=%v", tok2, user2, err2)
 	}
 }
+
+func TestCopyMangaGetMangaGroups(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/v3/comic2/") {
+			resp := copyAPIResponse{
+				Code:    200,
+				Message: "ok",
+			}
+			detail := comicDetailData{}
+			detail.Comic.Name = "Test Manga"
+			detail.Groups = map[string]struct {
+				Name     string `json:"name"`
+				PathWord string `json:"path_word"`
+			}{
+				"default":  {Name: "话", PathWord: "default"},
+				"tankobon": {Name: "卷", PathWord: "tankobon"},
+				"extra":    {Name: "番外篇", PathWord: "extra"},
+			}
+			raw, _ := json.Marshal(detail)
+			resp.Results = raw
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	client := NewClient(host, "", 5)
+
+	groups, err := client.GetMangaGroups(context.Background(), "test-manga")
+	if err != nil {
+		t.Fatalf("GetMangaGroups failed: %v", err)
+	}
+	if len(groups) != 3 {
+		t.Fatalf("expected 3 groups, got %d: %+v", len(groups), groups)
+	}
+	// Check that real names "话", "卷", "番外篇" are present
+	groupMap := make(map[string]bool)
+	for _, g := range groups {
+		groupMap[g] = true
+	}
+	if !groupMap["话"] || !groupMap["卷"] || !groupMap["番外篇"] {
+		t.Fatalf("expected groups to contain 话, 卷, 番外篇, got %+v", groups)
+	}
+}

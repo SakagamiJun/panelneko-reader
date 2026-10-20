@@ -440,5 +440,6 @@ export const ja = {
     groupExtra: "番外編",
     groupAll: "すべて",
     filterSourceDirectory: "ディレクトリ絞り込み",
+    loadingGroups: "グループ読込中…",
   },
 };

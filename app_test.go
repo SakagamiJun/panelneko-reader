@@ -1319,6 +1319,15 @@ func TestCheckMangaUpdatesGroupAware(t *testing.T) {
 		t.Errorf("expected task for ch-2 第2话, got %+v", tasks[0])
 	}
 
+	// Test GetOnlineMangaGroups dynamically fetching real groups
+	realGroups, err := app.GetOnlineMangaGroups(copymanga.SiteName, "onepiece")
+	if err != nil {
+		t.Fatalf("GetOnlineMangaGroups failed: %v", err)
+	}
+	if len(realGroups) != 2 || realGroups[0] != "话" || realGroups[1] != "卷" {
+		t.Fatalf("expected realGroups ['话', '卷'], got %+v", realGroups)
+	}
+
 	// Now test CheckAllFollowedUpdates: ch-2 is already queued, so no new tasks should be created
 	allQueued, err := app.CheckAllFollowedUpdates()
 	if err != nil {

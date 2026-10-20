@@ -208,6 +208,9 @@ describe("MockAdapter Pin Functionality", () => {
     const chapters = await adapter.getOnlineMangaChapters("copymanga", searchRes.items[0].id);
     expect(chapters.length).toBe(6);
 
+    const groups = await adapter.getOnlineMangaGroups("copymanga", searchRes.items[0].id);
+    expect(groups).toContain("话");
+
     // 3. Create download tasks
     const created = await adapter.createDownloadTasks([
       {

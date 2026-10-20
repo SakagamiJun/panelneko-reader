@@ -85,6 +85,10 @@ export function GetOnlineMangaChapters(source: string, mangaID: string): $Cancel
     return $Call.ByID(2287518610, source, mangaID);
 }
 
+export function GetOnlineMangaGroups(source: string, mangaID: string): $CancellablePromise<string[] | null> {
+    return $Call.ByID(1026509168, source, mangaID);
+}
+
 export function GetReaderManifest(mangaID: string): $CancellablePromise<contracts$0.ReaderManifest> {
     return $Call.ByID(2762869845, mangaID);
 }

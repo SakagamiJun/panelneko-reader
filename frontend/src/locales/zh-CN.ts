@@ -440,5 +440,6 @@ export const zhCN = {
     groupExtra: "番外篇",
     groupAll: "全部",
     filterSourceDirectory: "筛选目录",
+    loadingGroups: "读取分组中…",
   },
 };

@@ -148,6 +148,14 @@ export class WailsAdapter implements AppAdapter {
     return [];
   }
 
+  async getOnlineMangaGroups(source: string, mangaID: string): Promise<string[]> {
+    const fn = (App as any).GetOnlineMangaGroups;
+    if (typeof fn === "function") {
+      return ((await fn(source, mangaID)) ?? []) as string[];
+    }
+    return [];
+  }
+
   async createDownloadTasks(inputs: CreateDownloadTaskInput[]): Promise<DownloadTask[]> {
     const fn = (App as any).CreateDownloadTasks;
     if (typeof fn === "function") {

@@ -86,6 +86,9 @@ export const appAdapter: AppAdapter = {
   getOnlineMangaChapters(source, mangaID) {
     return currentAdapter().getOnlineMangaChapters(source, mangaID);
   },
+  getOnlineMangaGroups(source, mangaID) {
+    return currentAdapter().getOnlineMangaGroups(source, mangaID);
+  },
   createDownloadTasks(inputs) {
     return currentAdapter().createDownloadTasks(inputs);
   },

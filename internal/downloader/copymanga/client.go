@@ -443,6 +443,46 @@ type chaptersRespData struct {
 	Total int                 `json:"total"`
 }
 
+func (c *Client) GetMangaGroups(ctx context.Context, comicPathWord string) ([]string, error) {
+	q := url.Values{}
+	q.Set("platform", "1")
+
+	var detail comicDetailData
+	if err := c.getJSON(ctx, "/api/v3/comic2/"+url.PathEscape(comicPathWord), q, &detail); err != nil {
+		return nil, err
+	}
+
+	var groups []string
+	if len(detail.Groups) > 0 {
+		if def, ok := detail.Groups["default"]; ok {
+			name := def.Name
+			if name == "" {
+				name = "话"
+			}
+			groups = append(groups, name)
+		}
+		if tb, ok := detail.Groups["tankobon"]; ok {
+			name := tb.Name
+			if name == "" {
+				name = "卷"
+			}
+			groups = append(groups, name)
+		}
+		for k, v := range detail.Groups {
+			if k != "default" && k != "tankobon" {
+				name := v.Name
+				if name == "" {
+					name = k
+				}
+				groups = append(groups, name)
+			}
+		}
+	} else {
+		groups = append(groups, "话")
+	}
+	return groups, nil
+}
+
 func (c *Client) GetMangaChapters(ctx context.Context, comicPathWord string) ([]contracts.OnlineMangaChapter, error) {
 	q := url.Values{}
 	q.Set("platform", "1")

@@ -31,6 +31,7 @@ const requiredAdapterMethods: AdapterMethod[] = [
   "scanLibrary",
   "searchOnlineManga",
   "getOnlineMangaChapters",
+  "getOnlineMangaGroups",
   "createDownloadTasks",
   "pauseDownloadTask",
   "resumeDownloadTask",

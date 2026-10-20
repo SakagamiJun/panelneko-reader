@@ -1131,6 +1131,24 @@ func (a *App) GetOnlineMangaChapters(source string, mangaID string) ([]contracts
 	}
 }
 
+func (a *App) GetOnlineMangaGroups(source string, mangaID string) ([]string, error) {
+	if err := a.ensureReady(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	switch source {
+	case copymanga.SiteName:
+		if a.copyManga == nil {
+			return nil, fmt.Errorf("copymanga client not initialized")
+		}
+		return a.copyManga.GetMangaGroups(ctx, mangaID)
+	default:
+		return []string{}, nil
+	}
+}
+
 func (a *App) CreateDownloadTasks(inputs []contracts.CreateDownloadTaskInput) ([]contracts.DownloadTask, error) {
 	if err := a.ensureReady(); err != nil {
 		return nil, err
@@ -1361,8 +1379,8 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 			matched := false
 			if strings.EqualFold(targetGroup, "default") || targetGroup == "话" {
 				matched = strings.EqualFold(grp, "default") || grp == "话" || grp == ""
-			} else if strings.EqualFold(targetGroup, "tankobon") || targetGroup == "单行本" {
-				matched = strings.EqualFold(grp, "tankobon") || grp == "单行本"
+			} else if strings.EqualFold(targetGroup, "tankobon") || targetGroup == "单行本" || targetGroup == "卷" {
+				matched = strings.EqualFold(grp, "tankobon") || grp == "单行本" || grp == "卷"
 			} else {
 				matched = strings.EqualFold(grp, targetGroup)
 			}
