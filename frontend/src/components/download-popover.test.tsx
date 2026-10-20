@@ -26,6 +26,9 @@ vi.mock("react-i18next", () => ({
         "downloader.cancel": "取消任务",
         "downloader.checkFollowedUpdates": "检查追更",
         "downloader.checkingFollowedUpdates": "正在检查追更…",
+        "downloader.checkingFollowedUpdatesProgress": `正在检查 (${options?.current ?? 0}/${options?.total ?? 0})`,
+        "downloader.idleBadge": "空闲",
+        "downloader.activeBadge": `${options?.count ?? 0} 进行中`,
         "downloader.noFollowedUpdates": "所有追更漫画已是最新",
         "downloader.foundFollowedUpdates": `已添加 ${options?.count ?? 0} 个新章节到下载队列`,
         "downloader.checkFollowedUpdatesFailed": "检查追更失败，请重试",
@@ -201,5 +204,66 @@ describe("DownloadPopover Component", () => {
     await waitFor(() => {
       expect(screen.getByText("所有追更漫画已是最新")).toBeInTheDocument();
     });
+  });
+
+  it("shows checkProgress status with (current/total) and keeps button disabled across reopenings", () => {
+    const onCheckUpdates = vi.fn();
+
+    // First render with checking state (2/5)
+    const { unmount } = render(
+      <DownloadPopover
+        tasks={[]}
+        progress={{
+          activeTasks: 0,
+          totalTasks: 0,
+          downloadedPages: 0,
+          totalPages: 0,
+          speedFormatted: "",
+          bytesPerSec: 0,
+        }}
+        checkProgress={{
+          checking: true,
+          current: 2,
+          total: 5,
+          queued: 0,
+        }}
+        onCheckAllUpdates={onCheckUpdates}
+      />
+    );
+
+    const progressBtn = screen.getByTitle("正在检查 (2/5)");
+    expect(progressBtn).toBeInTheDocument();
+    expect(progressBtn).toBeDisabled();
+    expect(screen.getByText("正在检查 (2/5)")).toBeInTheDocument();
+
+    // Simulate closing popover
+    unmount();
+
+    // Reopen popover while still checking (3/5)
+    render(
+      <DownloadPopover
+        tasks={[]}
+        progress={{
+          activeTasks: 0,
+          totalTasks: 0,
+          downloadedPages: 0,
+          totalPages: 0,
+          speedFormatted: "",
+          bytesPerSec: 0,
+        }}
+        checkProgress={{
+          checking: true,
+          current: 3,
+          total: 5,
+          queued: 0,
+        }}
+        onCheckAllUpdates={onCheckUpdates}
+      />
+    );
+
+    const reopenedBtn = screen.getByTitle("正在检查 (3/5)");
+    expect(reopenedBtn).toBeInTheDocument();
+    expect(reopenedBtn).toBeDisabled();
+    expect(screen.getByText("正在检查 (3/5)")).toBeInTheDocument();
   });
 });

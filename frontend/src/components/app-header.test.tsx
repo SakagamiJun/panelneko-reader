@@ -398,4 +398,118 @@ describe("AppHeader Component", () => {
     fireEvent.click(copymangaBtn);
     expect(handleOnlineSearch).toHaveBeenCalledWith("copymanga", "Naruto");
   });
+
+  it("renders download count and speed in download button when downloading", () => {
+    render(
+      <AppHeader
+        selectedCollectionPath={null}
+        totalCount={0}
+        onBackToMain={vi.fn()}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+        settings={baseSettings}
+        onCycleTheme={vi.fn()}
+        onCycleLocale={vi.fn()}
+        settingsOpen={false}
+        onToggleSettings={vi.fn()}
+        downloadTasks={[
+          {
+            id: "t1",
+            source: "copymanga",
+            mangaID: "m1",
+            mangaTitle: "Manga 1",
+            chapterID: "c1",
+            chapterTitle: "Ch 1",
+            chapterNumber: 1,
+            status: "downloading",
+            totalPages: 10,
+            downloadedPages: 2,
+          },
+        ]}
+        downloadProgress={{
+          activeTasks: 2,
+          totalTasks: 2,
+          downloadedPages: 4,
+          totalPages: 20,
+          speedFormatted: "2.4 MB/s",
+          bytesPerSec: 2516582,
+        }}
+      />
+    );
+
+    // Number of active downloads
+    expect(screen.getByText("2")).toBeInTheDocument();
+    // Speed formatted
+    expect(screen.getByText("2.4 MB/s")).toBeInTheDocument();
+  });
+
+  it("renders visible update check indicators in download button when checking updates", () => {
+    const { rerender } = render(
+      <AppHeader
+        selectedCollectionPath={null}
+        totalCount={0}
+        onBackToMain={vi.fn()}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+        settings={baseSettings}
+        onCycleTheme={vi.fn()}
+        onCycleLocale={vi.fn()}
+        settingsOpen={false}
+        onToggleSettings={vi.fn()}
+        downloadTasks={[]}
+        downloadProgress={{
+          activeTasks: 0,
+          totalTasks: 0,
+          downloadedPages: 0,
+          totalPages: 0,
+          speedFormatted: "",
+          bytesPerSec: 0,
+        }}
+        followedUpdateProgress={{
+          checking: true,
+          current: 1,
+          total: 4,
+          queued: 0,
+        }}
+      />
+    );
+
+    // Visible indicator shows (current/total)
+    expect(screen.getByText("1/4")).toBeInTheDocument();
+
+    // Rerender when downloading AND checking
+    rerender(
+      <AppHeader
+        selectedCollectionPath={null}
+        totalCount={0}
+        onBackToMain={vi.fn()}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+        settings={baseSettings}
+        onCycleTheme={vi.fn()}
+        onCycleLocale={vi.fn()}
+        settingsOpen={false}
+        onToggleSettings={vi.fn()}
+        downloadTasks={[]}
+        downloadProgress={{
+          activeTasks: 3,
+          totalTasks: 3,
+          downloadedPages: 5,
+          totalPages: 30,
+          speedFormatted: "1.2 MB/s",
+          bytesPerSec: 1258291,
+        }}
+        followedUpdateProgress={{
+          checking: true,
+          current: 2,
+          total: 4,
+          queued: 0,
+        }}
+      />
+    );
+
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("1.2 MB/s")).toBeInTheDocument();
+  });
 });
+

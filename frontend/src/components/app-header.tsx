@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Kbd } from "@/components/ui/kbd";
 import { DownloadPopover } from "@/components/download-popover";
-import type { AppSettings, DownloadProgress, DownloadTask, LibraryManga } from "@/lib/contracts";
+import type { AppSettings, DownloadProgress, DownloadTask, FollowedUpdateCheckProgress, LibraryManga } from "@/lib/contracts";
 import { isMacPlatform } from "@/lib/system";
 import { useHasTrafficLights } from "@/hooks/use-traffic-lights";
 import { cn } from "@/lib/utils";
@@ -60,6 +60,7 @@ interface AppHeaderProps {
   onCancelTask?: (id: string) => void;
   onClearCompleted?: () => void;
   onCheckAllUpdates?: () => Promise<number | void>;
+  followedUpdateProgress?: FollowedUpdateCheckProgress | null;
 }
 
 export function AppHeader({
@@ -90,6 +91,7 @@ export function AppHeader({
   onOpenSettingsTab,
   downloadTasks = [],
   downloadProgress,
+  followedUpdateProgress,
   onPauseTask,
   onResumeTask,
   onCancelTask,
@@ -115,6 +117,12 @@ export function AppHeader({
   const activeDownloadsCount =
     downloadProgress?.activeTasks ??
     downloadTasks.filter((t) => t.status === "downloading" || t.status === "pending").length;
+  const isCheckingUpdates = Boolean(followedUpdateProgress?.checking);
+  const downloadButtonTitle = isCheckingUpdates
+    ? followedUpdateProgress && followedUpdateProgress.total > 0
+      ? `${t("downloader.checkingFollowedUpdates")} (${followedUpdateProgress.current}/${followedUpdateProgress.total})`
+      : t("downloader.checkingFollowedUpdates")
+    : t("downloader.managerTitle");
 
   const themeIcon =
     settings?.themeMode === "dark" ? (
@@ -824,13 +832,19 @@ export function AppHeader({
               ? "bg-primary/10 text-primary border-primary/30 font-semibold shadow-xs"
               : activeDownloadsCount > 0
               ? "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+              : isCheckingUpdates
+              ? "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
               : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60"
           )}
-          title={t("downloader.managerTitle")}
+          title={downloadButtonTitle}
           aria-label={t("downloader.managerTitle")}
         >
           <div className="relative flex items-center justify-center">
-            <Download className="h-3.5 w-3.5" />
+            {activeDownloadsCount === 0 && isCheckingUpdates ? (
+              <RefreshCw className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
             {activeDownloadsCount > 0 && (
               <span className="absolute -top-1 -right-1 flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
@@ -838,11 +852,26 @@ export function AppHeader({
               </span>
             )}
           </div>
-          {activeDownloadsCount > 0 && (
+          {activeDownloadsCount > 0 ? (
+            <div className="flex items-center gap-1 font-mono text-[11px] font-semibold text-primary">
+              <span>{activeDownloadsCount}</span>
+              {downloadProgress?.speedFormatted ? (
+                <>
+                  <span className="text-primary/40 font-normal">·</span>
+                  <span className="text-[10px] tracking-tight">{downloadProgress.speedFormatted}</span>
+                </>
+              ) : null}
+              {isCheckingUpdates && (
+                <RefreshCw className="h-2.5 w-2.5 ml-0.5 text-primary/80 animate-spin shrink-0" />
+              )}
+            </div>
+          ) : isCheckingUpdates ? (
             <span className="font-mono text-[11px] font-semibold text-primary">
-              {activeDownloadsCount}
+              {followedUpdateProgress && followedUpdateProgress.total > 0
+                ? `${followedUpdateProgress.current}/${followedUpdateProgress.total}`
+                : t("downloader.checkingShort")}
             </span>
-          )}
+          ) : null}
         </Button>
 
         {isDownloadMenuOpen && (
@@ -859,6 +888,7 @@ export function AppHeader({
                   bytesPerSec: 0,
                 }
               }
+              checkProgress={followedUpdateProgress}
               onPauseTask={onPauseTask}
               onResumeTask={onResumeTask}
               onCancelTask={onCancelTask}

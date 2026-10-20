@@ -15,12 +15,13 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { DownloadProgress, DownloadTask } from "@/lib/contracts";
+import type { DownloadProgress, DownloadTask, FollowedUpdateCheckProgress } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 
 export interface DownloadPopoverProps {
   tasks: DownloadTask[];
   progress: DownloadProgress;
+  checkProgress?: FollowedUpdateCheckProgress | null;
   onPauseTask?: (id: string) => void;
   onResumeTask?: (id: string) => void;
   onCancelTask?: (id: string) => void;
@@ -34,6 +35,7 @@ export interface DownloadPopoverProps {
 export function DownloadPopover({
   tasks,
   progress,
+  checkProgress,
   onPauseTask,
   onResumeTask,
   onCancelTask,
@@ -44,11 +46,13 @@ export function DownloadPopover({
   className,
 }: DownloadPopoverProps) {
   const { t } = useTranslation();
-  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [isLocalChecking, setIsLocalChecking] = useState(false);
   const [updateFeedback, setUpdateFeedback] = useState<{
     type: "success" | "none" | "error";
     count?: number;
   } | null>(null);
+
+  const isCheckingUpdates = Boolean(checkProgress?.checking || isLocalChecking);
 
   const activeCount =
     progress.activeTasks ??
@@ -57,7 +61,7 @@ export function DownloadPopover({
 
   const handleCheckUpdates = async () => {
     if (isCheckingUpdates || !onCheckAllUpdates) return;
-    setIsCheckingUpdates(true);
+    setIsLocalChecking(true);
     setUpdateFeedback(null);
     try {
       const res = await onCheckAllUpdates();
@@ -70,36 +74,44 @@ export function DownloadPopover({
     } catch {
       setUpdateFeedback({ type: "error" });
     } finally {
-      setIsCheckingUpdates(false);
+      setIsLocalChecking(false);
       window.setTimeout(() => {
         setUpdateFeedback(null);
       }, 4000);
     }
   };
 
+  const checkingProgressText =
+    checkProgress && checkProgress.total > 0
+      ? t("downloader.checkingFollowedUpdatesProgress", {
+          current: checkProgress.current,
+          total: checkProgress.total,
+        })
+      : t("downloader.checkingFollowedUpdates");
+
   return (
     <div
       role="region"
       aria-label={t("downloader.managerTitle")}
       className={cn(
-        "flex flex-col w-96 max-w-[calc(100vw-2.5rem)] rounded-xl border border-border/80 bg-card/95 backdrop-blur-2xl shadow-2xl overflow-hidden select-none animate-in fade-in-0 zoom-in-95",
+        "flex flex-col w-[460px] sm:w-[480px] max-w-[calc(100vw-2rem)] rounded-xl border border-border/80 bg-card/95 backdrop-blur-2xl shadow-2xl overflow-hidden select-none animate-in fade-in-0 zoom-in-95",
         className
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border/40 bg-muted/20">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border/40 bg-muted/20 gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <Download className="h-3.5 w-3.5 text-primary shrink-0" />
           <span className="text-xs font-bold text-foreground truncate">
             {t("downloader.managerTitle")}
           </span>
           <Badge
             tone={activeCount > 0 ? "running" : "neutral"}
-            className="font-mono text-[10px] shrink-0"
+            className="font-mono text-[10px] shrink-0 whitespace-nowrap"
           >
             {activeCount > 0
-              ? t("downloader.activeCount", { count: activeCount })
-              : t("downloader.idleStatus")}
+              ? t("downloader.activeBadge", { count: activeCount })
+              : t("downloader.idleBadge")}
           </Badge>
         </div>
 
@@ -111,14 +123,12 @@ export function DownloadPopover({
               variant="ghost"
               disabled={isCheckingUpdates}
               onClick={() => void handleCheckUpdates()}
-              className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground gap-1 cursor-pointer"
-              title={t("downloader.checkFollowedUpdates")}
+              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
+              title={isCheckingUpdates ? checkingProgressText : t("downloader.checkFollowedUpdates")}
             >
               <RefreshCw className={cn("h-3 w-3", isCheckingUpdates && "animate-spin")} />
-              <span className="hidden sm:inline">
-                {isCheckingUpdates
-                  ? t("downloader.checkingFollowedUpdates")
-                  : t("downloader.checkFollowedUpdates")}
+              <span>
+                {isCheckingUpdates ? checkingProgressText : t("downloader.checkFollowedUpdates")}
               </span>
             </Button>
           )}
@@ -129,7 +139,7 @@ export function DownloadPopover({
               size="xs"
               variant="ghost"
               onClick={onClearCompleted}
-              className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground gap-1 cursor-pointer"
+              className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground gap-1 cursor-pointer shrink-0 whitespace-nowrap"
               title={t("downloader.clearCompleted")}
             >
               <Trash2 className="h-3 w-3" />
@@ -143,7 +153,7 @@ export function DownloadPopover({
               size="xs"
               variant="ghost"
               onClick={onClose}
-              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground cursor-pointer"
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
               title={t("downloader.collapse")}
             >
               <X className="h-3.5 w-3.5" />
@@ -206,7 +216,7 @@ export function DownloadPopover({
 
       {/* Tasks List */}
       {tasks.length > 0 ? (
-        <div className="max-h-[340px] overflow-y-auto p-2.5 space-y-2 divide-y divide-border/20">
+        <div className="max-h-[440px] overflow-y-auto p-2.5 space-y-2 divide-y divide-border/20">
           {tasks.map((task) => {
             const pct =
               task.totalPages > 0

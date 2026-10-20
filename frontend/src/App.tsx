@@ -19,6 +19,7 @@ import {
   type DownloadTask,
   type DuplicateMergeMode,
   EVENTS,
+  type FollowedUpdateCheckProgress,
   type LibraryManga,
   type LibrarySource,
   type MangaOnlineLink,
@@ -57,6 +58,7 @@ export default function App() {
     speedFormatted: "0 B/s",
     bytesPerSec: 0,
   });
+  const [followedUpdateProgress, setFollowedUpdateProgress] = useState<FollowedUpdateCheckProgress | null>(null);
   const [onlineSearchOpen, setOnlineSearchOpen] = useState(false);
   const [onlineSearchSource, setOnlineSearchSource] = useState<"copymanga" | "klz9">("copymanga");
   const [onlineSearchQuery, setOnlineSearchQuery] = useState("");
@@ -121,6 +123,7 @@ export default function App() {
     // Initial sync and event subscriptions for downloads
     void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
     void appAdapter.getDownloadProgress().then(setDownloadProgress).catch(() => {});
+    void appAdapter.getFollowedUpdateCheckStatus().then(setFollowedUpdateProgress).catch(() => {});
 
     const offProgress = appAdapter.subscribe(EVENTS.DOWNLOAD_PROGRESS, (payload) => {
       if (payload && typeof payload === "object") {
@@ -136,6 +139,12 @@ export default function App() {
       }
     });
 
+    const offUpdateCheck = appAdapter.subscribe(EVENTS.FOLLOWED_UPDATE_CHECK_PROGRESS, (payload) => {
+      if (payload && typeof payload === "object") {
+        setFollowedUpdateProgress(payload as FollowedUpdateCheckProgress);
+      }
+    });
+
     return () => {
       offSettings();
       offLibrary();
@@ -143,6 +152,7 @@ export default function App() {
       offFilesOpened();
       offProgress();
       offTasks();
+      offUpdateCheck();
     };
   }, [queryClient]);
 
@@ -663,6 +673,7 @@ export default function App() {
           onOpenSettingsTab={(tab) => openSettingsWithTab(tab)}
           downloadTasks={downloadTasks}
           downloadProgress={downloadProgress}
+          followedUpdateProgress={followedUpdateProgress}
           onPauseTask={(id) => void appAdapter.pauseDownloadTask(id)}
           onResumeTask={(id) => {
             const task = downloadTasks.find((t) => t.id === id);
