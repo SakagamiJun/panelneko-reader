@@ -346,3 +346,10 @@ type UpdateCheckResult struct {
 	PublishedAt    string `json:"publishedAt,omitempty"`
 	IsHomebrew     bool   `json:"isHomebrew"`
 }
+
+type FollowedUpdateCheckProgress struct {
+	Checking bool `json:"checking"`
+	Current  int  `json:"current"`
+	Total    int  `json:"total"`
+	Queued   int  `json:"queued"`
+}

@@ -327,19 +327,21 @@ func (a *App) CheckForUpdates() (contracts.UpdateCheckResult, error) {
 }
 
 type App struct {
-	bootErr         error
-	store           *store.SQLiteStore
-	settings        *settings.Service
-	copyManga       *copymanga.Client
-	klz9            *klz9.Client
-	downloads       *downloader.Manager
-	scanMu          sync.Mutex
-	scanOnce        sync.Once
-	updater         *updater.Updater
-	updaterProvider updater.Provider
-	isHomebrewFn    func() bool
-	isDevMode       bool
-	devModeLock     sync.RWMutex
+	bootErr           error
+	store             *store.SQLiteStore
+	settings          *settings.Service
+	copyManga         *copymanga.Client
+	klz9              *klz9.Client
+	downloads         *downloader.Manager
+	scanMu            sync.Mutex
+	scanOnce          sync.Once
+	updater           *updater.Updater
+	updaterProvider   updater.Provider
+	isHomebrewFn      func() bool
+	isDevMode         bool
+	devModeLock       sync.RWMutex
+	updateCheckMu     sync.Mutex
+	updateCheckStatus contracts.FollowedUpdateCheckProgress
 }
 
 func NewApp() *App {
@@ -423,7 +425,8 @@ func (a *App) bootstrap() error {
 
 	if st.Downloader.AutoCheckComicUpdates {
 		go func() {
-			time.Sleep(8 * time.Second)
+			time.Sleep(2 * time.Second)
+			logger.Get().Info("Startup auto check for followed comics update initiated")
 			_, _ = a.CheckAllFollowedUpdates()
 		}()
 	}
@@ -1440,26 +1443,87 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 	return len(inputs), nil
 }
 
+func (a *App) GetFollowedUpdateCheckStatus() contracts.FollowedUpdateCheckProgress {
+	a.updateCheckMu.Lock()
+	defer a.updateCheckMu.Unlock()
+	return a.updateCheckStatus
+}
+
 func (a *App) CheckAllFollowedUpdates() (int, error) {
 	if err := a.ensureReady(); err != nil {
 		return 0, err
 	}
+
+	a.updateCheckMu.Lock()
+	if a.updateCheckStatus.Checking {
+		queued := a.updateCheckStatus.Queued
+		a.updateCheckMu.Unlock()
+		logger.Get().Info("Followed updates check already in progress, returning current state")
+		return queued, nil
+	}
+
 	links, err := a.store.GetAutoFollowMangaLinks()
 	if err != nil {
+		a.updateCheckMu.Unlock()
 		return 0, err
 	}
 
+	total := len(links)
+	a.updateCheckStatus = contracts.FollowedUpdateCheckProgress{
+		Checking: true,
+		Current:  0,
+		Total:    total,
+		Queued:   0,
+	}
+	progressCopy := a.updateCheckStatus
+	a.updateCheckMu.Unlock()
+
+	a.emit(contracts.EventFollowedUpdateCheckProgress, progressCopy)
+
+	if total == 0 {
+		a.updateCheckMu.Lock()
+		a.updateCheckStatus = contracts.FollowedUpdateCheckProgress{
+			Checking: false,
+			Current:  0,
+			Total:    0,
+			Queued:   0,
+		}
+		progressCopy = a.updateCheckStatus
+		a.updateCheckMu.Unlock()
+
+		a.emit(contracts.EventFollowedUpdateCheckProgress, progressCopy)
+		logger.Get().Info("Followed comics update check complete, no followed manga found")
+		return 0, nil
+	}
+
 	totalQueued := 0
-	for _, link := range links {
+	for i, link := range links {
 		n, err := a.CheckMangaUpdates(link.MangaID)
 		if err != nil {
 			logger.Get().Warn("Failed to check updates for followed manga %s (%s): %v", link.MangaID, link.OnlineTitle, err)
-			continue
+		} else {
+			totalQueued += n
 		}
-		totalQueued += n
-		time.Sleep(1500 * time.Millisecond)
+
+		a.updateCheckMu.Lock()
+		a.updateCheckStatus.Current = i + 1
+		a.updateCheckStatus.Queued = totalQueued
+		progressCopy = a.updateCheckStatus
+		a.updateCheckMu.Unlock()
+
+		a.emit(contracts.EventFollowedUpdateCheckProgress, progressCopy)
+
+		if i < total-1 {
+			time.Sleep(1000 * time.Millisecond)
+		}
 	}
 
+	a.updateCheckMu.Lock()
+	a.updateCheckStatus.Checking = false
+	progressCopy = a.updateCheckStatus
+	a.updateCheckMu.Unlock()
+
+	a.emit(contracts.EventFollowedUpdateCheckProgress, progressCopy)
 	logger.Get().Info("Followed comics update check complete, queued %d new chapters", totalQueued)
 	return totalQueued, nil
 }

@@ -459,3 +459,40 @@ func TestNormalizeDuplicateMergeMode(t *testing.T) {
 		t.Fatal("expected normalize to reject invalid duplicate merge mode")
 	}
 }
+
+func TestAutoCheckComicUpdatesPersistence(t *testing.T) {
+	tempDir := t.TempDir()
+	sqliteStore, err := store.Open(tempDir)
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	current := service.Get()
+	if current.Downloader.AutoCheckComicUpdates {
+		t.Fatal("expected AutoCheckComicUpdates to default to false")
+	}
+
+	current.Downloader.AutoCheckComicUpdates = true
+	updated, err := service.Update(current)
+	if err != nil {
+		t.Fatalf("update settings failed: %v", err)
+	}
+	if !updated.Downloader.AutoCheckComicUpdates {
+		t.Fatal("expected AutoCheckComicUpdates to be true after update")
+	}
+
+	// Verify persistence across new service instantiation
+	service2, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("re-open settings service: %v", err)
+	}
+	if !service2.Get().Downloader.AutoCheckComicUpdates {
+		t.Fatal("expected AutoCheckComicUpdates to persist across service re-creation")
+	}
+}

@@ -1405,3 +1405,41 @@ func TestLoginCopyMangaDeveloperModeAndAccounts(t *testing.T) {
 		t.Fatalf("expected 0 accounts after deletion, got %+v", accountsAfter)
 	}
 }
+
+func TestApp_FollowedUpdateCheckStatusAndConcurrency(t *testing.T) {
+	tempDir := t.TempDir()
+	sqliteStore, err := store.Open(tempDir)
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	settingsService, err := settings.NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	app := &App{
+		store:    sqliteStore,
+		settings: settingsService,
+	}
+
+	// 1. Initial status should be idle
+	status := app.GetFollowedUpdateCheckStatus()
+	if status.Checking || status.Total != 0 || status.Current != 0 {
+		t.Fatalf("expected idle status, got %+v", status)
+	}
+
+	// 2. Running CheckAllFollowedUpdates with 0 links completes with 0
+	queued, err := app.CheckAllFollowedUpdates()
+	if err != nil {
+		t.Fatalf("CheckAllFollowedUpdates with 0 links failed: %v", err)
+	}
+	if queued != 0 {
+		t.Fatalf("expected 0 queued, got %d", queued)
+	}
+	status = app.GetFollowedUpdateCheckStatus()
+	if status.Checking {
+		t.Fatalf("expected status not checking after complete, got %+v", status)
+	}
+}
