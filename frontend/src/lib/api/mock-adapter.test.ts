@@ -309,6 +309,22 @@ describe("MockAdapter Pin Functionality", () => {
     const accountsAfterDel = await adapter.getCopyMangaAccounts();
     expect(accountsAfterDel.some((a) => a.username === "extra_acc")).toBe(false);
   });
+
+  it("handles followed updates checking status and events in mock mode", async () => {
+    const initialStatus = await adapter.getFollowedUpdateCheckStatus();
+    expect(initialStatus.checking).toBe(false);
+
+    const checkPromise = adapter.checkAllFollowedUpdates();
+    const runningStatus = await adapter.getFollowedUpdateCheckStatus();
+    expect(runningStatus.checking).toBe(true);
+
+    const queued = await checkPromise;
+    expect(typeof queued).toBe("number");
+
+    const finalStatus = await adapter.getFollowedUpdateCheckStatus();
+    expect(finalStatus.checking).toBe(false);
+  });
 });
+
 
 

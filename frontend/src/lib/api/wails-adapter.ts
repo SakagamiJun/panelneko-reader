@@ -16,6 +16,7 @@ import type {
   CopyMangaLoginResult,
   DevInfo,
   CopyMangaAccount,
+  FollowedUpdateCheckProgress,
 } from "@/lib/contracts";
 import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 import { isWailsEnvironment } from "@/lib/runtime";
@@ -266,6 +267,27 @@ export class WailsAdapter implements AppAdapter {
       return (await fn()) ?? 0;
     }
     return 0;
+  }
+
+  async getFollowedUpdateCheckStatus(): Promise<FollowedUpdateCheckProgress> {
+    const fn = (App as any).GetFollowedUpdateCheckStatus;
+    if (typeof fn === "function") {
+      const res = await fn();
+      return (
+        res ?? {
+          checking: false,
+          current: 0,
+          total: 0,
+          queued: 0,
+        }
+      );
+    }
+    return {
+      checking: false,
+      current: 0,
+      total: 0,
+      queued: 0,
+    };
   }
 
   async openLogDirectory(): Promise<void> {

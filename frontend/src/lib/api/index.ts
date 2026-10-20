@@ -131,6 +131,9 @@ export const appAdapter: AppAdapter = {
   checkAllFollowedUpdates() {
     return currentAdapter().checkAllFollowedUpdates();
   },
+  getFollowedUpdateCheckStatus() {
+    return currentAdapter().getFollowedUpdateCheckStatus();
+  },
   openLogDirectory() {
     return currentAdapter().openLogDirectory();
   },

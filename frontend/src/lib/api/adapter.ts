@@ -16,6 +16,7 @@ import type {
   CopyMangaLoginResult,
   DevInfo,
   CopyMangaAccount,
+  FollowedUpdateCheckProgress,
 } from "@/lib/contracts";
 
 export interface SelectDirectoryOptions {
@@ -66,6 +67,7 @@ export interface AppAdapter {
   unlinkMangaOnline(mangaID: string): Promise<void>;
   checkMangaUpdates(mangaID: string): Promise<number>;
   checkAllFollowedUpdates(): Promise<number>;
+  getFollowedUpdateCheckStatus(): Promise<FollowedUpdateCheckProgress>;
   openLogDirectory(): Promise<void>;
   toggleMangaAutoFollow(mangaID: string): Promise<boolean>;
   getAllMangaOnlineLinks(): Promise<MangaOnlineLink[]>;

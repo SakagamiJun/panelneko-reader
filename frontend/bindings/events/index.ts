@@ -19,6 +19,11 @@ export const DownloadProgress = "download:progress";
 export const DownloadTasksUpdated = "download:tasks_updated";
 
 /**
+ * Name of the custom event "followed_update:check_progress".
+ */
+export const FollowedUpdateCheckProgress = "followed_update:check_progress";
+
+/**
  * Name of the custom event "files:dropped".
  */
 export const FilesDropped = "files:dropped";

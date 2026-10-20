@@ -16,6 +16,7 @@ import {
   type CopyMangaLoginResult,
   type DevInfo,
   type CopyMangaAccount,
+  type FollowedUpdateCheckProgress,
 } from "@/lib/contracts";
 import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 
@@ -178,6 +179,12 @@ export class MockAdapter implements AppAdapter {
   private listeners = new Map<string, Set<Listener>>();
   private collectionOverrides = new Map<string, boolean>();
   private mockTasks: DownloadTask[] = [];
+  private followedUpdateStatus: FollowedUpdateCheckProgress = {
+    checking: false,
+    current: 0,
+    total: 0,
+    queued: 0,
+  };
   private mockLinks = new Map<string, MangaOnlineLink>();
   private isDevMode = false;
   private mockAccounts: CopyMangaAccount[] = [
@@ -672,7 +679,33 @@ export class MockAdapter implements AppAdapter {
   }
 
   async checkAllFollowedUpdates(): Promise<number> {
-    return 0;
+    if (this.followedUpdateStatus.checking) {
+      return this.followedUpdateStatus.queued;
+    }
+    const followedCount = Array.from(this.mockLinks.values()).filter((l) => l.autoFollow).length;
+    const total = followedCount > 0 ? followedCount : 2;
+    this.followedUpdateStatus = {
+      checking: true,
+      current: 0,
+      total,
+      queued: 0,
+    };
+    this.emit(EVENTS.FOLLOWED_UPDATE_CHECK_PROGRESS, { ...this.followedUpdateStatus });
+
+    // Simulate progressive check
+    for (let i = 1; i <= total; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      this.followedUpdateStatus.current = i;
+      this.emit(EVENTS.FOLLOWED_UPDATE_CHECK_PROGRESS, { ...this.followedUpdateStatus });
+    }
+
+    this.followedUpdateStatus.checking = false;
+    this.emit(EVENTS.FOLLOWED_UPDATE_CHECK_PROGRESS, { ...this.followedUpdateStatus });
+    return this.followedUpdateStatus.queued;
+  }
+
+  async getFollowedUpdateCheckStatus(): Promise<FollowedUpdateCheckProgress> {
+    return { ...this.followedUpdateStatus };
   }
 
   async openLogDirectory(): Promise<void> {

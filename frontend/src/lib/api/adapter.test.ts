@@ -46,6 +46,7 @@ const requiredAdapterMethods: AdapterMethod[] = [
   "unlinkMangaOnline",
   "checkMangaUpdates",
   "checkAllFollowedUpdates",
+  "getFollowedUpdateCheckStatus",
   "openLogDirectory",
   "toggleMangaAutoFollow",
   "getAllMangaOnlineLinks",

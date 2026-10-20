@@ -229,6 +229,13 @@ export interface UpdateCheckResult {
   isHomebrew?: boolean;
 }
 
+export interface FollowedUpdateCheckProgress {
+  checking: boolean;
+  current: number;
+  total: number;
+  queued: number;
+}
+
 export const EVENTS = {
   SETTINGS_UPDATED: BindingsEvents.SettingsUpdated,
   THEME_RESOLVED: BindingsEvents.ThemeResolved,
@@ -238,6 +245,7 @@ export const EVENTS = {
   FILES_OPENED: BindingsEvents.FilesOpened,
   DOWNLOAD_PROGRESS: BindingsEvents.DownloadProgress,
   DOWNLOAD_TASKS_UPDATED: BindingsEvents.DownloadTasksUpdated,
+  FOLLOWED_UPDATE_CHECK_PROGRESS: BindingsEvents.FollowedUpdateCheckProgress,
 } as const;
 
 export interface CopyMangaLoginResult {
