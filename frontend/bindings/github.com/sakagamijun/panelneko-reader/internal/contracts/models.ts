@@ -153,6 +153,13 @@ export enum DuplicateMergeMode {
     DuplicateMergeModeMerge = "merge",
 };
 
+export interface FollowedUpdateCheckProgress {
+    "checking": boolean;
+    "current": number;
+    "total": number;
+    "queued": number;
+}
+
 export interface LibraryManga {
     "id": string;
     "sourceID"?: string;

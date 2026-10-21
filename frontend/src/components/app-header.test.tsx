@@ -424,6 +424,8 @@ describe("AppHeader Component", () => {
             status: "downloading",
             totalPages: 10,
             downloadedPages: 2,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           },
         ]}
         downloadProgress={{

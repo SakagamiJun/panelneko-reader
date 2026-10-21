@@ -245,7 +245,9 @@ export const EVENTS = {
   FILES_OPENED: BindingsEvents.FilesOpened,
   DOWNLOAD_PROGRESS: BindingsEvents.DownloadProgress,
   DOWNLOAD_TASKS_UPDATED: BindingsEvents.DownloadTasksUpdated,
-  FOLLOWED_UPDATE_CHECK_PROGRESS: BindingsEvents.FollowedUpdateCheckProgress,
+  FOLLOWED_UPDATE_CHECK_PROGRESS:
+    (BindingsEvents as Record<string, string>).FollowedUpdateCheckProgress ??
+    "followed_update:check_progress",
 } as const;
 
 export interface CopyMangaLoginResult {

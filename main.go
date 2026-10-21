@@ -25,6 +25,7 @@ func init() {
 	application.RegisterEvent[[]string](contracts.EventFilesOpened)
 	application.RegisterEvent[contracts.DownloadProgress](contracts.EventDownloadProgress)
 	application.RegisterEvent[application.Void](contracts.EventDownloadTasksUpdated)
+	application.RegisterEvent[contracts.FollowedUpdateCheckProgress](contracts.EventFollowedUpdateCheckProgress)
 }
 
 func main() {

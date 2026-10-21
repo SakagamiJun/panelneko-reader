@@ -26,6 +26,7 @@ export type {
     DownloadProgress,
     DownloadTask,
     DownloaderSettings,
+    FollowedUpdateCheckProgress,
     LibraryManga,
     LibrarySource,
     LocaleResolvedPayload,

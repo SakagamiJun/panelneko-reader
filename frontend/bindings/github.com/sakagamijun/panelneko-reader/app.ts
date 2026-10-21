@@ -73,6 +73,10 @@ export function GetDownloadTasks(): $CancellablePromise<contracts$0.DownloadTask
     return $Call.ByID(3990232731);
 }
 
+export function GetFollowedUpdateCheckStatus(): $CancellablePromise<contracts$0.FollowedUpdateCheckProgress> {
+    return $Call.ByID(2930683628);
+}
+
 export function GetIsDevMode(): $CancellablePromise<boolean> {
     return $Call.ByID(2397861529);
 }

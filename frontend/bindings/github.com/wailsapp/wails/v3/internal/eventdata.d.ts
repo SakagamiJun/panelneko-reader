@@ -16,6 +16,7 @@ declare module "@wailsio/runtime" {
             "download:tasks_updated": void;
             "files:dropped": string[] | null;
             "files:opened": string[] | null;
+            "followed_update:check_progress": contracts$0.FollowedUpdateCheckProgress;
             "library:updated": void;
             "locale:resolved": contracts$0.LocaleResolvedPayload;
             "settings:updated": contracts$0.AppSettings;
