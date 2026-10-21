@@ -62,8 +62,6 @@ export interface DownloaderSettings {
   downloadSubPath?: string;
   copyMangaCdnMode?: "official" | "striped";
   copyMangaCustomCdns?: string[] | null;
-  copymangaCDNMode?: "official" | "striped";
-  copymangaCustomCDNs?: string;
   downloadFormat?: "cbz" | "folder";
   maxConcurrentDownloads?: number;
   maxImageConcurrency?: number;

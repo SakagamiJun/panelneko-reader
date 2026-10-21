@@ -17,12 +17,31 @@ import {
   type DevInfo,
   type CopyMangaAccount,
   type FollowedUpdateCheckProgress,
+  type DownloaderSettings,
 } from "@/lib/contracts";
 import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 
 const STORAGE_KEY = "panelneko-reader-settings";
 const READER_PROGRESS_STORAGE_KEY = "panelneko-reader-progress";
 const PINNED_STORAGE_KEY = "panelneko-pinned-items";
+
+const defaultDownloaderSettings: DownloaderSettings = {
+  enableCopyManga: false,
+  copyMangaApiDomain: "https://api.copymanga.tv",
+  copyMangaCdnMode: "official",
+  copyMangaCustomCdns: [],
+  enableRawManga: false,
+  rawMangaBaseUrl: "",
+  targetSourceId: "default",
+  downloadSubPath: "",
+  downloadDir: "",
+  downloadFormat: "cbz",
+  maxConcurrentDownloads: 3,
+  maxImageConcurrency: 5,
+  chapterIntervalSec: 2,
+  autoCheckComicUpdates: false,
+  autoFollowPolicy: "latest_only",
+};
 
 const defaultSettings: AppSettings = {
   libraryRoot: "/mock/library",
@@ -62,6 +81,7 @@ const defaultSettings: AppSettings = {
   autoCheckUpdates: true,
   enableThumbnailCache: true,
   thumbnailQuality: "medium",
+  downloader: defaultDownloaderSettings,
 };
 
 function createMockReaderManifest(index: number, title: string): ReaderManifest {
@@ -196,7 +216,15 @@ export class MockAdapter implements AppAdapter {
 
   async updateSettings(input: AppSettings) {
     const current = this.readSettings();
-    const updated: AppSettings = { ...current, ...input };
+    const updated: AppSettings = {
+      ...current,
+      ...input,
+      downloader: {
+        ...defaultDownloaderSettings,
+        ...(current.downloader ?? {}),
+        ...(input.downloader ?? {}),
+      },
+    };
     if (input.thumbnailQuality !== undefined) {
       updated.thumbnailQuality = input.thumbnailQuality;
       updated.enableThumbnailCache = input.thumbnailQuality !== "off";
@@ -828,7 +856,15 @@ export class MockAdapter implements AppAdapter {
       if (!raw) {
         return defaultSettings;
       }
-      return { ...defaultSettings, ...(JSON.parse(raw) as AppSettings) };
+      const parsed = JSON.parse(raw) as AppSettings;
+      return {
+        ...defaultSettings,
+        ...parsed,
+        downloader: {
+          ...defaultDownloaderSettings,
+          ...(parsed.downloader ?? {}),
+        },
+      };
     } catch {
       return defaultSettings;
     }

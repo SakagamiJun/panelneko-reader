@@ -64,22 +64,7 @@ export function SettingsDialog({
 
   useEffect(() => {
     if (settings) {
-      const dl = settings.downloader;
-      const cdnMode = dl?.copyMangaCdnMode || dl?.copymangaCDNMode || "official";
-      const customCDNsStr = Array.isArray(dl?.copyMangaCustomCdns)
-        ? dl.copyMangaCustomCdns.join(", ")
-        : dl?.copymangaCustomCDNs || "";
-      setForm({
-        ...settings,
-        downloader: dl
-          ? {
-              ...dl,
-              copyMangaCdnMode: cdnMode,
-              copymangaCDNMode: cdnMode,
-              copymangaCustomCDNs: customCDNsStr,
-            }
-          : dl,
-      });
+      setForm(settings);
     }
   }, [settings]);
 

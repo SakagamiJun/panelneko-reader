@@ -1,5 +1,10 @@
 package contracts
 
+import (
+	"encoding/json"
+	"strings"
+)
+
 type LocaleMode string
 
 const (
@@ -139,6 +144,53 @@ type DownloaderSettings struct {
 	ChapterIntervalSec         int      `json:"chapterIntervalSec,omitempty"`
 	AutoCheckComicUpdates      bool     `json:"autoCheckComicUpdates,omitempty"`
 	AutoFollowPolicy           string   `json:"autoFollowPolicy,omitempty"` // "latest_only" | "fill_gaps"
+}
+
+func (d *DownloaderSettings) UnmarshalJSON(data []byte) error {
+	type Alias DownloaderSettings
+	aux := struct {
+		*Alias
+		RawCustomCDNs  json.RawMessage `json:"copyMangaCustomCdns"`
+		RawCustomCDNs2 json.RawMessage `json:"copymangaCustomCDNs"`
+	}{
+		Alias: (*Alias)(d),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	raw := aux.RawCustomCDNs
+	if len(raw) == 0 || string(raw) == "null" {
+		raw = aux.RawCustomCDNs2
+	}
+
+	if len(raw) > 0 && string(raw) != "null" {
+		var list []string
+		if err := json.Unmarshal(raw, &list); err == nil {
+			d.CopyMangaCustomCDNs = list
+		} else {
+			var str string
+			if err := json.Unmarshal(raw, &str); err == nil {
+				trimmed := strings.TrimSpace(str)
+				if trimmed != "" {
+					parts := strings.Split(trimmed, ",")
+					var cdns []string
+					for _, p := range parts {
+						p = strings.TrimSpace(p)
+						if p != "" {
+							cdns = append(cdns, p)
+						}
+					}
+					d.CopyMangaCustomCDNs = cdns
+				} else {
+					d.CopyMangaCustomCDNs = nil
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 type OnlineMangaItem struct {

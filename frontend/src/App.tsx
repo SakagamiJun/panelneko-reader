@@ -316,6 +316,9 @@ export default function App() {
       queryClient.setQueryData(["settings"], updated);
       await queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
+    onError: (err) => {
+      console.error("Failed to update settings:", err);
+    },
   });
 
   const togglePinMutation = useMutation({

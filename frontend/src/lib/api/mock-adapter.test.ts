@@ -324,6 +324,27 @@ describe("MockAdapter Pin Functionality", () => {
     const finalStatus = await adapter.getFollowedUpdateCheckStatus();
     expect(finalStatus.checking).toBe(false);
   });
+
+  it("persists downloader settings including autoCheckComicUpdates and custom cdns", async () => {
+    const current = await adapter.getSettings();
+    expect(current.downloader?.autoCheckComicUpdates).toBe(false);
+
+    const updated = await adapter.updateSettings({
+      ...current,
+      downloader: {
+        ...current.downloader!,
+        autoCheckComicUpdates: true,
+        copyMangaCustomCdns: ["https://cdn.test.com"],
+      },
+    });
+
+    expect(updated.downloader?.autoCheckComicUpdates).toBe(true);
+    expect(updated.downloader?.copyMangaCustomCdns).toEqual(["https://cdn.test.com"]);
+
+    const reloaded = await adapter.getSettings();
+    expect(reloaded.downloader?.autoCheckComicUpdates).toBe(true);
+    expect(reloaded.downloader?.copyMangaCustomCdns).toEqual(["https://cdn.test.com"]);
+  });
 });
 
 

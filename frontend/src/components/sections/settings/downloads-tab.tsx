@@ -40,6 +40,17 @@ export function DownloadsTab({
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginStatusMessage, setLoginStatusMessage] = useState("");
 
+  const currentCDNsStr = Array.isArray(form.downloader?.copyMangaCustomCdns)
+    ? form.downloader.copyMangaCustomCdns.join(", ")
+    : "";
+  const [customCDNsInput, setCustomCDNsInput] = useState(currentCDNsStr);
+  const [prevCDNsStr, setPrevCDNsStr] = useState(currentCDNsStr);
+
+  if (currentCDNsStr !== prevCDNsStr) {
+    setPrevCDNsStr(currentCDNsStr);
+    setCustomCDNsInput(currentCDNsStr);
+  }
+
   const selectedTargetSourceId = form.downloader?.targetSourceId || form.librarySources?.[0]?.id;
   const selectedTargetSource = form.librarySources?.find((s) => s.id === selectedTargetSourceId);
   const targetSubPath = form.downloader?.downloadSubPath?.trim() ?? "";
@@ -217,11 +228,10 @@ export function DownloadsTab({
               control={
                 <SegmentedControl
                   size="sm"
-                  value={form.downloader?.copyMangaCdnMode || form.downloader?.copymangaCDNMode || "official"}
+                  value={form.downloader?.copyMangaCdnMode || "official"}
                   onChange={(val) =>
                     updateDownloader({
                       copyMangaCdnMode: val as "official" | "striped",
-                      copymangaCDNMode: val as "official" | "striped",
                     })
                   }
                   options={[
@@ -231,22 +241,18 @@ export function DownloadsTab({
                 />
               }
             />
-            {(form.downloader?.copyMangaCdnMode === "striped" || form.downloader?.copymangaCDNMode === "striped") && (
+            {form.downloader?.copyMangaCdnMode === "striped" && (
               <SettingRow
                 title={t("settings.copyMangaCustomCDNs")}
                 description={t("settings.copyMangaCustomCDNsHint")}
                 control={
                   <Input
-                    value={
-                      Array.isArray(form.downloader?.copyMangaCustomCdns)
-                        ? form.downloader?.copyMangaCustomCdns.join(", ")
-                        : form.downloader?.copymangaCustomCDNs ?? ""
-                    }
+                    value={customCDNsInput}
                     onChange={(e) => {
                       const val = e.target.value;
+                      setCustomCDNsInput(val);
                       const parsed = val.split(",").map((s) => s.trim()).filter(Boolean);
                       updateDownloader({
-                        copymangaCustomCDNs: val,
                         copyMangaCustomCdns: parsed,
                       });
                     }}
