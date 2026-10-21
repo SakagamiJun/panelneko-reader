@@ -17,7 +17,6 @@ import {
   type AppSettings,
   type DownloadProgress,
   type DownloadTask,
-  type DuplicateMergeMode,
   EVENTS,
   type FollowedUpdateCheckProgress,
   type LibraryManga,
@@ -347,24 +346,6 @@ export default function App() {
   });
 
   const settings = settingsQuery.data;
-  const isMergeMode = settings?.duplicateMergeMode === "merge";
-
-  const prevMergeModeRef = useRef<DuplicateMergeMode | undefined>(undefined);
-  useEffect(() => {
-    const prev = prevMergeModeRef.current;
-    const current = settings?.duplicateMergeMode;
-    if (prev !== undefined && current !== undefined && prev !== current) {
-      if (selectedCollectionPath) {
-        if (current === "separate") {
-          setSelectedCollectionPath(null);
-          setSelectedCollectionSourceID(null);
-        } else if (current === "merge") {
-          setSelectedCollectionSourceID(null);
-        }
-      }
-    }
-    prevMergeModeRef.current = current;
-  }, [settings?.duplicateMergeMode, selectedCollectionPath]);
 
   const library = libraryQuery.data ?? [];
 
@@ -423,17 +404,14 @@ export default function App() {
         (item) =>
           item.isCollection &&
           item.relativePath === selectedLibrary.parentPath &&
-          (isMergeMode || (item.sourceID || "default") === (selectedLibrary.sourceID || "default"))
+          (item.sourceID || "default") === (selectedLibrary.sourceID || "default")
       )
     : null;
   const currentCollection = selectedCollectionPath
     ? library.find((item) => {
         if (!item.isCollection || item.relativePath !== selectedCollectionPath) return false;
-        if (!isMergeMode) {
-          const targetSource = selectedCollectionSourceID || "default";
-          return (item.sourceID || "default") === targetSource;
-        }
-        return true;
+        const targetSource = selectedCollectionSourceID || "default";
+        return (item.sourceID || "default") === targetSource;
       })
     : null;
 
@@ -448,11 +426,9 @@ export default function App() {
         if (item.parentPath !== selectedCollectionPath) {
           return false;
         }
-        if (!isMergeMode) {
-          const targetSource = selectedCollectionSourceID || "default";
-          if ((item.sourceID || "default") !== targetSource) {
-            return false;
-          }
+        const targetSource = selectedCollectionSourceID || "default";
+        if ((item.sourceID || "default") !== targetSource) {
+          return false;
         }
         if (!showOffline && item.isAvailable === false) {
           return false;
@@ -469,7 +445,7 @@ export default function App() {
             (c) =>
               c.parentPath === item.relativePath &&
               c.isAvailable !== false &&
-              (isMergeMode || (c.sourceID || "default") === (item.sourceID || "default"))
+              (c.sourceID || "default") === (item.sourceID || "default")
           );
           if (!hasAvailableChild) {
             return false;
@@ -487,7 +463,7 @@ export default function App() {
         (c) =>
           c.parentPath === item.relativePath &&
           c.isAvailable !== false &&
-          (isMergeMode || (c.sourceID || "default") === (item.sourceID || "default"))
+          (c.sourceID || "default") === (item.sourceID || "default")
       ).length;
       return { ...item, mangaCount: availableChildrenCount };
     })
@@ -581,11 +557,7 @@ export default function App() {
   const handleExitReader = () => {
     if (parentCollection) {
       setSelectedCollectionPath(parentCollection.relativePath);
-      if (isMergeMode && selectedSourceID === "all") {
-        setSelectedCollectionSourceID(null);
-      } else {
-        setSelectedCollectionSourceID(parentCollection.sourceID || "default");
-      }
+      setSelectedCollectionSourceID(parentCollection.sourceID || "default");
     }
     setSelectedLibraryID(null);
   };
@@ -751,11 +723,7 @@ export default function App() {
                 }}
                 onOpenCollection={(collectionPath, sourceID) => {
                   setSelectedCollectionPath(collectionPath);
-                  if (isMergeMode && selectedSourceID === "all") {
-                    setSelectedCollectionSourceID(null);
-                  } else {
-                    setSelectedCollectionSourceID(sourceID || "default");
-                  }
+                  setSelectedCollectionSourceID(sourceID || "default");
                 }}
                 onOpenSettings={() => openSettingsWithTab("general")}
                 onTogglePin={(id) => togglePinMutation.mutate(id)}

@@ -3,7 +3,6 @@
 
 export {
     DownloadTaskStatus,
-    DuplicateMergeMode,
     LocaleMode,
     ReaderDirection,
     ReaderFilter,

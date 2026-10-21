@@ -105,34 +105,9 @@ describe("App Collection View in Duplicate Merge Mode", () => {
     cleanup();
   });
 
-  it("displays both local and remote child mangas in merge mode", async () => {
+  it("isolates source children in collection view", async () => {
     vi.spyOn(appAdapter, "getSettings").mockResolvedValue({
       ...baseSettings,
-      duplicateMergeMode: "merge",
-    });
-    vi.spyOn(appAdapter, "listLibraryManga").mockResolvedValue(mockItems);
-
-    renderApp();
-
-    // Verify collection card is displayed
-    await waitFor(() => {
-      expect(screen.getByText("Action")).toBeInTheDocument();
-    });
-
-    // Click on Action collection
-    fireEvent.click(screen.getByText("Action"));
-
-    // In merge mode, both local and remote manga must be visible
-    await waitFor(() => {
-      expect(screen.getByText("Local Naruto")).toBeInTheDocument();
-      expect(screen.getByText("Remote Bleach")).toBeInTheDocument();
-    });
-  });
-
-  it("isolates source children in separate mode", async () => {
-    vi.spyOn(appAdapter, "getSettings").mockResolvedValue({
-      ...baseSettings,
-      duplicateMergeMode: "separate",
     });
     vi.spyOn(appAdapter, "listLibraryManga").mockResolvedValue(mockItems);
 
@@ -152,15 +127,14 @@ describe("App Collection View in Duplicate Merge Mode", () => {
     });
   });
 
-  it("exits reader back to collection for remote manga in merge mode", async () => {
+  it("exits reader back to collection view", async () => {
     vi.spyOn(appAdapter, "getSettings").mockResolvedValue({
       ...baseSettings,
-      duplicateMergeMode: "merge",
     });
     vi.spyOn(appAdapter, "listLibraryManga").mockResolvedValue(mockItems);
     vi.spyOn(appAdapter, "getReaderManifest").mockResolvedValue({
-      mangaID: "manga-remote-bleach",
-      title: "Remote Bleach",
+      mangaID: "manga-local-naruto",
+      title: "Local Naruto",
       chapters: [
         {
           id: "ch-1",
@@ -186,7 +160,7 @@ describe("App Collection View in Duplicate Merge Mode", () => {
       coverImageURL: "",
     });
     vi.spyOn(appAdapter, "getReaderProgress").mockResolvedValue({
-      mangaID: "manga-remote-bleach",
+      mangaID: "manga-local-naruto",
       chapterID: "ch-1",
       page: 1,
       updatedAt: "2026-09-24T12:00:00Z",
@@ -202,20 +176,19 @@ describe("App Collection View in Duplicate Merge Mode", () => {
     fireEvent.click(screen.getByText("Action"));
 
     await waitFor(() => {
-      expect(screen.getByText("Remote Bleach")).toBeInTheDocument();
+      expect(screen.getByText("Local Naruto")).toBeInTheDocument();
     });
 
-    // Open remote manga
-    fireEvent.click(screen.getByText("Remote Bleach"));
+    // Open local manga
+    fireEvent.click(screen.getByText("Local Naruto"));
 
     // Find and click exit reader button
     const exitBtn = await screen.findByRole("button", { name: /Back to Library|返回书架|ライブラリに戻る/i });
     fireEvent.click(exitBtn);
 
-    // Verify it returns to the collection view with both mangas
+    // Verify it returns to the collection view
     await waitFor(() => {
       expect(screen.getByText("Local Naruto")).toBeInTheDocument();
-      expect(screen.getByText("Remote Bleach")).toBeInTheDocument();
     });
   });
 
@@ -395,7 +368,6 @@ describe("App Collection View in Duplicate Merge Mode", () => {
 
     vi.spyOn(appAdapter, "getSettings").mockResolvedValue({
       ...baseSettings,
-      duplicateMergeMode: "separate",
     });
     vi.spyOn(appAdapter, "listLibraryManga").mockResolvedValue(multiCollItems);
 
@@ -431,46 +403,6 @@ describe("App Collection View in Duplicate Merge Mode", () => {
     await waitFor(() => {
       expect(screen.getByText("Remote Bleach")).toBeInTheDocument();
       expect(screen.queryByText("Local Naruto")).not.toBeInTheDocument();
-    });
-  });
-
-  it("resets collection view safely when duplicateMergeMode is switched from merge to separate", async () => {
-    let currentMode: "merge" | "separate" = "merge";
-    vi.spyOn(appAdapter, "getSettings").mockImplementation(async () => ({
-      ...baseSettings,
-      duplicateMergeMode: currentMode,
-    }));
-    vi.spyOn(appAdapter, "listLibraryManga").mockResolvedValue(mockItems);
-
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    renderApp(queryClient);
-
-    // In merge mode, enter Action collection
-    await waitFor(() => {
-      expect(screen.getByText("Action")).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByText("Action"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Local Naruto")).toBeInTheDocument();
-      expect(screen.getByText("Remote Bleach")).toBeInTheDocument();
-    });
-
-    // Switch duplicateMergeMode to separate
-    currentMode = "separate";
-    queryClient.setQueryData(["settings"], {
-      ...baseSettings,
-      duplicateMergeMode: "separate",
-    });
-
-    // Collection view should automatically reset to library root to prevent cross-source leakage
-    await waitFor(() => {
-      expect(screen.queryByText("Local Naruto")).not.toBeInTheDocument();
-      expect(screen.queryByText("Remote Bleach")).not.toBeInTheDocument();
-      expect(screen.getByText("Action")).toBeInTheDocument();
     });
   });
 

@@ -13,13 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import { Switch } from "@/components/ui/switch";
 import { appAdapter } from "@/lib/api";
 import type {
   AppSettings,
-  DuplicateMergeMode,
   LibrarySource,
   SourceType,
 } from "@/lib/contracts";
@@ -506,39 +503,6 @@ export function SourcesTab({
         onConfirm={handleConfirmDeleteSource}
         onCancel={() => setSourceToDelete(null)}
       />
-
-      <div className="pt-2">
-        <SettingGroup
-          title={t("settings.duplicateMergeMode")}
-          description={t("settings.duplicateMergeModeDesc")}
-        >
-          <SettingRow
-            title={t("settings.duplicateMergeMode")}
-            description={
-              form.duplicateMergeMode === "merge"
-                ? t("settings.duplicateMergeMergeDesc")
-                : t("settings.duplicateMergeSeparateDesc")
-            }
-            control={
-              <SegmentedControl<DuplicateMergeMode>
-                size="sm"
-                value={form.duplicateMergeMode ?? "separate"}
-                onChange={(mode) => updateField("duplicateMergeMode", mode)}
-                options={[
-                  {
-                    value: "separate",
-                    label: t("settings.duplicateMergeSeparate"),
-                  },
-                  {
-                    value: "merge",
-                    label: t("settings.duplicateMergeMerge"),
-                  },
-                ]}
-              />
-            }
-          />
-        </SettingGroup>
-      </div>
     </div>
   );
 }

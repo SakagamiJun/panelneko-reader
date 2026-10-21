@@ -62,7 +62,6 @@ const defaultSettings: AppSettings = {
   autoCheckUpdates: true,
   enableThumbnailCache: true,
   thumbnailQuality: "medium",
-  duplicateMergeMode: "separate",
 };
 
 function createMockReaderManifest(index: number, title: string): ReaderManifest {
@@ -238,13 +237,12 @@ export class MockAdapter implements AppAdapter {
     });
 
     // Update collection cover if child is pinned
-    const isMergeMode = settings.duplicateMergeMode === "merge";
     for (const item of items) {
       if (item.isCollection) {
         const children = items.filter(
           (c) =>
             c.parentPath === item.relativePath &&
-            (isMergeMode || (c.sourceID || "default") === (item.sourceID || "default"))
+            (c.sourceID || "default") === (item.sourceID || "default")
         );
         const pinnedChildren = children.filter((c) => c.isPinned);
         if (pinnedChildren.length > 0) {
@@ -269,7 +267,6 @@ export class MockAdapter implements AppAdapter {
     });
 
     const getCollectionKey = (sourceID: string | undefined, path: string) => {
-      if (isMergeMode) return path;
       return (sourceID || "default") + "::" + path;
     };
 

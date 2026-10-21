@@ -247,7 +247,7 @@ export function AboutTab({ form, updateField, version, commit }: AboutTabProps) 
         <SettingRow
           title="Wails"
           description={t("settings.ackWailsDesc")}
-          control={<span className="text-[11px] font-mono text-muted-foreground">v2</span>}
+          control={<span className="text-[11px] font-mono text-muted-foreground">v3</span>}
         />
         <SettingRow
           title="Go"
@@ -255,7 +255,7 @@ export function AboutTab({ form, updateField, version, commit }: AboutTabProps) 
           control={<span className="text-[11px] font-mono text-muted-foreground">Backend</span>}
         />
         <SettingRow
-          title="React 19"
+          title="React"
           description={t("settings.ackReactDesc")}
           control={<span className="text-[11px] font-mono text-muted-foreground">Frontend</span>}
         />

@@ -21,7 +21,6 @@ export interface AppSettings {
     "autoCheckUpdates"?: boolean | null;
     "enableThumbnailCache"?: boolean | null;
     "thumbnailQuality"?: ThumbnailQuality;
-    "duplicateMergeMode"?: DuplicateMergeMode;
     "enableFileLogging": boolean;
     "downloader": DownloaderSettings;
 }
@@ -142,16 +141,6 @@ export interface DownloaderSettings {
      */
     "autoFollowPolicy"?: string;
 }
-
-export enum DuplicateMergeMode {
-    /**
-     * The Go zero value for the underlying type of the enum.
-     */
-    $zero = "",
-
-    DuplicateMergeModeSeparate = "separate",
-    DuplicateMergeModeMerge = "merge",
-};
 
 export interface FollowedUpdateCheckProgress {
     "checking": boolean;

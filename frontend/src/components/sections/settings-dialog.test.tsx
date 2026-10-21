@@ -360,7 +360,7 @@ describe("SettingsDialog Component - Sources Tab", () => {
     );
   });
 
-  it("renders duplicate merge mode control and updates setting on change", () => {
+  it("does not render duplicate merge mode control in sources tab", () => {
     const onSaveSpy = vi.fn();
 
     render(
@@ -373,16 +373,7 @@ describe("SettingsDialog Component - Sources Tab", () => {
       />
     );
 
-    expect(screen.getAllByText(/同名内容展示策略|Duplicate Content Strategy|同名コンテンツの表示方針/i).length).toBeGreaterThanOrEqual(1);
-
-    const mergeBtn = screen.getByRole("radio", { name: /自动合并|Auto Merge|自動統合/i });
-    fireEvent.click(mergeBtn);
-
-    expect(onSaveSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        duplicateMergeMode: "merge",
-      })
-    );
+    expect(screen.queryByText(/同名内容展示策略|Duplicate Content Strategy|同名コンテンツの表示方針/i)).not.toBeInTheDocument();
   });
 
   it("renders downloads tab and toggles provider settings", () => {
