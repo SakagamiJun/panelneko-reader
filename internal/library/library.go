@@ -603,8 +603,6 @@ func ResolveDirectoryPathWithSources(sources []contracts.LibrarySource, mangaID 
 		return "", err
 	}
 	return "", fmt.Errorf("manga directory not found: %s", relativePath)
-
-	return targetPath, nil
 }
 
 func ToggleCollectionMarker(outputRoot string, mangaID string) (bool, error) {
