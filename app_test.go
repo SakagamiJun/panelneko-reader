@@ -959,7 +959,7 @@ func TestMultiSourceScanningAndOfflineFallback(t *testing.T) {
 	}
 }
 
-func TestAppDuplicateMergeMode(t *testing.T) {
+func TestAppSourcesSeparateDisplay(t *testing.T) {
 	dataDir := t.TempDir()
 	appDataDir := filepath.Join(dataDir, "panelneko-reader")
 	sqliteStore, err := store.Open(appDataDir)
@@ -991,7 +991,6 @@ func TestAppDuplicateMergeMode(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dirB, "Action", "One Piece", "Vol 01", "001.jpg"), []byte("op-page1"), 0o644)
 
 	initSettings := settingsService.Get()
-	initSettings.DuplicateMergeMode = contracts.DuplicateMergeModeSeparate
 	initSettings.LibrarySources = []contracts.LibrarySource{
 		{
 			ID:      "src-local",
@@ -1020,7 +1019,7 @@ func TestAppDuplicateMergeMode(t *testing.T) {
 		settings: settingsService,
 	}
 
-	// 1. Separate mode: both items exist independently
+	// 1. Separate display: both same-named items exist independently
 	itemsSep, err := app.ListLibraryManga()
 	if err != nil {
 		t.Fatalf("ListLibraryManga (separate): %v", err)
@@ -1042,81 +1041,19 @@ func TestAppDuplicateMergeMode(t *testing.T) {
 		t.Fatalf("expected 2 Naruto mangas in separate mode, got %d", sepNaruto)
 	}
 
-	// 2. Switch to Merge Mode
-	current := app.settings.Get()
-	current.DuplicateMergeMode = contracts.DuplicateMergeModeMerge
-	_, err = app.UpdateSettings(current)
+	// 2. Test GetReaderManifest for specific item
+	localNarutoID := library.EncodeMangaIDWithSource("src-local", "Naruto")
+	manifestLocal, err := app.GetReaderManifest(localNarutoID)
 	if err != nil {
-		t.Fatalf("update settings to merge mode: %v", err)
+		t.Fatalf("GetReaderManifest (local): %v", err)
+	}
+	if len(manifestLocal.Chapters) != 1 || manifestLocal.Chapters[0].Title != "Vol 01" {
+		t.Fatalf("expected 1 chapter 'Vol 01' for local Naruto, got %v", manifestLocal.Chapters)
 	}
 
-	itemsMerged, err := app.ListLibraryManga()
-	if err != nil {
-		t.Fatalf("ListLibraryManga (merge): %v", err)
-	}
-
-	var mergedColl *contracts.LibraryManga
-	var mergedNaruto *contracts.LibraryManga
-	var mergedChildren []contracts.LibraryManga
-
-	for i := range itemsMerged {
-		it := itemsMerged[i]
-		if it.ParentPath == "" && it.IsCollection && it.RelativePath == "Action" {
-			mergedColl = &it
-		}
-		if it.ParentPath == "" && !it.IsCollection && it.RelativePath == "Naruto" {
-			mergedNaruto = &it
-		}
-		if it.ParentPath == "Action" {
-			mergedChildren = append(mergedChildren, it)
-		}
-	}
-
-	if mergedColl == nil {
-		t.Fatal("merged collection Action not found")
-	}
-	if mergedColl.SourceID != "src-local" {
-		t.Fatalf("expected merged collection source to be local, got %s", mergedColl.SourceID)
-	}
-	if mergedColl.MangaCount != 2 {
-		t.Fatalf("expected merged collection to contain 2 children, got %d", mergedColl.MangaCount)
-	}
-	if len(mergedChildren) != 2 {
-		t.Fatalf("expected 2 child mangas under Action, got %d", len(mergedChildren))
-	}
-
-	if mergedNaruto == nil {
-		t.Fatal("merged Naruto not found")
-	}
-	if mergedNaruto.SourceID != "src-local" {
-		t.Fatalf("expected merged Naruto source to be local, got %s", mergedNaruto.SourceID)
-	}
-	if mergedNaruto.ChapterCount != 2 {
-		t.Fatalf("expected merged Naruto chapter count to be 2, got %d", mergedNaruto.ChapterCount)
-	}
-
-	// 3. Test GetReaderManifest in merge mode
-	manifest, err := app.GetReaderManifest(mergedNaruto.ID)
-	if err != nil {
-		t.Fatalf("GetReaderManifest (merged): %v", err)
-	}
-	if len(manifest.Chapters) != 2 {
-		t.Fatalf("expected 2 merged chapters in reader manifest, got %d", len(manifest.Chapters))
-	}
-	if manifest.Chapters[0].Title != "Vol 01" || manifest.Chapters[1].Title != "Vol 02" {
-		t.Fatalf("unexpected chapter order: %s, %s", manifest.Chapters[0].Title, manifest.Chapters[1].Title)
-	}
-	if manifest.TotalPages != 2 {
-		t.Fatalf("expected 2 total pages, got %d", manifest.TotalPages)
-	}
-
-	// 4. Test Remote Source Disconnection Fallback
+	// 3. Test Remote Source Disconnection Fallback
 	// Simulate DirB (network source) being disconnected or inaccessible
 	_ = os.RemoveAll(dirB)
-
-	// In separate mode, request remote manga ID with fallback to local source
-	current.DuplicateMergeMode = contracts.DuplicateMergeModeSeparate
-	_, _ = app.UpdateSettings(current)
 
 	remoteNarutoID := library.EncodeMangaIDWithSource("src-network", "Naruto")
 	manifestFallback, err := app.GetReaderManifest(remoteNarutoID)

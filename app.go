@@ -613,11 +613,7 @@ func (a *App) getCachedLibraryManga() ([]contracts.LibraryManga, error) {
 	}
 
 	currentSettings := a.settings.Get()
-	if currentSettings.DuplicateMergeMode == contracts.DuplicateMergeModeMerge {
-		items = library.MergeLibraryManga(items, currentSettings.LibrarySources, pins)
-	}
-
-	items = library.ApplyPinsAndSort(items, pins, currentSettings.DuplicateMergeMode)
+	items = library.ApplyPinsAndSort(items, pins)
 
 	quality := resolveThumbnailQuality(currentSettings)
 
@@ -684,7 +680,7 @@ func (a *App) GetReaderManifest(mangaID string) (contracts.ReaderManifest, error
 		return contracts.ReaderManifest{}, err
 	}
 
-	return library.GetReaderManifestWithSources(a.getActiveSources(), mangaID, a.settings.Get().DuplicateMergeMode)
+	return library.GetReaderManifestWithSources(a.getActiveSources(), mangaID)
 }
 
 func (a *App) GetReaderProgress(mangaID string) (contracts.ReaderProgress, error) {
@@ -1309,7 +1305,7 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 		return 0, fmt.Errorf("get online chapters: %w", err)
 	}
 
-	manifest, err := library.GetReaderManifestWithSources(a.getActiveSources(), mangaID, a.settings.Get().DuplicateMergeMode)
+	manifest, err := library.GetReaderManifestWithSources(a.getActiveSources(), mangaID)
 	if err != nil {
 		return 0, fmt.Errorf("get local manifest: %w", err)
 	}

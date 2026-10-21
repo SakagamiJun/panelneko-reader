@@ -747,12 +747,7 @@ func TestApplyPinsAndSortMultiSourceIsolation(t *testing.T) {
 	}
 }
 
-func TestApplyPinsAndSortDuplicateMergeMode(t *testing.T) {
-	sources := []contracts.LibrarySource{
-		{ID: "src-local", Type: contracts.SourceTypeLocal, Enabled: true},
-		{ID: "src-remote", Type: contracts.SourceTypeNetwork, Enabled: true},
-	}
-
+func TestApplyPinsAndSortSourcesSeparation(t *testing.T) {
 	items := []contracts.LibraryManga{
 		{
 			ID:            "src-local:Action",
@@ -801,33 +796,31 @@ func TestApplyPinsAndSortDuplicateMergeMode(t *testing.T) {
 		"src-remote:Action/Remote2": "2026-08-23T11:00:00Z",
 	}
 
-	// 1. Merge library items across sources
-	merged := MergeLibraryManga(items, sources, pins)
+	sorted := ApplyPinsAndSort(items, pins)
 
-	// 2. Apply pins and sort in Merge mode
-	sorted := ApplyPinsAndSort(merged, pins, contracts.DuplicateMergeModeMerge)
-
-	// Expect merged collection to be first, followed by children of Action (pinned remote first, then local)
-	if len(sorted) != 3 {
-		t.Fatalf("expected 3 items (1 merged collection + 2 children), got %d", len(sorted))
+	// In separate mode, collection covers are isolated by source
+	var localAction, remoteAction *contracts.LibraryManga
+	for i := range sorted {
+		if sorted[i].ID == "src-local:Action" {
+			localAction = &sorted[i]
+		}
+		if sorted[i].ID == "src-remote:Action" {
+			remoteAction = &sorted[i]
+		}
 	}
 
-	coll := sorted[0]
-	if coll.ID != "src-local:Action" || !coll.IsCollection {
-		t.Fatalf("expected merged collection as first item, got ID=%s, isColl=%v", coll.ID, coll.IsCollection)
+	if localAction == nil || remoteAction == nil {
+		t.Fatalf("expected both local and remote Action collections to exist independently")
 	}
 
-	// Pinned remote child cover should propagate to merged collection cover
-	if coll.CoverImageURL != "/covers/remote-2-pinned.jpg" {
-		t.Fatalf("expected collection cover to be updated to pinned remote child cover, got %s", coll.CoverImageURL)
+	// Remote Action cover should update because its child was pinned
+	if remoteAction.CoverImageURL != "/covers/remote-2-pinned.jpg" {
+		t.Fatalf("expected remote collection cover to be updated to pinned remote child cover, got %s", remoteAction.CoverImageURL)
 	}
 
-	// Children order: Remote Manga 2 (pinned) then Local Manga 1
-	if sorted[1].ID != "src-remote:Action/Remote2" {
-		t.Fatalf("expected pinned remote child as sorted[1], got %s", sorted[1].ID)
-	}
-	if sorted[2].ID != "src-local:Action/Local1" {
-		t.Fatalf("expected local child as sorted[2], got %s", sorted[2].ID)
+	// Local Action cover should NOT be overwritten by the remote pin
+	if localAction.CoverImageURL != "/covers/local-action.jpg" {
+		t.Fatalf("expected local collection cover to remain unchanged, got %s", localAction.CoverImageURL)
 	}
 }
 
@@ -1160,223 +1153,7 @@ func TestMultiSourceLibraryScanningAndResolution(t *testing.T) {
 	}
 }
 
-func TestMergeLibraryManga(t *testing.T) {
-	sources := []contracts.LibrarySource{
-		{
-			ID:      "src-local",
-			Name:    "Local Disk",
-			Type:    contracts.SourceTypeLocal,
-			Path:    "/Volumes/Local/Manga",
-			Enabled: true,
-		},
-		{
-			ID:      "src-remote",
-			Name:    "NAS Storage",
-			Type:    contracts.SourceTypeNetwork,
-			Path:    "/Volumes/NAS/Manga",
-			Enabled: true,
-		},
-	}
-
-	items := []contracts.LibraryManga{
-		// Collection in local
-		{
-			ID:            "local:Action",
-			SourceID:      "src-local",
-			Title:         "Action",
-			RelativePath:  "Action",
-			ParentPath:    "",
-			IsCollection:  true,
-			CoverImageURL: "/covers/local-action.jpg",
-			LastUpdated:   "2026-08-01T00:00:00Z",
-			IsAvailable:   true,
-		},
-		// Child in local collection
-		{
-			ID:            "local:Action/Naruto",
-			SourceID:      "src-local",
-			Title:         "Naruto",
-			RelativePath:  "Action/Naruto",
-			ParentPath:    "Action",
-			IsCollection:  false,
-			CoverImageURL: "/covers/local-naruto.jpg",
-			ChapterCount:  10,
-			PageCount:     100,
-			LastUpdated:   "2026-08-01T00:00:00Z",
-			IsAvailable:   true,
-		},
-		// Another child in local collection
-		{
-			ID:            "local:Action/One Piece",
-			SourceID:      "src-local",
-			Title:         "One Piece",
-			RelativePath:  "Action/One Piece",
-			ParentPath:    "Action",
-			IsCollection:  false,
-			CoverImageURL: "/covers/op.jpg",
-			ChapterCount:  20,
-			PageCount:     200,
-			LastUpdated:   "2026-08-01T00:00:00Z",
-			IsAvailable:   true,
-		},
-		// Collection in remote (same RelativePath)
-		{
-			ID:            "remote:Action",
-			SourceID:      "src-remote",
-			Title:         "Action",
-			RelativePath:  "Action",
-			ParentPath:    "",
-			IsCollection:  true,
-			CoverImageURL: "/covers/remote-action.jpg",
-			LastUpdated:   "2026-08-05T00:00:00Z",
-			IsAvailable:   true,
-		},
-		// Duplicate child in remote collection
-		{
-			ID:            "remote:Action/Naruto",
-			SourceID:      "src-remote",
-			Title:         "Naruto",
-			RelativePath:  "Action/Naruto",
-			ParentPath:    "Action",
-			IsCollection:  false,
-			CoverImageURL: "/covers/remote-naruto.jpg",
-			ChapterCount:  15,
-			PageCount:     150,
-			LastUpdated:   "2026-08-05T00:00:00Z",
-			IsAvailable:   true,
-		},
-		// Child unique to remote collection
-		{
-			ID:            "remote:Action/Bleach",
-			SourceID:      "src-remote",
-			Title:         "Bleach",
-			RelativePath:  "Action/Bleach",
-			ParentPath:    "Action",
-			IsCollection:  false,
-			CoverImageURL: "/covers/bleach.jpg",
-			ChapterCount:  30,
-			PageCount:     300,
-			LastUpdated:   "2026-08-05T00:00:00Z",
-			IsAvailable:   true,
-		},
-		// Root manga in local
-		{
-			ID:            "local:Dragon Ball",
-			SourceID:      "src-local",
-			Title:         "Dragon Ball",
-			RelativePath:  "Dragon Ball",
-			ParentPath:    "",
-			IsCollection:  false,
-			CoverImageURL: "/covers/local-db.jpg",
-			ChapterCount:  42,
-			PageCount:     420,
-			LastUpdated:   "2026-08-01T00:00:00Z",
-			IsAvailable:   true,
-		},
-		// Root manga in remote
-		{
-			ID:            "remote:Dragon Ball",
-			SourceID:      "src-remote",
-			Title:         "Dragon Ball",
-			RelativePath:  "Dragon Ball",
-			ParentPath:    "",
-			IsCollection:  false,
-			CoverImageURL: "/covers/remote-db.jpg",
-			ChapterCount:  10,
-			PageCount:     100,
-			LastUpdated:   "2026-08-05T00:00:00Z",
-			IsAvailable:   true,
-		},
-	}
-
-	pins := map[string]string{
-		"remote:Action/Naruto": "2026-08-20T10:00:00Z",
-	}
-
-	merged := MergeLibraryManga(items, sources, pins)
-
-	var collAction *contracts.LibraryManga
-	var rootDB *contracts.LibraryManga
-	var childNaruto *contracts.LibraryManga
-	var childOP *contracts.LibraryManga
-	var childBleach *contracts.LibraryManga
-
-	for _, it := range merged {
-		switch it.ID {
-		case "local:Action":
-			c := it
-			collAction = &c
-		case "local:Dragon Ball":
-			m := it
-			rootDB = &m
-		case "local:Action/Naruto":
-			n := it
-			childNaruto = &n
-		case "local:Action/One Piece":
-			o := it
-			childOP = &o
-		case "remote:Action/Bleach":
-			b := it
-			childBleach = &b
-		}
-	}
-
-	// 1. Verify Merged Collection
-	if collAction == nil {
-		t.Fatal("merged collection Action not found")
-	}
-	if collAction.CoverImageURL != "/covers/local-action.jpg" {
-		t.Fatalf("expected local collection cover, got %s", collAction.CoverImageURL)
-	}
-	if collAction.MangaCount != 3 {
-		t.Fatalf("expected 3 distinct children in Action, got %d", collAction.MangaCount)
-	}
-	if collAction.ChapterCount != 75 { // (10+15) + 20 + 30 = 75
-		t.Fatalf("expected 75 total chapters in Action, got %d", collAction.ChapterCount)
-	}
-	if collAction.PageCount != 750 { // (100+150) + 200 + 300 = 750
-		t.Fatalf("expected 750 total pages in Action, got %d", collAction.PageCount)
-	}
-
-	// 2. Verify Merged Child Naruto
-	if childNaruto == nil {
-		t.Fatal("merged child Naruto not found")
-	}
-	if childNaruto.CoverImageURL != "/covers/local-naruto.jpg" {
-		t.Fatalf("expected local Naruto cover, got %s", childNaruto.CoverImageURL)
-	}
-	if childNaruto.ChapterCount != 25 {
-		t.Fatalf("expected 25 chapters for Naruto, got %d", childNaruto.ChapterCount)
-	}
-	if childNaruto.PageCount != 250 {
-		t.Fatalf("expected 250 pages for Naruto, got %d", childNaruto.PageCount)
-	}
-	// Check pin propagation to base item
-	if pins["local:Action/Naruto"] != "2026-08-20T10:00:00Z" {
-		t.Fatalf("expected pin to propagate to local:Action/Naruto, got %s", pins["local:Action/Naruto"])
-	}
-
-	// 3. Verify Other Children
-	if childOP == nil || childBleach == nil {
-		t.Fatalf("expected both One Piece and Bleach to exist, got op=%v, bleach=%v", childOP, childBleach)
-	}
-
-	// 4. Verify Merged Root Manga Dragon Ball
-	if rootDB == nil {
-		t.Fatal("merged Dragon Ball not found")
-	}
-	if rootDB.CoverImageURL != "/covers/local-db.jpg" {
-		t.Fatalf("expected local Dragon Ball cover, got %s", rootDB.CoverImageURL)
-	}
-	if rootDB.ChapterCount != 52 {
-		t.Fatalf("expected 52 chapters for Dragon Ball, got %d", rootDB.ChapterCount)
-	}
-	if rootDB.PageCount != 520 {
-		t.Fatalf("expected 520 pages for Dragon Ball, got %d", rootDB.PageCount)
-	}
-}
-
-func TestGetReaderManifestMergeChapters(t *testing.T) {
+func TestGetReaderManifestSeparateChapters(t *testing.T) {
 	rootA := t.TempDir()
 	rootB := t.TempDir()
 
@@ -1419,7 +1196,7 @@ func TestGetReaderManifestMergeChapters(t *testing.T) {
 	mangaIDB := EncodeMangaIDWithSource("src-b", "Naruto")
 
 	// 1. Separate mode on src-a: only chapters 1 and 2
-	manifestSepA, err := GetReaderManifestWithSources(sources, mangaIDA, contracts.DuplicateMergeModeSeparate)
+	manifestSepA, err := GetReaderManifestWithSources(sources, mangaIDA)
 	if err != nil {
 		t.Fatalf("get manifest sep A: %v", err)
 	}
@@ -1428,41 +1205,12 @@ func TestGetReaderManifestMergeChapters(t *testing.T) {
 	}
 
 	// 2. Separate mode on src-b: only chapters 2 and 3
-	manifestSepB, err := GetReaderManifestWithSources(sources, mangaIDB, contracts.DuplicateMergeModeSeparate)
+	manifestSepB, err := GetReaderManifestWithSources(sources, mangaIDB)
 	if err != nil {
 		t.Fatalf("get manifest sep B: %v", err)
 	}
 	if len(manifestSepB.Chapters) != 2 {
 		t.Fatalf("expected 2 chapters in separate mode for B, got %d", len(manifestSepB.Chapters))
-	}
-
-	// 3. Merge mode: should merge chapters 1, 2, 3 (with Vol 02 deduplicated, keeping src-a's)
-	manifestMerged, err := GetReaderManifestWithSources(sources, mangaIDA, contracts.DuplicateMergeModeMerge)
-	if err != nil {
-		t.Fatalf("get manifest merged: %v", err)
-	}
-	if len(manifestMerged.Chapters) != 3 {
-		t.Fatalf("expected 3 merged chapters, got %d", len(manifestMerged.Chapters))
-	}
-	if manifestMerged.Chapters[0].Title != "Vol 01" || manifestMerged.Chapters[1].Title != "Vol 02" || manifestMerged.Chapters[2].Title != "Vol 03" {
-		t.Fatalf("unexpected chapter titles order: %s, %s, %s",
-			manifestMerged.Chapters[0].Title, manifestMerged.Chapters[1].Title, manifestMerged.Chapters[2].Title)
-	}
-	if manifestMerged.TotalPages != 3 {
-		t.Fatalf("expected 3 total pages, got %d", manifestMerged.TotalPages)
-	}
-	// Check chapter numbering and startPage
-	for i, ch := range manifestMerged.Chapters {
-		if ch.Number != float64(i+1) {
-			t.Fatalf("expected chapter %d number to be %d, got %v", i, i+1, ch.Number)
-		}
-		if ch.StartPage != i {
-			t.Fatalf("expected chapter %d startPage to be %d, got %d", i, i, ch.StartPage)
-		}
-	}
-	// Verify that Vol 03 has page pointing to src-b
-	if !strings.Contains(manifestMerged.Chapters[2].Pages[0].SourceURL, "src-b") {
-		t.Fatalf("expected chapter 3 page to point to src-b, got %s", manifestMerged.Chapters[2].Pages[0].SourceURL)
 	}
 }
 
@@ -1521,7 +1269,7 @@ func TestResolveMultiSourceAssetPathFallback(t *testing.T) {
 		{ID: "src-a", Name: "Source A", Path: rootA, Enabled: true},
 		{ID: "src-b", Name: "Source B", Path: rootB, Enabled: true},
 	}
-	manifestFallback, err := GetReaderManifestWithSources(sourcesList, encodeMangaID("MangaB"), contracts.DuplicateMergeModeSeparate)
+	manifestFallback, err := GetReaderManifestWithSources(sourcesList, encodeMangaID("MangaB"))
 	if err != nil {
 		t.Fatalf("expected manifest fallback to find MangaB in src-b, got: %v", err)
 	}
@@ -1577,7 +1325,7 @@ func TestRemoteSourceDisconnectedFallback(t *testing.T) {
 
 	// 1. GetReaderManifestWithSources fallback when mangaID explicitly points to disconnected src-remote
 	remoteMangaID := EncodeMangaIDWithSource("src-remote", "Action/Manga1")
-	manifest, err := GetReaderManifestWithSources(sources, remoteMangaID, contracts.DuplicateMergeModeSeparate)
+	manifest, err := GetReaderManifestWithSources(sources, remoteMangaID)
 	if err != nil {
 		t.Fatalf("expected fallback to local source for disconnected remote manga, got: %v", err)
 	}

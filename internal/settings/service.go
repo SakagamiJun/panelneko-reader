@@ -94,7 +94,6 @@ func DefaultSettings() contracts.AppSettings {
 		AutoCheckUpdates:     boolPtr(true),
 		EnableThumbnailCache: boolPtr(true),
 		ThumbnailQuality:     contracts.ThumbnailQualityMedium,
-		DuplicateMergeMode:   contracts.DuplicateMergeModeSeparate,
 		Downloader: contracts.DownloaderSettings{
 			EnableCopyManga:        false,
 			CopyMangaAPIDomain:     "api.copy202601.com",
@@ -384,18 +383,6 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 		return contracts.AppSettings{}, contracts.ContractError{
 			Code:    contracts.ErrCodeSettingsInvalid,
 			Message: fmt.Sprintf("unsupported theme mode: %s", input.ThemeMode),
-		}
-	}
-
-	switch input.DuplicateMergeMode {
-	case contracts.DuplicateMergeModeMerge:
-		settings.DuplicateMergeMode = contracts.DuplicateMergeModeMerge
-	case "", contracts.DuplicateMergeModeSeparate:
-		settings.DuplicateMergeMode = contracts.DuplicateMergeModeSeparate
-	default:
-		return contracts.AppSettings{}, contracts.ContractError{
-			Code:    contracts.ErrCodeSettingsInvalid,
-			Message: fmt.Sprintf("unsupported duplicate merge mode: %s", input.DuplicateMergeMode),
 		}
 	}
 
