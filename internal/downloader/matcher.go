@@ -1,15 +1,91 @@
 package downloader
 
 import (
+	"fmt"
+	"math"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
 
 var (
-	bracketTagRe = regexp.MustCompile(`\[.*?\]|\(.*?\)|【.*?】|（.*?）|<.*?>`)
-	volumeChRe   = regexp.MustCompile(`(?i)(第\s*\d+\s*[卷话回期册]|vol\s*\.?\s*\d+|ch\s*\.?\s*\d+|part\s*\.?\s*\d+).*$`)
-	extraSpaceRe = regexp.MustCompile(`\s+`)
+	bracketTagRe  = regexp.MustCompile(`\[.*?\]|\(.*?\)|【.*?】|（.*?）|<.*?>`)
+	volumeChRe    = regexp.MustCompile(`(?i)(第\s*\d+\s*[卷话回期册]|vol\s*\.?\s*\d+|ch\s*\.?\s*\d+|part\s*\.?\s*\d+).*$`)
+	extraSpaceRe  = regexp.MustCompile(`\s+`)
+	leadingZeroRe = regexp.MustCompile(`(?i)(^|[^\d])0+(\d+)`)
+	extRe         = regexp.MustCompile(`(?i)\.(cbz|cbr|zip|rar|tar|pdf)$`)
 )
+
+// FormatChapterFilename generates clean, standard filenames supporting integer and decimal chapters.
+// Example: 1.0 -> "001 - Title.cbz", 1.5 -> "001.5 - Title.cbz"
+func FormatChapterFilename(chNum float64, safeTitle string, ext string) string {
+	var numStr string
+	if chNum == math.Trunc(chNum) {
+		numStr = fmt.Sprintf("%03d", int(chNum))
+	} else {
+		numStr = fmt.Sprintf("%05.1f", chNum)
+	}
+	if ext != "" && !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	return fmt.Sprintf("%s - %s%s", numStr, safeTitle, ext)
+}
+
+// NormalizeChapterTitleForMatch cleans suffixes, extensions, dashes, brackets, and leading zeroes
+// to yield a canonical comparable string for chapter title matching.
+func NormalizeChapterTitleForMatch(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+
+	// Strip file extension
+	s = extRe.ReplaceAllString(s, "")
+
+	// Extract title part after the last " - " delimiter (e.g. "001 - 第01话" -> "第01话")
+	if dashIdx := strings.LastIndex(s, " - "); dashIdx >= 0 && dashIdx+3 < len(s) {
+		s = s[dashIdx+3:]
+	}
+
+	// Remove scanlation brackets
+	s = bracketTagRe.ReplaceAllString(s, "")
+
+	// Normalize leading zeros in chapter indicators: e.g. 第01.5话 -> 第1.5话, #001 -> #1, 01.5 -> 1.5
+	s = leadingZeroRe.ReplaceAllString(s, "${1}${2}")
+
+	// Remove all whitespace
+	s = strings.ReplaceAll(s, " ", "")
+	s = strings.ToLower(s)
+
+	// Normalize prefix "第" (e.g. 第1.5话 -> 1.5话)
+	s = strings.TrimPrefix(s, "第")
+
+	return strings.TrimSpace(s)
+}
+
+// MatchChapterTitle returns true if the online chapter title corresponds to the local chapter title or path.
+func MatchChapterTitle(onlineTitle, localTitle, localPath string) bool {
+	onNorm := NormalizeChapterTitleForMatch(onlineTitle)
+	if onNorm == "" {
+		return false
+	}
+
+	if localTitle != "" {
+		locNorm := NormalizeChapterTitleForMatch(localTitle)
+		if locNorm != "" && locNorm == onNorm {
+			return true
+		}
+	}
+
+	if localPath != "" {
+		pathNorm := NormalizeChapterTitleForMatch(filepath.Base(localPath))
+		if pathNorm != "" && pathNorm == onNorm {
+			return true
+		}
+	}
+
+	return false
+}
 
 // CleanMangaTitle cleans common release group prefixes, brackets, volume/chapter suffixes,
 // returning the clean core series title for search matching.

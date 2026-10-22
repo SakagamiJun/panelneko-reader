@@ -1338,6 +1338,14 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 		}
 	}
 
+	type localChapterInfo struct {
+		title     string
+		localPath string
+		number    float64
+		group     string
+	}
+	var localChapters []localChapterInfo
+
 	for _, ch := range manifest.Chapters {
 		allLocalNumbers[ch.Number] = true
 		if ch.Number > globalMaxLocalNumber {
@@ -1361,6 +1369,13 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 				groupMaxNumber[matchedGroup] = ch.Number
 			}
 		}
+
+		localChapters = append(localChapters, localChapterInfo{
+			title:     ch.Title,
+			localPath: ch.LocalPath,
+			number:    ch.Number,
+			group:     matchedGroup,
+		})
 	}
 
 	var inputs []contracts.CreateDownloadTaskInput
@@ -1398,14 +1413,29 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 			maxNum = globalMaxLocalNumber
 		}
 
-		shouldDownload := false
-		if link.FollowPolicy == "fill_gaps" {
-			if locNums == nil || !locNums[ch.Number] {
-				shouldDownload = true
+		alreadyDownloaded := false
+		if locNums != nil && locNums[ch.Number] {
+			alreadyDownloaded = true
+		} else {
+			for _, locCh := range localChapters {
+				if grp != "" && locCh.group != "" && !strings.EqualFold(locCh.group, grp) {
+					continue
+				}
+				if downloader.MatchChapterTitle(ch.Title, locCh.title, locCh.localPath) {
+					alreadyDownloaded = true
+					break
+				}
 			}
-		} else { // latest_only default
-			if ch.Number > maxNum {
+		}
+
+		shouldDownload := false
+		if !alreadyDownloaded {
+			if link.FollowPolicy == "fill_gaps" {
 				shouldDownload = true
+			} else { // latest_only default
+				if ch.Number > maxNum {
+					shouldDownload = true
+				}
 			}
 		}
 

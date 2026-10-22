@@ -347,9 +347,9 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 	var finalFilePath string
 	format := st.Downloader.DownloadFormat
 	if format == "folder" {
-		finalFilePath = filepath.Join(chapterDir, fmt.Sprintf("%03.0f - %s", task.ChapterNumber, safeChapter))
+		finalFilePath = filepath.Join(chapterDir, FormatChapterFilename(task.ChapterNumber, safeChapter, ""))
 	} else {
-		finalFilePath = filepath.Join(chapterDir, fmt.Sprintf("%03.0f - %s.cbz", task.ChapterNumber, safeChapter))
+		finalFilePath = filepath.Join(chapterDir, FormatChapterFilename(task.ChapterNumber, safeChapter, ".cbz"))
 	}
 
 	var pageURLs []string
