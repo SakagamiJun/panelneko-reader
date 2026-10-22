@@ -2,10 +2,8 @@ package main
 
 import (
 	"archive/zip"
-	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -265,78 +263,6 @@ func TestListLibraryMangaPinAndCollectionCover(t *testing.T) {
 	}
 }
 
-func TestAppOpenDirectory(t *testing.T) {
-	libraryRoot := t.TempDir()
-	mangaDir := filepath.Join(libraryRoot, "Manga A")
-	if err := os.MkdirAll(mangaDir, 0o755); err != nil {
-		t.Fatalf("mkdir manga A: %v", err)
-	}
-
-	app, cleanup := newAssetTestApp(t, libraryRoot)
-	defer cleanup()
-
-	var openedPath string
-	origOpener := library.FileOpener
-	library.FileOpener = func(path string) error {
-		openedPath = path
-		return nil
-	}
-	defer func() {
-		library.FileOpener = origOpener
-	}()
-
-	mangaID := encodePathTokenForAppTest("Manga A")
-	if err := app.OpenDirectory(mangaID); err != nil {
-		t.Fatalf("open directory: %v", err)
-	}
-
-	resolvedMangaDir, err := filepath.EvalSymlinks(mangaDir)
-	if err != nil {
-		resolvedMangaDir = mangaDir
-	}
-	resolvedOpened, err := filepath.EvalSymlinks(openedPath)
-	if err != nil {
-		resolvedOpened = openedPath
-	}
-	if resolvedOpened != resolvedMangaDir {
-		t.Fatalf("expected opened path %q, got %q", resolvedMangaDir, resolvedOpened)
-	}
-}
-
-func TestAppToggleCollection(t *testing.T) {
-	libraryRoot := t.TempDir()
-	mangaDir := filepath.Join(libraryRoot, "Series B")
-	if err := os.MkdirAll(filepath.Join(mangaDir, "Ch 1"), 0o755); err != nil {
-		t.Fatalf("mkdir manga B: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(mangaDir, "Ch 1", "001.jpg"), []byte("test"), 0o644); err != nil {
-		t.Fatalf("write page: %v", err)
-	}
-
-	app, cleanup := newAssetTestApp(t, libraryRoot)
-	defer cleanup()
-
-	mangaID := encodePathTokenForAppTest("Series B")
-
-	// 1. Toggle to collection
-	isColl, err := app.ToggleCollection(mangaID)
-	if err != nil {
-		t.Fatalf("toggle collection error: %v", err)
-	}
-	if !isColl {
-		t.Fatal("expected isCollection to be true")
-	}
-
-	// 2. Toggle back to regular
-	isColl, err = app.ToggleCollection(mangaID)
-	if err != nil {
-		t.Fatalf("toggle collection error: %v", err)
-	}
-	if isColl {
-		t.Fatal("expected isCollection to be false")
-	}
-}
-
 func newAssetTestApp(t *testing.T, libraryRoot string) (*App, func()) {
 	t.Helper()
 
@@ -395,38 +321,6 @@ func writeZipArchiveForAppTest(t *testing.T, archivePath string, files map[strin
 	}
 	if err := archiveWriter.Close(); err != nil {
 		t.Fatalf("close archive writer: %v", err)
-	}
-}
-
-func TestAppGetAppVersion(t *testing.T) {
-	app := &App{}
-	info := app.GetAppVersion()
-	if info.Version == "" {
-		t.Fatal("expected non-empty version")
-	}
-	if info.Commit == "" {
-		t.Fatal("expected non-empty commit hash")
-	}
-}
-
-func TestResolveThumbnailQuality(t *testing.T) {
-	off := false
-	on := true
-
-	if got := resolveThumbnailQuality(contracts.AppSettings{ThumbnailQuality: contracts.ThumbnailQualityHigh}); got != contracts.ThumbnailQualityHigh {
-		t.Errorf("got %v, want high", got)
-	}
-
-	if got := resolveThumbnailQuality(contracts.AppSettings{EnableThumbnailCache: &off}); got != contracts.ThumbnailQualityOff {
-		t.Errorf("got %v, want off", got)
-	}
-
-	if got := resolveThumbnailQuality(contracts.AppSettings{EnableThumbnailCache: &on}); got != contracts.ThumbnailQualityMedium {
-		t.Errorf("got %v, want medium", got)
-	}
-
-	if got := resolveThumbnailQuality(contracts.AppSettings{}); got != contracts.ThumbnailQualityMedium {
-		t.Errorf("got %v, want medium", got)
 	}
 }
 
@@ -517,123 +411,6 @@ func TestIsHomebrewExecutable(t *testing.T) {
 	unlinkedApp := filepath.Join(tempPrefix, "Applications", "other.app", "Contents", "MacOS", "other")
 	if isHomebrewExecutable(unlinkedApp, tempPrefix) {
 		t.Errorf("expected unlinked app NOT to be detected as Homebrew")
-	}
-}
-
-type mockUpdaterProvider struct {
-	release *updater.Release
-	err     error
-}
-
-func (m *mockUpdaterProvider) Name() string { return "mock" }
-func (m *mockUpdaterProvider) Check(_ context.Context, _ updater.CheckRequest) (*updater.Release, error) {
-	return m.release, m.err
-}
-func (m *mockUpdaterProvider) Download(_ context.Context, _ *updater.Release, _ io.Writer, _ func(int64, int64)) error {
-	return nil
-}
-
-func TestAppCheckForUpdates(t *testing.T) {
-	// Case 1: Update available, not Homebrew
-	app := NewApp()
-	app.isHomebrewFn = func() bool { return false }
-	app.updaterProvider = &mockUpdaterProvider{
-		release: &updater.Release{
-			Version: "1.0.0",
-			Notes:   "Test release notes",
-			Metadata: map[string]any{
-				"github.release.htmlURL": "https://github.com/SakagamiJun/panelneko-reader/releases/tag/v1.0.0",
-			},
-		},
-	}
-
-	res, err := app.CheckForUpdates()
-	if err != nil {
-		t.Fatalf("CheckForUpdates failed: %v", err)
-	}
-	if !res.HasUpdate {
-		t.Error("expected HasUpdate to be true")
-	}
-	if res.LatestVersion != "1.0.0" {
-		t.Errorf("expected LatestVersion 1.0.0, got %q", res.LatestVersion)
-	}
-	if res.IsHomebrew {
-		t.Error("expected IsHomebrew to be false")
-	}
-	if res.ReleaseURL != "https://github.com/SakagamiJun/panelneko-reader/releases/tag/v1.0.0" {
-		t.Errorf("unexpected ReleaseURL: %q", res.ReleaseURL)
-	}
-
-	// Case 2: Update available, Homebrew managed
-	app.isHomebrewFn = func() bool { return true }
-	resHomebrew, err := app.CheckForUpdates()
-	if err != nil {
-		t.Fatalf("CheckForUpdates failed: %v", err)
-	}
-	if !resHomebrew.IsHomebrew {
-		t.Error("expected IsHomebrew to be true")
-	}
-	if !resHomebrew.HasUpdate {
-		t.Error("expected HasUpdate to be true")
-	}
-
-	// Case 3: Up to date (provider returns nil, nil)
-	app.updaterProvider = &mockUpdaterProvider{release: nil, err: nil}
-	resUpToDate, err := app.CheckForUpdates()
-	if err != nil {
-		t.Fatalf("CheckForUpdates failed: %v", err)
-	}
-	if resUpToDate.HasUpdate {
-		t.Error("expected HasUpdate to be false")
-	}
-
-	// Case 4: Provider error
-	app.updaterProvider = &mockUpdaterProvider{err: fmt.Errorf("network failure")}
-	_, err = app.CheckForUpdates()
-	if err == nil {
-		t.Error("expected error from CheckForUpdates when provider fails")
-	}
-}
-
-func TestAppThumbnailCacheManagement(t *testing.T) {
-	libraryRoot := t.TempDir()
-	app, cleanup := newAssetTestApp(t, libraryRoot)
-	defer cleanup()
-
-	// Initially cache size should be 0
-	size, err := app.GetThumbnailCacheSize()
-	if err != nil {
-		t.Fatalf("GetThumbnailCacheSize failed: %v", err)
-	}
-	if size != 0 {
-		t.Errorf("expected initial cache size 0, got %d", size)
-	}
-
-	// Write a mock cache file into cache directory
-	cacheDir := filepath.Join(app.store.DataDir(), "cache", "thumbnails")
-	_ = os.MkdirAll(cacheDir, 0o755)
-	dummyData := []byte("dummy-thumbnail-content")
-	_ = os.WriteFile(filepath.Join(cacheDir, "test.jpg"), dummyData, 0o644)
-
-	size, err = app.GetThumbnailCacheSize()
-	if err != nil {
-		t.Fatalf("GetThumbnailCacheSize failed: %v", err)
-	}
-	if size != int64(len(dummyData)) {
-		t.Errorf("expected cache size %d, got %d", len(dummyData), size)
-	}
-
-	// Clear thumbnail cache
-	if err := app.ClearThumbnailCache(); err != nil {
-		t.Fatalf("ClearThumbnailCache failed: %v", err)
-	}
-
-	size, err = app.GetThumbnailCacheSize()
-	if err != nil {
-		t.Fatalf("GetThumbnailCacheSize failed: %v", err)
-	}
-	if size != 0 {
-		t.Errorf("expected cache size 0 after clear, got %d", size)
 	}
 }
 

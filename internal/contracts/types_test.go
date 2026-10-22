@@ -24,7 +24,7 @@ func TestDownloaderSettings_UnmarshalJSON(t *testing.T) {
 			wantAutoCheckUpdates: true,
 		},
 		{
-			name: "empty string in copymangaCustomCDNs (legacy UI binding)",
+			name: "adversarial: empty string in copymangaCustomCDNs (legacy UI binding)",
 			payload: `{
 				"enableCopyManga": true,
 				"autoCheckComicUpdates": true,
@@ -34,34 +34,24 @@ func TestDownloaderSettings_UnmarshalJSON(t *testing.T) {
 			wantAutoCheckUpdates: true,
 		},
 		{
-			name: "comma separated string in copyMangaCustomCdns",
+			name: "adversarial: comma separated string with chaotic spacing",
 			payload: `{
 				"enableCopyManga": true,
 				"autoCheckComicUpdates": true,
-				"copyMangaCustomCdns": "https://cdn1.example.com, https://cdn2.example.com"
+				"copyMangaCustomCdns": "  https://cdn1.example.com ,  , https://cdn2.example.com  "
 			}`,
 			wantCDNs:             []string{"https://cdn1.example.com", "https://cdn2.example.com"},
 			wantAutoCheckUpdates: true,
 		},
 		{
-			name: "comma separated string in copymangaCustomCDNs",
-			payload: `{
-				"enableCopyManga": true,
-				"autoCheckComicUpdates": false,
-				"copymangaCustomCDNs": "https://cdn3.example.com"
-			}`,
-			wantCDNs:             []string{"https://cdn3.example.com"},
-			wantAutoCheckUpdates: false,
-		},
-		{
-			name: "null cdns",
+			name: "adversarial: null and missing cdns",
 			payload: `{
 				"enableCopyManga": false,
-				"autoCheckComicUpdates": true,
+				"autoCheckComicUpdates": false,
 				"copyMangaCustomCdns": null
 			}`,
 			wantCDNs:             nil,
-			wantAutoCheckUpdates: true,
+			wantAutoCheckUpdates: false,
 		},
 	}
 

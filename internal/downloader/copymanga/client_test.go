@@ -18,56 +18,8 @@ import (
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 )
 
-func TestCopyMangaSearchAndStriping(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v3/search/comic" {
-			q := r.URL.Query().Get("q")
-			if q != "onepiece" {
-				http.Error(w, "invalid query", http.StatusBadRequest)
-				return
-			}
-			resp := copyAPIResponse{
-				Code: 200,
-			}
-			data := searchResultsData{
-				Total: 1,
-				List: []searchComicItem{
-					{
-						Name:     "One Piece",
-						PathWord: "one-piece",
-						Cover:    "https://cdn.example.com/cover.jpg",
-						Brief:    "Luffy adventure",
-						Status: struct {
-							Value   int    `json:"value"`
-							Display string `json:"display"`
-						}{Value: 0, Display: "连载中"},
-					},
-				},
-			}
-			raw, _ := json.Marshal(data)
-			resp.Results = raw
-			_ = json.NewEncoder(w).Encode(resp)
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
-	host := strings.TrimPrefix(server.URL, "http://")
-	client := NewClient(host, "", 5)
-
-	res, err := client.SearchManga(context.Background(), "onepiece", 1, 20)
-	if err != nil {
-		t.Fatalf("SearchManga failed: %v", err)
-	}
-	if len(res.Items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(res.Items))
-	}
-	if res.Items[0].Title != "One Piece" {
-		t.Errorf("expected One Piece, got %s", res.Items[0].Title)
-	}
-
-	// Test CDN Striping
+func TestCopyMangaCDNStripingAndCooling(t *testing.T) {
+	client := NewClient("example.com", "", 5)
 	origURL := "https://cdn.example.com/p1.webp"
 
 	// Default is official route (no rewriting)

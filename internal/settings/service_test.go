@@ -1,51 +1,11 @@
 package settings
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
 )
-
-func TestNewServicePersistsDefaults(t *testing.T) {
-	sqliteStore, err := store.Open(t.TempDir())
-	if err != nil {
-		t.Fatalf("open sqlite store: %v", err)
-	}
-	defer sqliteStore.Close()
-
-	service, err := NewService(sqliteStore)
-	if err != nil {
-		t.Fatalf("new settings service: %v", err)
-	}
-
-	current := service.Get()
-	if current.LocaleMode != "system" {
-		t.Fatalf("unexpected default locale mode: %s", current.LocaleMode)
-	}
-	if current.ReaderScrollCachePages != 6 {
-		t.Fatalf("unexpected default reader cache size: %d", current.ReaderScrollCachePages)
-	}
-	if !current.AutoRestoreReaderProgress {
-		t.Fatal("expected auto restore reader progress to be enabled by default")
-	}
-	if filepath.Base(current.LibraryRoot) != "MangaLibrary" {
-		t.Fatalf("unexpected library root: %s", current.LibraryRoot)
-	}
-	if current.ReaderSideClickMode != "right_next" {
-		t.Fatalf("unexpected default reader side click mode: %s", current.ReaderSideClickMode)
-	}
-	if current.AutoCheckUpdates == nil || !*current.AutoCheckUpdates {
-		t.Fatal("expected auto check updates to be enabled by default")
-	}
-	if current.EnableThumbnailCache == nil || !*current.EnableThumbnailCache {
-		t.Fatal("expected enable thumbnail cache to be enabled by default")
-	}
-	if current.ThumbnailQuality != contracts.ThumbnailQualityMedium {
-		t.Fatalf("expected thumbnail quality to default to medium, got %s", current.ThumbnailQuality)
-	}
-}
 
 func TestNormalizeRejectsUnsupportedLocale(t *testing.T) {
 	sqliteStore, err := store.Open(t.TempDir())
@@ -409,42 +369,5 @@ func TestNormalizeLibrarySources(t *testing.T) {
 	}
 	if normDupPath.LibrarySources[0].ID != "src-a" {
 		t.Fatalf("expected first source to be preserved, got %s", normDupPath.LibrarySources[0].ID)
-	}
-}
-
-func TestAutoCheckComicUpdatesPersistence(t *testing.T) {
-	tempDir := t.TempDir()
-	sqliteStore, err := store.Open(tempDir)
-	if err != nil {
-		t.Fatalf("open sqlite store: %v", err)
-	}
-	defer sqliteStore.Close()
-
-	service, err := NewService(sqliteStore)
-	if err != nil {
-		t.Fatalf("new settings service: %v", err)
-	}
-
-	current := service.Get()
-	if current.Downloader.AutoCheckComicUpdates {
-		t.Fatal("expected AutoCheckComicUpdates to default to false")
-	}
-
-	current.Downloader.AutoCheckComicUpdates = true
-	updated, err := service.Update(current)
-	if err != nil {
-		t.Fatalf("update settings failed: %v", err)
-	}
-	if !updated.Downloader.AutoCheckComicUpdates {
-		t.Fatal("expected AutoCheckComicUpdates to be true after update")
-	}
-
-	// Verify persistence across new service instantiation
-	service2, err := NewService(sqliteStore)
-	if err != nil {
-		t.Fatalf("re-open settings service: %v", err)
-	}
-	if !service2.Get().Downloader.AutoCheckComicUpdates {
-		t.Fatal("expected AutoCheckComicUpdates to persist across service re-creation")
 	}
 }

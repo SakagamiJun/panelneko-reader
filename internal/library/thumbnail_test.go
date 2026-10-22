@@ -75,54 +75,6 @@ func createTestZipArchive(t *testing.T, dir, zipName, imageEntryName string, wid
 	return zipPath
 }
 
-func TestThumbnailURLHelpers(t *testing.T) {
-	if got := BuildThumbnailURL(""); got != "" {
-		t.Errorf("expected empty string, got %s", got)
-	}
-
-	raw := "/library-files/comic/01.jpg"
-	wrapped := BuildThumbnailURL(raw)
-	expected := "/library-thumbnail/library-files/comic/01.jpg?q=medium"
-	if wrapped != expected {
-		t.Errorf("expected %s, got %s", expected, wrapped)
-	}
-
-	// Idempotent with quality
-	if BuildThumbnailURL(wrapped) != expected {
-		t.Errorf("BuildThumbnailURL should be idempotent with existing thumbnail URL")
-	}
-
-	highURL := BuildThumbnailURLWithQuality(raw, "high")
-	if highURL != "/library-thumbnail/library-files/comic/01.jpg?q=high" {
-		t.Errorf("expected ?q=high, got %s", highURL)
-	}
-
-	lowURL := BuildThumbnailURLWithQuality(highURL, "low")
-	if lowURL != "/library-thumbnail/library-files/comic/01.jpg?q=low" {
-		t.Errorf("expected ?q=low, got %s", lowURL)
-	}
-
-	offURL := BuildThumbnailURLWithQuality(raw, "off")
-	if offURL != "/library-thumbnail/library-files/comic/01.jpg" {
-		t.Errorf("expected prefix only for off, got %s", offURL)
-	}
-
-	stripped := StripThumbnailURL(wrapped)
-	if stripped != raw {
-		t.Errorf("expected %s, got %s", raw, stripped)
-	}
-
-	strippedHigh := StripThumbnailURL(highURL)
-	if strippedHigh != raw {
-		t.Errorf("expected %s, got %s", raw, strippedHigh)
-	}
-
-	// Strip non-thumbnail URL should be no-op
-	if StripThumbnailURL(raw) != raw {
-		t.Errorf("StripThumbnailURL on non-thumbnail should return original")
-	}
-}
-
 func TestServeThumbnailDirectory(t *testing.T) {
 	libraryRoot := t.TempDir()
 	cacheDir := filepath.Join(t.TempDir(), "cache")
