@@ -586,16 +586,73 @@ func (c *Client) GetChapterImageURLs(ctx context.Context, comicPathWord, chapter
 		return nil, err
 	}
 
-	urls := make([]string, 0, len(ch.Chapter.Contents))
-	for _, item := range ch.Chapter.Contents {
+	rawURLs := make([]string, len(ch.Chapter.Contents))
+	for i, item := range ch.Chapter.Contents {
 		raw := strings.TrimSpace(item.URL)
 		if raw != "" {
 			// Upgrade default 800px preview resolution to 1500px high quality image
-			hdURL := strings.ReplaceAll(raw, ".c800x.", ".c1500x.")
-			urls = append(urls, hdURL)
+			raw = strings.ReplaceAll(raw, ".c800x.", ".c1500x.")
+		}
+		rawURLs[i] = raw
+	}
+
+	if len(ch.Chapter.Words) > 0 {
+		rawURLs = ReorderImageURLsByWords(rawURLs, ch.Chapter.Words)
+	}
+
+	urls := make([]string, 0, len(rawURLs))
+	for _, u := range rawURLs {
+		if u != "" {
+			urls = append(urls, u)
 		}
 	}
 	return urls, nil
+}
+
+// ReorderImageURLsByWords maps the scrambled image URLs according to CopyManga's words permutation array.
+// In CopyManga API, words[i] represents the sequential 0-based (or 1-based) page index of contents[i].
+func ReorderImageURLsByWords(urls []string, words []int) []string {
+	n := len(urls)
+	if n <= 1 || len(words) != n {
+		return urls
+	}
+
+	minIdx := words[0]
+	maxIdx := words[0]
+	for _, idx := range words[1:] {
+		if idx < minIdx {
+			minIdx = idx
+		}
+		if idx > maxIdx {
+			maxIdx = idx
+		}
+	}
+
+	offset := 0
+	if minIdx == 0 && maxIdx == n-1 {
+		offset = 0
+	} else if minIdx == 1 && maxIdx == n {
+		offset = 1
+	} else {
+		// Out-of-range bounds, return unmodified URLs safely
+		return urls
+	}
+
+	seen := make([]bool, n)
+	for _, idx := range words {
+		normalized := idx - offset
+		if normalized < 0 || normalized >= n || seen[normalized] {
+			// Duplicate or illegal index, return unmodified URLs safely
+			return urls
+		}
+		seen[normalized] = true
+	}
+
+	result := make([]string, n)
+	for i, idx := range words {
+		result[idx-offset] = urls[i]
+	}
+	return result
 }
 
 func (c *Client) GetStripedCDNURL(originalURL string, pageIndex int) string {

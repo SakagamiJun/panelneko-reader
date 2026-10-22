@@ -137,6 +137,91 @@ func TestGetChapterImageURLsHighResReplacement(t *testing.T) {
 	}
 }
 
+func TestReorderImageURLsByWords_Adversarial(t *testing.T) {
+	urls := []string{"urlB", "urlD", "urlA", "urlC"}
+
+	// 0-based valid permutation: B->1, D->3, A->0, C->2
+	res0 := ReorderImageURLsByWords(urls, []int{1, 3, 0, 2})
+	expected := []string{"urlA", "urlB", "urlC", "urlD"}
+	for i, exp := range expected {
+		if res0[i] != exp {
+			t.Fatalf("0-based permutation mismatch at %d: got %s, want %s", i, res0[i], exp)
+		}
+	}
+
+	// 1-based valid permutation: B->2, D->4, A->1, C->3
+	res1 := ReorderImageURLsByWords(urls, []int{2, 4, 1, 3})
+	for i, exp := range expected {
+		if res1[i] != exp {
+			t.Fatalf("1-based permutation mismatch at %d: got %s, want %s", i, res1[i], exp)
+		}
+	}
+
+	// Adversarial: mismatched length
+	shortWords := ReorderImageURLsByWords(urls, []int{1, 2})
+	if shortWords[0] != "urlB" || len(shortWords) != 4 {
+		t.Fatalf("expected untouched slice on mismatched words length")
+	}
+
+	// Adversarial: duplicate indices
+	dupWords := ReorderImageURLsByWords(urls, []int{0, 1, 1, 2})
+	if dupWords[0] != "urlB" {
+		t.Fatalf("expected untouched slice on duplicate words")
+	}
+
+	// Adversarial: negative index
+	negWords := ReorderImageURLsByWords(urls, []int{-1, 0, 1, 2})
+	if negWords[0] != "urlB" {
+		t.Fatalf("expected untouched slice on negative words")
+	}
+
+	// Adversarial: out-of-range index
+	oorWords := ReorderImageURLsByWords(urls, []int{0, 1, 2, 99})
+	if oorWords[0] != "urlB" {
+		t.Fatalf("expected untouched slice on out of range words")
+	}
+
+	// Adversarial: empty
+	if empty := ReorderImageURLsByWords(nil, nil); len(empty) != 0 {
+		t.Fatalf("expected empty slice for nil inputs")
+	}
+}
+
+func TestGetChapterImageURLs_WordsReorderIntegration(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := copyAPIResponse{Code: 200}
+		data := chapterDetailData{}
+		data.Chapter.Words = []int{1, 0}
+		data.Chapter.Contents = []struct {
+			URL string `json:"url"`
+		}{
+			{URL: "https://c1.mangafunc.fun/comic/op/second_page.webp"},
+			{URL: "https://c1.mangafunc.fun/comic/op/first_page.webp"},
+		}
+		raw, _ := json.Marshal(data)
+		resp.Results = raw
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	client := NewClient(host, "", 5)
+
+	urls, err := client.GetChapterImageURLs(context.Background(), "one-piece", "ch-reorder")
+	if err != nil {
+		t.Fatalf("GetChapterImageURLs failed: %v", err)
+	}
+	if len(urls) != 2 {
+		t.Fatalf("expected 2 urls, got %d", len(urls))
+	}
+	if urls[0] != "https://c1.mangafunc.fun/comic/op/first_page.webp" {
+		t.Errorf("expected first_page at index 0 after reorder, got %s", urls[0])
+	}
+	if urls[1] != "https://c1.mangafunc.fun/comic/op/second_page.webp" {
+		t.Errorf("expected second_page at index 1 after reorder, got %s", urls[1])
+	}
+}
+
 func TestDownloadImageStreamInStreamRetry(t *testing.T) {
 	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
