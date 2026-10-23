@@ -1413,8 +1413,13 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 			maxNum = globalMaxLocalNumber
 		}
 
+		effectiveChapterNumber := ch.Number
+		if semanticNum := downloader.ExtractChapterNumber(ch.Title, -1); semanticNum >= 0 {
+			effectiveChapterNumber = semanticNum
+		}
+
 		alreadyDownloaded := false
-		if locNums != nil && locNums[ch.Number] {
+		if locNums != nil && (locNums[ch.Number] || locNums[effectiveChapterNumber]) {
 			alreadyDownloaded = true
 		} else {
 			for _, locCh := range localChapters {
@@ -1433,7 +1438,7 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 			if link.FollowPolicy == "fill_gaps" {
 				shouldDownload = true
 			} else { // latest_only default
-				if ch.Number > maxNum {
+				if ch.Number > maxNum && effectiveChapterNumber > maxNum {
 					shouldDownload = true
 				}
 			}
@@ -1446,7 +1451,7 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 				MangaTitle:     link.OnlineTitle,
 				ChapterID:      ch.ID,
 				ChapterTitle:   ch.Title,
-				ChapterNumber:  ch.Number,
+				ChapterNumber:  effectiveChapterNumber,
 				ChapterGroup:   ch.Group,
 				TargetSourceID: localManga.SourceID,
 			})

@@ -53,6 +53,30 @@ func TestLevenshteinSimilarity(t *testing.T) {
 	}
 }
 
+func TestExtractChapterNumber(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected float64
+	}{
+		{"第31.1话机翻", 31.1},
+		{"31.1 第31.1话机翻", 31.1},
+		{"第01.5话", 1.5},
+		{"02 - 1.5话.cbz", 1.5},
+		{"Ch. 12", 12.0},
+		{"Chapter 15.5", 15.5},
+		{"#005", 5.0},
+		{"特别篇", -1},
+		{"", -1},
+	}
+
+	for _, tc := range cases {
+		got := ExtractChapterNumber(tc.input, -1)
+		if got != tc.expected {
+			t.Errorf("ExtractChapterNumber(%q) = %f, want %f", tc.input, got, tc.expected)
+		}
+	}
+}
+
 func TestFormatChapterFilename(t *testing.T) {
 	if got := FormatChapterFilename(1.0, "第01话", ".cbz"); got != "001 - 第01话.cbz" {
 		t.Errorf("FormatChapterFilename(1.0) = %q, want %q", got, "001 - 第01话.cbz")
@@ -66,6 +90,17 @@ func TestFormatChapterFilename(t *testing.T) {
 }
 
 func TestMatchChapterTitle_Adversarial(t *testing.T) {
+	// 0. User reported real-world case: local "31.1 第31.1话机翻" matches online "第31.1话机翻"
+	if !MatchChapterTitle("第31.1话机翻", "", "31.1 第31.1话机翻.cbz") {
+		t.Errorf("expected '31.1 第31.1话机翻.cbz' to match online '第31.1话机翻'")
+	}
+	if !MatchChapterTitle("第31.1话机翻", "31.1 第31.1话机翻", "") {
+		t.Errorf("expected local title '31.1 第31.1话机翻' to match online '第31.1话机翻'")
+	}
+	if !MatchChapterTitle("第31.1话", "", "31.1 第31.1话机翻.cbz") {
+		t.Errorf("expected '31.1 第31.1话机翻.cbz' to match online '第31.1话'")
+	}
+
 	// 1. Third-party non-standard prefix ("02 - 1.5话") matches online "第01.5话"
 	if !MatchChapterTitle("第01.5话", "", "02 - 1.5话.cbz") {
 		t.Errorf("expected '02 - 1.5话.cbz' to match online '第01.5话'")

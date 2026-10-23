@@ -5,16 +5,50 @@ import (
 	"math"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
 var (
-	bracketTagRe  = regexp.MustCompile(`\[.*?\]|\(.*?\)|【.*?】|（.*?）|<.*?>`)
-	volumeChRe    = regexp.MustCompile(`(?i)(第\s*\d+\s*[卷话回期册]|vol\s*\.?\s*\d+|ch\s*\.?\s*\d+|part\s*\.?\s*\d+).*$`)
-	extraSpaceRe  = regexp.MustCompile(`\s+`)
-	leadingZeroRe = regexp.MustCompile(`(?i)(^|[^\d])0+(\d+)`)
-	extRe         = regexp.MustCompile(`(?i)\.(cbz|cbr|zip|rar|tar|pdf)$`)
+	bracketTagRe        = regexp.MustCompile(`\[.*?\]|\(.*?\)|【.*?】|（.*?）|<.*?>`)
+	volumeChRe          = regexp.MustCompile(`(?i)(第\s*\d+\s*[卷话回期册]|vol\s*\.?\s*\d+|ch\s*\.?\s*\d+|part\s*\.?\s*\d+).*$`)
+	extraSpaceRe        = regexp.MustCompile(`\s+`)
+	leadingZeroRe       = regexp.MustCompile(`(?i)(^|[^\d])0+(\d+)`)
+	extRe               = regexp.MustCompile(`(?i)\.(cbz|cbr|zip|rar|tar|pdf)$`)
+	prefixIndexRe       = regexp.MustCompile(`^\[?\d+(?:\.\d+)?\]?\s*[-_.\s]\s*`)
+	explicitChapterRe   = regexp.MustCompile(`(?i)(?:第|ch\.?\s*|chapter\s*|#)\s*(\d+(?:\.\d+)?)\s*(?:话|話|回|期|卷|集)?`)
+	suffixChapterRe     = regexp.MustCompile(`(?i)(?:^|[^\d])(\d+(?:\.\d+)?)\s*(?:话|話|回|期|卷|集)`)
+	leadingNumChapterRe = regexp.MustCompile(`(?i)^\[?(\d+(?:\.\d+)?)\]?\s*[-_.\s]`)
 )
+
+// ExtractChapterNumber parses the semantic chapter number from a title string.
+// Returns fallback if no valid chapter number can be recognized.
+func ExtractChapterNumber(title string, fallback float64) float64 {
+	s := strings.TrimSpace(title)
+	if s == "" {
+		return fallback
+	}
+
+	if m := explicitChapterRe.FindStringSubmatch(s); len(m) > 1 {
+		if val, err := strconv.ParseFloat(m[1], 64); err == nil {
+			return val
+		}
+	}
+
+	if m := suffixChapterRe.FindStringSubmatch(s); len(m) > 1 {
+		if val, err := strconv.ParseFloat(m[1], 64); err == nil {
+			return val
+		}
+	}
+
+	if m := leadingNumChapterRe.FindStringSubmatch(s); len(m) > 1 {
+		if val, err := strconv.ParseFloat(m[1], 64); err == nil {
+			return val
+		}
+	}
+
+	return fallback
+}
 
 // FormatChapterFilename generates clean, standard filenames supporting integer and decimal chapters.
 // Example: 1.0 -> "001 - Title.cbz", 1.5 -> "001.5 - Title.cbz"
@@ -47,6 +81,9 @@ func NormalizeChapterTitleForMatch(raw string) string {
 		s = s[dashIdx+3:]
 	}
 
+	// Remove leading order index prefix if present (e.g. "31.1 第31.1话机翻" -> "第31.1话机翻", "02_1.5话" -> "1.5话")
+	s = prefixIndexRe.ReplaceAllString(s, "")
+
 	// Remove scanlation brackets
 	s = bracketTagRe.ReplaceAllString(s, "")
 
@@ -70,16 +107,36 @@ func MatchChapterTitle(onlineTitle, localTitle, localPath string) bool {
 		return false
 	}
 
-	if localTitle != "" {
-		locNorm := NormalizeChapterTitleForMatch(localTitle)
-		if locNorm != "" && locNorm == onNorm {
+	candidates := []string{localTitle, filepath.Base(localPath)}
+	for _, cand := range candidates {
+		cand = strings.TrimSpace(cand)
+		if cand == "" {
+			continue
+		}
+
+		locNorm := NormalizeChapterTitleForMatch(cand)
+		if locNorm == "" {
+			continue
+		}
+
+		// 1. Direct normalized equality (e.g. "31.1话机翻" == "31.1话机翻")
+		if locNorm == onNorm {
 			return true
 		}
-	}
 
-	if localPath != "" {
-		pathNorm := NormalizeChapterTitleForMatch(filepath.Base(localPath))
-		if pathNorm != "" && pathNorm == onNorm {
+		// 2. Substring containment check
+		// (e.g. "31.1第31.1话机翻" contains "31.1话机翻")
+		if len(onNorm) >= 3 && strings.Contains(locNorm, onNorm) {
+			return true
+		}
+		if len(locNorm) >= 3 && strings.Contains(onNorm, locNorm) {
+			return true
+		}
+
+		// 3. Extracted semantic chapter number check
+		onNum := ExtractChapterNumber(onlineTitle, -1)
+		locNum := ExtractChapterNumber(cand, -2)
+		if onNum >= 0 && onNum == locNum {
 			return true
 		}
 	}
