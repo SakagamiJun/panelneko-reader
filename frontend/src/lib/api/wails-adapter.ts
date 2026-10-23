@@ -17,6 +17,8 @@ import type {
   DevInfo,
   CopyMangaAccount,
   FollowedUpdateCheckProgress,
+  MangaLinkPreviewInput,
+  MangaLinkPreviewItem,
 } from "@/lib/contracts";
 import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 import { isWailsEnvironment } from "@/lib/runtime";
@@ -251,6 +253,14 @@ export class WailsAdapter implements AppAdapter {
     if (typeof fn === "function") {
       await fn(mangaID);
     }
+  }
+
+  async previewBatchMangaLinks(inputs: MangaLinkPreviewInput[]): Promise<MangaLinkPreviewItem[]> {
+    const fn = (App as any).PreviewBatchMangaLinks;
+    if (typeof fn === "function") {
+      return ((await fn(inputs)) ?? []) as MangaLinkPreviewItem[];
+    }
+    return [];
   }
 
   async checkMangaUpdates(mangaID: string): Promise<number> {

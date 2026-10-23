@@ -125,6 +125,9 @@ export const appAdapter: AppAdapter = {
   unlinkMangaOnline(mangaID) {
     return currentAdapter().unlinkMangaOnline(mangaID);
   },
+  previewBatchMangaLinks(inputs) {
+    return currentAdapter().previewBatchMangaLinks(inputs);
+  },
   checkMangaUpdates(mangaID) {
     return currentAdapter().checkMangaUpdates(mangaID);
   },

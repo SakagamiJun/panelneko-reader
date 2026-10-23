@@ -153,6 +153,30 @@ export interface MangaOnlineLink {
   lastCheckedAt?: string;
   lastNotifiedChapter?: string;
   targetGroup?: string;
+  baselineChapterNumber?: number;
+  baselineChapterTitle?: string;
+}
+
+export interface MangaLinkPreviewInput {
+  mangaId: string;
+  onlineSource: string;
+  onlineComicId: string;
+  targetGroup?: string;
+  followPolicy?: string;
+}
+
+export interface MangaLinkPreviewItem {
+  mangaId: string;
+  mangaTitle: string;
+  localLatestTitle: string;
+  localLatestNumber: number;
+  onlineLatestTitle: string;
+  onlineLatestNumber: number;
+  diffType: "in_sync" | "online_ahead" | "local_ahead";
+  diffCount: number;
+  pendingChapters: string[];
+  recommendedPolicy: "latest_only" | "fill_gaps";
+  errorMessage?: string;
 }
 
 export interface LibraryManga {

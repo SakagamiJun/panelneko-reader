@@ -18,6 +18,8 @@ import {
   type CopyMangaAccount,
   type FollowedUpdateCheckProgress,
   type DownloaderSettings,
+  type MangaLinkPreviewInput,
+  type MangaLinkPreviewItem,
 } from "@/lib/contracts";
 import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 
@@ -697,6 +699,21 @@ export class MockAdapter implements AppAdapter {
 
   async unlinkMangaOnline(mangaID: string): Promise<void> {
     this.mockLinks.delete(mangaID);
+  }
+
+  async previewBatchMangaLinks(inputs: MangaLinkPreviewInput[]): Promise<MangaLinkPreviewItem[]> {
+    return inputs.map((inItem) => ({
+      mangaId: inItem.mangaId,
+      mangaTitle: inItem.mangaId,
+      localLatestTitle: "第5话",
+      localLatestNumber: 5,
+      onlineLatestTitle: "第5话",
+      onlineLatestNumber: 5,
+      diffType: "in_sync",
+      diffCount: 0,
+      pendingChapters: [],
+      recommendedPolicy: "latest_only",
+    }));
   }
 
   async checkMangaUpdates(_mangaID: string): Promise<number> {
