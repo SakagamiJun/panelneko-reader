@@ -29,6 +29,8 @@ export type {
     LibraryManga,
     LibrarySource,
     LocaleResolvedPayload,
+    MangaLinkPreviewInput,
+    MangaLinkPreviewItem,
     MangaOnlineLink,
     OnlineMangaChapter,
     OnlineMangaItem,

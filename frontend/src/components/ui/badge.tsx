@@ -14,9 +14,11 @@ export function Badge({
   children,
   className,
   tone = "default",
-}: PropsWithChildren<{ className?: string; tone?: string }>) {
+  title,
+}: PropsWithChildren<{ className?: string; tone?: string; title?: string }>) {
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium leading-tight tracking-tight select-none",
         toneMap[tone] ?? toneMap.default,

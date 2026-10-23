@@ -195,6 +195,36 @@ export interface LocaleResolvedPayload {
     "locale": string;
 }
 
+export interface MangaLinkPreviewInput {
+    "mangaId": string;
+    "onlineSource": string;
+    "onlineComicId": string;
+    "targetGroup"?: string;
+    "followPolicy"?: string;
+}
+
+export interface MangaLinkPreviewItem {
+    "mangaId": string;
+    "mangaTitle": string;
+    "localLatestTitle": string;
+    "localLatestNumber": number;
+    "onlineLatestTitle": string;
+    "onlineLatestNumber": number;
+
+    /**
+     * "in_sync" | "online_ahead" | "local_ahead"
+     */
+    "diffType": string;
+    "diffCount": number;
+    "pendingChapters": string[] | null;
+
+    /**
+     * "latest_only" | "fill_gaps"
+     */
+    "recommendedPolicy": string;
+    "errorMessage"?: string;
+}
+
 export interface MangaOnlineLink {
     "mangaId": string;
     "onlineSource": string;
@@ -209,6 +239,8 @@ export interface MangaOnlineLink {
     "lastCheckedAt": string;
     "lastNotifiedChapter"?: string;
     "targetGroup"?: string;
+    "baselineChapterNumber"?: number;
+    "baselineChapterTitle"?: string;
 }
 
 export interface OnlineMangaChapter {

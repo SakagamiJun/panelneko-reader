@@ -141,6 +141,10 @@ export function PauseDownloadTask(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(3743113560, taskID);
 }
 
+export function PreviewBatchMangaLinks(inputs: contracts$0.MangaLinkPreviewInput[] | null): $CancellablePromise<contracts$0.MangaLinkPreviewItem[] | null> {
+    return $Call.ByID(4086719864, inputs);
+}
+
 export function RelocateLibrarySource(sourceID: string, newPath: string): $CancellablePromise<contracts$0.AppSettings> {
     return $Call.ByID(3057094592, sourceID, newPath);
 }
