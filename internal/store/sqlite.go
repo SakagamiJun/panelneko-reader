@@ -133,7 +133,9 @@ func (s *SQLiteStore) init() error {
 			follow_policy TEXT NOT NULL DEFAULT 'latest_only',
 			last_checked_at TEXT NOT NULL DEFAULT '',
 			last_notified_chapter TEXT NOT NULL DEFAULT '',
-			target_group TEXT NOT NULL DEFAULT ''
+			target_group TEXT NOT NULL DEFAULT '',
+			baseline_chapter_number REAL NOT NULL DEFAULT -1,
+			baseline_chapter_title TEXT NOT NULL DEFAULT ''
 		);`,
 		`CREATE TABLE IF NOT EXISTS copymanga_accounts (
 			username TEXT PRIMARY KEY,
@@ -158,6 +160,8 @@ func (s *SQLiteStore) init() error {
 	s.addColumnIfNotExists("download_tasks", "chapter_group", "TEXT NOT NULL DEFAULT ''")
 	s.addColumnIfNotExists("download_tasks", "target_source_id", "TEXT NOT NULL DEFAULT ''")
 	s.addColumnIfNotExists("manga_online_links", "target_group", "TEXT NOT NULL DEFAULT ''")
+	s.addColumnIfNotExists("manga_online_links", "baseline_chapter_number", "REAL NOT NULL DEFAULT -1")
+	s.addColumnIfNotExists("manga_online_links", "baseline_chapter_title", "TEXT NOT NULL DEFAULT ''")
 
 	_, _ = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_library_manga_source ON library_manga (source_id)`)
 
@@ -649,8 +653,8 @@ func (s *SQLiteStore) SaveMangaOnlineLink(link contracts.MangaOnlineLink) error 
 		INSERT INTO manga_online_links (
 			manga_id, online_source, online_comic_id, online_title,
 			auto_follow, follow_policy, last_checked_at, last_notified_chapter,
-			target_group
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			target_group, baseline_chapter_number, baseline_chapter_title
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(manga_id) DO UPDATE SET
 			online_source = excluded.online_source,
 			online_comic_id = excluded.online_comic_id,
@@ -659,7 +663,9 @@ func (s *SQLiteStore) SaveMangaOnlineLink(link contracts.MangaOnlineLink) error 
 			follow_policy = excluded.follow_policy,
 			last_checked_at = excluded.last_checked_at,
 			last_notified_chapter = excluded.last_notified_chapter,
-			target_group = excluded.target_group
+			target_group = excluded.target_group,
+			baseline_chapter_number = excluded.baseline_chapter_number,
+			baseline_chapter_title = excluded.baseline_chapter_title
 	`
 	autoFollowInt := 0
 	if link.AutoFollow {
@@ -669,10 +675,14 @@ func (s *SQLiteStore) SaveMangaOnlineLink(link contracts.MangaOnlineLink) error 
 	if policy == "" {
 		policy = "latest_only"
 	}
+	baseNum := link.BaselineChapterNumber
+	if baseNum == 0 && link.BaselineChapterTitle == "" {
+		baseNum = -1
+	}
 	_, err := s.db.Exec(query,
 		link.MangaID, link.OnlineSource, link.OnlineComicID, link.OnlineTitle,
 		autoFollowInt, policy, link.LastCheckedAt, link.LastNotifiedChapter,
-		link.TargetGroup,
+		link.TargetGroup, baseNum, link.BaselineChapterTitle,
 	)
 	if err != nil {
 		return fmt.Errorf("save manga online link: %w", err)
@@ -684,7 +694,7 @@ func (s *SQLiteStore) GetMangaOnlineLink(mangaID string) (contracts.MangaOnlineL
 	const query = `
 		SELECT manga_id, online_source, online_comic_id, online_title,
 		       auto_follow, follow_policy, last_checked_at, last_notified_chapter,
-		       target_group
+		       target_group, baseline_chapter_number, baseline_chapter_title
 		FROM manga_online_links
 		WHERE manga_id = ?
 	`
@@ -693,7 +703,7 @@ func (s *SQLiteStore) GetMangaOnlineLink(mangaID string) (contracts.MangaOnlineL
 	err := s.db.QueryRow(query, mangaID).Scan(
 		&link.MangaID, &link.OnlineSource, &link.OnlineComicID, &link.OnlineTitle,
 		&autoFollowInt, &link.FollowPolicy, &link.LastCheckedAt, &link.LastNotifiedChapter,
-		&link.TargetGroup,
+		&link.TargetGroup, &link.BaselineChapterNumber, &link.BaselineChapterTitle,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -709,7 +719,7 @@ func (s *SQLiteStore) GetAutoFollowMangaLinks() ([]contracts.MangaOnlineLink, er
 	const query = `
 		SELECT manga_id, online_source, online_comic_id, online_title,
 		       auto_follow, follow_policy, last_checked_at, last_notified_chapter,
-		       target_group
+		       target_group, baseline_chapter_number, baseline_chapter_title
 		FROM manga_online_links
 		WHERE auto_follow = 1
 	`
@@ -726,7 +736,7 @@ func (s *SQLiteStore) GetAutoFollowMangaLinks() ([]contracts.MangaOnlineLink, er
 		err := rows.Scan(
 			&link.MangaID, &link.OnlineSource, &link.OnlineComicID, &link.OnlineTitle,
 			&autoFollowInt, &link.FollowPolicy, &link.LastCheckedAt, &link.LastNotifiedChapter,
-			&link.TargetGroup,
+			&link.TargetGroup, &link.BaselineChapterNumber, &link.BaselineChapterTitle,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan auto follow manga link: %w", err)
@@ -741,7 +751,7 @@ func (s *SQLiteStore) GetAllMangaOnlineLinks() ([]contracts.MangaOnlineLink, err
 	const query = `
 		SELECT manga_id, online_source, online_comic_id, online_title,
 		       auto_follow, follow_policy, last_checked_at, last_notified_chapter,
-		       target_group
+		       target_group, baseline_chapter_number, baseline_chapter_title
 		FROM manga_online_links
 	`
 	rows, err := s.db.Query(query)
@@ -757,7 +767,7 @@ func (s *SQLiteStore) GetAllMangaOnlineLinks() ([]contracts.MangaOnlineLink, err
 		err := rows.Scan(
 			&link.MangaID, &link.OnlineSource, &link.OnlineComicID, &link.OnlineTitle,
 			&autoFollowInt, &link.FollowPolicy, &link.LastCheckedAt, &link.LastNotifiedChapter,
-			&link.TargetGroup,
+			&link.TargetGroup, &link.BaselineChapterNumber, &link.BaselineChapterTitle,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan manga online link: %w", err)

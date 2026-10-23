@@ -276,15 +276,39 @@ type CreateDownloadTaskInput struct {
 }
 
 type MangaOnlineLink struct {
-	MangaID             string `json:"mangaId"`
-	OnlineSource        string `json:"onlineSource"`
-	OnlineComicID       string `json:"onlineComicId"`
-	OnlineTitle         string `json:"onlineTitle"`
-	AutoFollow          bool   `json:"autoFollow"`
-	FollowPolicy        string `json:"followPolicy"` // "latest_only" | "fill_gaps"
-	LastCheckedAt       string `json:"lastCheckedAt"`
-	LastNotifiedChapter string `json:"lastNotifiedChapter,omitempty"`
-	TargetGroup         string `json:"targetGroup,omitempty"`
+	MangaID               string  `json:"mangaId"`
+	OnlineSource          string  `json:"onlineSource"`
+	OnlineComicID         string  `json:"onlineComicId"`
+	OnlineTitle           string  `json:"onlineTitle"`
+	AutoFollow            bool    `json:"autoFollow"`
+	FollowPolicy          string  `json:"followPolicy"` // "latest_only" | "fill_gaps"
+	LastCheckedAt         string  `json:"lastCheckedAt"`
+	LastNotifiedChapter   string  `json:"lastNotifiedChapter,omitempty"`
+	TargetGroup           string  `json:"targetGroup,omitempty"`
+	BaselineChapterNumber float64 `json:"baselineChapterNumber,omitempty"`
+	BaselineChapterTitle  string  `json:"baselineChapterTitle,omitempty"`
+}
+
+type MangaLinkPreviewInput struct {
+	MangaID       string `json:"mangaId"`
+	OnlineSource  string `json:"onlineSource"`
+	OnlineComicID string `json:"onlineComicId"`
+	TargetGroup   string `json:"targetGroup,omitempty"`
+	FollowPolicy  string `json:"followPolicy,omitempty"`
+}
+
+type MangaLinkPreviewItem struct {
+	MangaID            string   `json:"mangaId"`
+	MangaTitle         string   `json:"mangaTitle"`
+	LocalLatestTitle   string   `json:"localLatestTitle"`
+	LocalLatestNumber  float64  `json:"localLatestNumber"`
+	OnlineLatestTitle  string   `json:"onlineLatestTitle"`
+	OnlineLatestNumber float64  `json:"onlineLatestNumber"`
+	DiffType           string   `json:"diffType"` // "in_sync" | "online_ahead" | "local_ahead"
+	DiffCount          int      `json:"diffCount"`
+	PendingChapters    []string `json:"pendingChapters"`
+	RecommendedPolicy  string   `json:"recommendedPolicy"` // "latest_only" | "fill_gaps"
+	ErrorMessage       string   `json:"errorMessage,omitempty"`
 }
 
 type CopyMangaAccount struct {
