@@ -211,6 +211,7 @@ type OnlineMangaChapter struct {
 	Source        string  `json:"source"`
 	Title         string  `json:"title"`
 	Number        float64 `json:"number"`
+	Ordered       int64   `json:"ordered,omitempty"`
 	Group         string  `json:"group,omitempty"`
 	GroupPathWord string  `json:"groupPathWord,omitempty"`
 	ReleaseDate   string  `json:"releaseDate,omitempty"`
@@ -317,6 +318,7 @@ type CopyMangaAccount struct {
 	Token         string `json:"token"`
 	LimitedAt     int64  `json:"limitedAt"`
 	LastCheckedAt int64  `json:"lastCheckedAt"`
+	Platform      string `json:"platform,omitempty"`
 }
 
 type CopyMangaLoginResult struct {

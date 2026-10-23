@@ -559,3 +559,67 @@ func TestCopyMangaGetMangaGroups(t *testing.T) {
 		t.Fatalf("expected groups to contain 话, 卷, 番外篇, got %+v", groups)
 	}
 }
+
+func TestCopyMangaGetMangaChaptersWithOrdered(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(r.URL.Path, "/api/v3/comic2/") {
+			detail := comicDetailData{}
+			detail.Comic.Name = "Test Manga"
+			detail.Groups = map[string]struct {
+				Name     string `json:"name"`
+				PathWord string `json:"path_word"`
+			}{
+				"default": {Name: "话", PathWord: "default"},
+			}
+			raw, _ := json.Marshal(detail)
+			_ = json.NewEncoder(w).Encode(copyAPIResponse{Code: 200, Message: "ok", Results: raw})
+			return
+		}
+		if strings.Contains(r.URL.Path, "/group/default/chapters") {
+			list := []map[string]any{
+				{"uuid": "ch-1", "name": "第1话", "index": 0.0, "ordered": 10},
+				{"uuid": "ch-1.5", "name": "第1.5话", "index": 1.0, "ordered": 15},
+				{"uuid": "ch-0", "name": "第0话", "index": 2.0, "ordered": 0},
+				{"uuid": "ch-fallback", "name": "第4话", "index": 4.0}, // no ordered field
+			}
+			data := map[string]any{
+				"total": 4,
+				"list":  list,
+			}
+			raw, _ := json.Marshal(data)
+			_ = json.NewEncoder(w).Encode(copyAPIResponse{Code: 200, Message: "ok", Results: raw})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	client := NewClient(host, "", 5)
+
+	chapters, err := client.GetMangaChapters(context.Background(), "test-manga")
+	if err != nil {
+		t.Fatalf("GetMangaChapters failed: %v", err)
+	}
+	if len(chapters) != 4 {
+		t.Fatalf("expected 4 chapters, got %d", len(chapters))
+	}
+
+	// ch-1: ordered=10 -> 1.0
+	if chapters[0].Number != 1.0 || chapters[0].Ordered != 10 {
+		t.Errorf("ch-1: expected Number=1.0 Ordered=10, got Number=%f Ordered=%d", chapters[0].Number, chapters[0].Ordered)
+	}
+	// ch-1.5: ordered=15 -> 1.5
+	if chapters[1].Number != 1.5 || chapters[1].Ordered != 15 {
+		t.Errorf("ch-1.5: expected Number=1.5 Ordered=15, got Number=%f Ordered=%d", chapters[1].Number, chapters[1].Ordered)
+	}
+	// ch-0: ordered=0 -> 0.0
+	if chapters[2].Number != 0.0 || chapters[2].Ordered != 0 {
+		t.Errorf("ch-0: expected Number=0.0 Ordered=0, got Number=%f Ordered=%d", chapters[2].Number, chapters[2].Ordered)
+	}
+	// ch-fallback: ordered nil -> fallback to index 4.0
+	if chapters[3].Number != 4.0 || chapters[3].Ordered != 0 {
+		t.Errorf("ch-fallback: expected Number=4.0 Ordered=0, got Number=%f Ordered=%d", chapters[3].Number, chapters[3].Ordered)
+	}
+}

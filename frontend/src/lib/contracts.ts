@@ -88,6 +88,7 @@ export interface OnlineMangaChapter {
   source: string;
   title: string;
   number: number;
+  ordered?: number;
   group?: string;
   groupPathWord?: string;
   releaseDate?: string;
@@ -292,5 +293,6 @@ export interface CopyMangaAccount {
   token: string;
   limitedAt: number;
   lastCheckedAt: number;
+  platform?: string;
 }
 

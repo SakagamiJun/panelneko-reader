@@ -433,9 +433,10 @@ type comicDetailData struct {
 }
 
 type chapterItemInList struct {
-	UUID  string  `json:"uuid"`
-	Name  string  `json:"name"`
-	Index float64 `json:"index"`
+	UUID    string  `json:"uuid"`
+	Name    string  `json:"name"`
+	Index   float64 `json:"index"`
+	Ordered *int64  `json:"ordered"`
 }
 
 type chaptersRespData struct {
@@ -543,12 +544,19 @@ func (c *Client) GetMangaChapters(ctx context.Context, comicPathWord string) ([]
 			}
 
 			for _, ch := range chResp.List {
+				num := ch.Index
+				var orderedVal int64
+				if ch.Ordered != nil {
+					orderedVal = *ch.Ordered
+					num = float64(orderedVal) / 10.0
+				}
 				allChapters = append(allChapters, contracts.OnlineMangaChapter{
 					ID:            ch.UUID,
 					MangaID:       comicPathWord,
 					Source:        SiteName,
 					Title:         ch.Name,
-					Number:        ch.Index,
+					Number:        num,
+					Ordered:       orderedVal,
 					Group:         grp.name,
 					GroupPathWord: grp.pathWord,
 				})
@@ -569,6 +577,7 @@ type chapterDetailData struct {
 		ComicPathWord string  `json:"comic_path_word"`
 		Name          string  `json:"name"`
 		Index         float64 `json:"index"`
+		Ordered       *int64  `json:"ordered"`
 		Words         []int   `json:"words"`
 		Contents      []struct {
 			URL string `json:"url"`

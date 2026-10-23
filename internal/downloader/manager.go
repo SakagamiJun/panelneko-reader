@@ -192,6 +192,13 @@ func (m *Manager) CreateTasks(inputs []contracts.CreateDownloadTaskInput) ([]con
 			targetSrcID = m.settings.Get().Downloader.TargetSourceID
 		}
 
+		chNum := in.ChapterNumber
+		if chNum <= 0 {
+			if semanticNum := ExtractChapterNumber(in.ChapterTitle, -1); semanticNum >= 0 {
+				chNum = semanticNum
+			}
+		}
+
 		task := contracts.DownloadTask{
 			ID:              taskID,
 			Source:          in.Source,
@@ -200,7 +207,7 @@ func (m *Manager) CreateTasks(inputs []contracts.CreateDownloadTaskInput) ([]con
 			MangaCoverURL:   in.MangaCoverURL,
 			ChapterID:       in.ChapterID,
 			ChapterTitle:    in.ChapterTitle,
-			ChapterNumber:   in.ChapterNumber,
+			ChapterNumber:   chNum,
 			ChapterGroup:    in.ChapterGroup,
 			TargetSourceID:  targetSrcID,
 			Status:          contracts.DownloadStatusPending,
