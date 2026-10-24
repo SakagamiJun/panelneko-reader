@@ -68,9 +68,9 @@ export class WailsAdapter implements AppAdapter {
     if (isWailsEnvironment()) {
       const selected = await Dialogs.OpenFile({
         CanChooseDirectories: true,
-        CanChooseFiles: false,
+        CanChooseFiles: true,
         CanCreateDirectories: true,
-        Title: options?.title || "Select Manga Library Directory",
+        Title: options?.title || "Select Manga Library Directory or Archive",
         Directory: options?.defaultDirectory || undefined,
       });
       return selected || "";

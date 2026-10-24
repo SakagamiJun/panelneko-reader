@@ -163,6 +163,43 @@ func ScanSource(source contracts.LibrarySource, prevItems map[string]contracts.L
 		return nil, nil, fmt.Errorf("stat library source: %w", err)
 	}
 	if !info.IsDir() {
+		if isSupportedArchivePath(outputRoot) {
+			modTime := info.ModTime().UnixNano()
+			relPath := filepath.Base(outputRoot)
+			mangaID := EncodeMangaIDWithSource(sourceID, relPath)
+			if prevTime, ok := prevModTimes[mangaID]; ok && prevTime == modTime {
+				if prevItem, ok := prevItems[mangaID]; ok {
+					prevItem.SourceID = sourceID
+					prevItem.IsAvailable = true
+					return []contracts.LibraryManga{prevItem}, map[string]int64{mangaID: modTime}, nil
+				}
+			}
+
+			parentDir := filepath.Dir(outputRoot)
+			manifest, err := loadMangaManifestWithSource(parentDir, sourceID, outputRoot, relPath)
+			if err != nil {
+				return nil, nil, fmt.Errorf("load archive source: %w", err)
+			}
+			if len(manifest.reader.Chapters) == 0 {
+				return nil, nil, fmt.Errorf("no chapters in archive: %s", outputRoot)
+			}
+			item := contracts.LibraryManga{
+				ID:            manifest.reader.MangaID,
+				SourceID:      sourceID,
+				Title:         manifest.reader.Title,
+				SourceURL:     manifest.sourceURL,
+				RelativePath:  relPath,
+				ParentPath:    "",
+				IsCollection:  false,
+				MangaCount:    0,
+				CoverImageURL: BuildThumbnailURL(manifest.reader.CoverImageURL),
+				ChapterCount:  len(manifest.reader.Chapters),
+				PageCount:     manifest.reader.TotalPages,
+				LastUpdated:   manifest.updatedAt.UTC().Format(time.RFC3339),
+				IsAvailable:   true,
+			}
+			return []contracts.LibraryManga{item}, map[string]int64{item.ID: modTime}, nil
+		}
 		return nil, nil, fmt.Errorf("library source path is not a directory: %s", outputRoot)
 	}
 
@@ -484,8 +521,18 @@ func GetReaderManifestWithSources(sources []contracts.LibrarySource, mangaID str
 				if !sources[i].Enabled {
 					continue
 				}
-				if candDir, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
-					if manifest, mErr := loadMangaManifestWithSource(sources[i].Path, sources[i].ID, candDir, relativePath); mErr == nil && len(manifest.reader.Chapters) > 0 {
+				var candDir string
+				var rootPath string
+				sInfo, sErr := os.Stat(sources[i].Path)
+				if sErr == nil && !sInfo.IsDir() && isSupportedArchivePath(sources[i].Path) {
+					candDir = sources[i].Path
+					rootPath = filepath.Dir(sources[i].Path)
+				} else if dir, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
+					candDir = dir
+					rootPath = sources[i].Path
+				}
+				if candDir != "" {
+					if manifest, mErr := loadMangaManifestWithSource(rootPath, sources[i].ID, candDir, relativePath); mErr == nil && len(manifest.reader.Chapters) > 0 {
 						return manifest.reader, nil
 					}
 				}
@@ -500,8 +547,18 @@ func GetReaderManifestWithSources(sources []contracts.LibrarySource, mangaID str
 			if !sources[i].Enabled || sources[i].ID == matchedSource.ID {
 				continue
 			}
-			if candDir, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
-				if manifest, mErr := loadMangaManifestWithSource(sources[i].Path, sources[i].ID, candDir, relativePath); mErr == nil && len(manifest.reader.Chapters) > 0 {
+			var fallbackCandDir string
+			var fallbackRoot string
+			fbInfo, fbErr := os.Stat(sources[i].Path)
+			if fbErr == nil && !fbInfo.IsDir() && isSupportedArchivePath(sources[i].Path) {
+				fallbackCandDir = sources[i].Path
+				fallbackRoot = filepath.Dir(sources[i].Path)
+			} else if dir, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
+				fallbackCandDir = dir
+				fallbackRoot = sources[i].Path
+			}
+			if fallbackCandDir != "" {
+				if manifest, mErr := loadMangaManifestWithSource(fallbackRoot, sources[i].ID, fallbackCandDir, relativePath); mErr == nil && len(manifest.reader.Chapters) > 0 {
 					return manifest.reader, nil
 				}
 			}
@@ -510,14 +567,25 @@ func GetReaderManifestWithSources(sources []contracts.LibrarySource, mangaID str
 	}
 
 	var primaryErr error
-	if mangaDir, err := resolveWithinRoot(matchedSource.Path, relativePath); err == nil {
-		manifest, mErr := loadMangaManifestWithSource(matchedSource.Path, matchedSource.ID, mangaDir, relativePath)
+	var candDir string
+	var rootPath string
+	srcInfo, sErr := os.Stat(matchedSource.Path)
+	if sErr == nil && !srcInfo.IsDir() && isSupportedArchivePath(matchedSource.Path) {
+		candDir = matchedSource.Path
+		rootPath = filepath.Dir(matchedSource.Path)
+	} else if dir, err := resolveWithinRoot(matchedSource.Path, relativePath); err == nil {
+		candDir = dir
+		rootPath = matchedSource.Path
+	} else {
+		primaryErr = err
+	}
+
+	if candDir != "" {
+		manifest, mErr := loadMangaManifestWithSource(rootPath, matchedSource.ID, candDir, relativePath)
 		if mErr == nil {
 			return manifest.reader, nil
 		}
 		primaryErr = mErr
-	} else {
-		primaryErr = err
 	}
 
 	if len(sources) > 1 {
@@ -525,8 +593,18 @@ func GetReaderManifestWithSources(sources []contracts.LibrarySource, mangaID str
 			if !sources[i].Enabled || sources[i].ID == matchedSource.ID {
 				continue
 			}
-			if candDir, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
-				if manifest, mErr := loadMangaManifestWithSource(sources[i].Path, sources[i].ID, candDir, relativePath); mErr == nil && len(manifest.reader.Chapters) > 0 {
+			var fallbackCandDir string
+			var fallbackRoot string
+			fbInfo, fbErr := os.Stat(sources[i].Path)
+			if fbErr == nil && !fbInfo.IsDir() && isSupportedArchivePath(sources[i].Path) {
+				fallbackCandDir = sources[i].Path
+				fallbackRoot = filepath.Dir(sources[i].Path)
+			} else if dir, cErr := resolveWithinRoot(sources[i].Path, relativePath); cErr == nil {
+				fallbackCandDir = dir
+				fallbackRoot = sources[i].Path
+			}
+			if fallbackCandDir != "" {
+				if manifest, mErr := loadMangaManifestWithSource(fallbackRoot, sources[i].ID, fallbackCandDir, relativePath); mErr == nil && len(manifest.reader.Chapters) > 0 {
 					return manifest.reader, nil
 				}
 			}
@@ -572,6 +650,10 @@ func ResolveDirectoryPathWithSources(sources []contracts.LibrarySource, mangaID 
 			}
 			return "", fmt.Errorf("library source %q not found", sourceID)
 		}
+	}
+
+	if fi, sErr := os.Stat(matchedSource.Path); sErr == nil && !fi.IsDir() && isSupportedArchivePath(matchedSource.Path) {
+		return matchedSource.Path, nil
 	}
 
 	targetPath, err := resolveWithinRoot(matchedSource.Path, relativePath)
@@ -1501,9 +1583,8 @@ func normalizeArchiveEntryPath(entryPath string) (string, error) {
 	}
 
 	normalizedPath := strings.ReplaceAll(entryPath, "\\", "/")
-	if strings.HasPrefix(normalizedPath, "/") {
-		return "", fmt.Errorf("illegal archive entry path: %s", entryPath)
-	}
+	normalizedPath = strings.TrimPrefix(normalizedPath, "/")
+	normalizedPath = strings.TrimPrefix(normalizedPath, "./")
 
 	cleanedPath := path.Clean(normalizedPath)
 	if cleanedPath == "." || cleanedPath == ".." || strings.HasPrefix(cleanedPath, "../") {
@@ -1815,18 +1896,21 @@ func resolveChapterDescriptors(dirPath string) ([]chapterSourceDescriptor, error
 	}
 	var descriptors []chapterSourceDescriptor
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
-		subDir := filepath.Join(dirPath, entry.Name())
-		ok, err := dirHasImages(subDir)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
+		switch {
+		case entry.IsDir():
+			subDir := filepath.Join(dirPath, entry.Name())
+			subDescriptors, err := resolveChapterDescriptors(subDir)
+			if err != nil {
+				return nil, err
+			}
+			descriptors = append(descriptors, subDescriptors...)
+		case isSupportedArchivePath(entry.Name()):
 			descriptors = append(descriptors, chapterSourceDescriptor{
-				kind: chapterSourceDirectory,
-				path: subDir,
+				kind: chapterSourceArchive,
+				path: filepath.Join(dirPath, entry.Name()),
 				name: entry.Name(),
 			})
 		}
@@ -1851,13 +1935,17 @@ func isASCIIDigit(value byte) bool {
 	return value >= '0' && value <= '9'
 }
 
-func isSupportedArchivePath(filePath string) bool {
+func IsSupportedArchivePath(filePath string) bool {
 	switch strings.ToLower(path.Ext(filepath.ToSlash(filePath))) {
 	case ".zip", ".cbz", ".cbr", ".rar":
 		return true
 	default:
 		return false
 	}
+}
+
+func isSupportedArchivePath(filePath string) bool {
+	return IsSupportedArchivePath(filePath)
 }
 
 func contentTypeForImagePath(filePath string) string {

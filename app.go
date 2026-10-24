@@ -995,10 +995,14 @@ func (a *App) assetHandler() http.Handler {
 		var defaultRoot string
 		for _, src := range sources {
 			if src.Enabled {
-				sourcesMap[src.ID] = src.Path
-			}
-			if src.ID == "default" || defaultRoot == "" {
-				defaultRoot = src.Path
+				rootPath := src.Path
+				if fi, err := os.Stat(rootPath); err == nil && !fi.IsDir() && library.IsSupportedArchivePath(rootPath) {
+					rootPath = filepath.Dir(rootPath)
+				}
+				sourcesMap[src.ID] = rootPath
+				if src.ID == "default" || defaultRoot == "" {
+					defaultRoot = rootPath
+				}
 			}
 		}
 		if defaultRoot == "" {

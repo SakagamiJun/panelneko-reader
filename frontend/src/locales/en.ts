@@ -256,6 +256,7 @@ export const en = {
     title: "Local Library",
     empty: "No manga directories found. Please configure your manga library directory below to scan your local folders and archives (.zip/.cbz).",
     dropHint: "Drag and drop manga folders or archives here to import",
+    openFileOrFolder: "Open Manga Folder or Archive",
     back: "Back to Library",
     backToMain: "Back to Main Library",
     collectionBadge: "Collection",

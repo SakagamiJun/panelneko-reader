@@ -256,6 +256,7 @@ export const zhCN = {
     title: "本地漫画库",
     empty: "当前漫画库目录下还没有已导入漫画。请点击下方按钮选择存放漫画（包含图片子目录或 ZIP/CBZ 压缩包）的本地文件夹。",
     dropHint: "拖拽本地漫画文件夹或压缩包到此处快速导入",
+    openFileOrFolder: "打开漫画文件夹或压缩包",
     back: "返回书架",
     backToMain: "返回主书架",
     collectionBadge: "合集",

@@ -1343,3 +1343,122 @@ func TestRemoteSourceDisconnectedFallback(t *testing.T) {
 		t.Fatalf("expected dir %q, got %q", expectedDir, dirPath)
 	}
 }
+
+func TestGroupedArchiveChaptersAndSingleArchiveSource(t *testing.T) {
+	root := t.TempDir()
+
+	// 1. Grouped CBZ chapters inside a manga directory (simulating CopyManga downloads)
+	mangaDir := filepath.Join(root, "Chainsaw Man")
+	groupDir := filepath.Join(mangaDir, "话")
+	if err := os.MkdirAll(groupDir, 0o755); err != nil {
+		t.Fatalf("mkdir group dir: %v", err)
+	}
+
+	ch1CBZ := filepath.Join(groupDir, "001 - 第1话.cbz")
+	writeZipArchive(t, ch1CBZ, map[string]string{
+		"ComicInfo.xml": `<?xml version="1.0"?><ComicInfo><Title>第1话</Title><Number>1</Number></ComicInfo>`,
+		"001.webp":      "page1-data",
+		"002.webp":      "page2-data",
+	})
+
+	ch2CBZ := filepath.Join(groupDir, "002 - 第2话.cbz")
+	writeZipArchive(t, ch2CBZ, map[string]string{
+		"ComicInfo.xml": `<?xml version="1.0"?><ComicInfo><Title>第2话</Title><Number>2</Number></ComicInfo>`,
+		"001.webp":      "page1-data-ch2",
+	})
+
+	// 2. Scan source containing the grouped CBZ manga
+	items, _, err := ScanSource(contracts.LibrarySource{ID: "src-local", Path: root, Enabled: true}, nil, nil)
+	if err != nil {
+		t.Fatalf("ScanSource failed: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 manga item, got %d", len(items))
+	}
+	if items[0].Title != "Chainsaw Man" || items[0].ChapterCount != 2 || items[0].PageCount != 3 {
+		t.Fatalf("unexpected manga item: %+v", items[0])
+	}
+
+	// 3. GetReaderManifestWithSources for grouped CBZ manga
+	manifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{
+		{ID: "src-local", Path: root, Enabled: true},
+	}, items[0].ID)
+	if err != nil {
+		t.Fatalf("GetReaderManifestWithSources failed: %v", err)
+	}
+	if len(manifest.Chapters) != 2 {
+		t.Fatalf("expected 2 chapters in manifest, got %d", len(manifest.Chapters))
+	}
+	if manifest.Chapters[0].Title != "第1话" || manifest.Chapters[0].Number != 1 {
+		t.Fatalf("unexpected chapter 0: %+v", manifest.Chapters[0])
+	}
+	if len(manifest.Chapters[0].Pages) != 2 {
+		t.Fatalf("unexpected page count in chapter 0: %d", len(manifest.Chapters[0].Pages))
+	}
+
+	// 4. Test reading archive asset stream from grouped CBZ
+	pageURL := manifest.Chapters[0].Pages[0].SourceURL
+	sourcesMap := map[string]string{"src-local": root}
+	rc, contentType, size, err := OpenMultiSourceArchiveAsset(sourcesMap, root, pageURL)
+	if err != nil {
+		t.Fatalf("OpenMultiSourceArchiveAsset failed: %v", err)
+	}
+	defer rc.Close()
+	if contentType != "image/webp" {
+		t.Fatalf("expected contentType image/webp, got %q", contentType)
+	}
+	buf, err := io.ReadAll(rc)
+	if err != nil || string(buf) != "page1-data" {
+		t.Fatalf("read asset body mismatch: %v, got %q", err, string(buf))
+	}
+	if size != int64(len("page1-data")) {
+		t.Fatalf("expected size %d, got %d", len("page1-data"), size)
+	}
+
+	// 5. Test single standalone CBZ archive file configured as a LibrarySource
+	standaloneDir := t.TempDir()
+	standaloneCBZ := filepath.Join(standaloneDir, "OneShot.cbz")
+	writeZipArchive(t, standaloneCBZ, map[string]string{
+		"ComicInfo.xml": `<?xml version="1.0"?><ComicInfo><Title>OneShot</Title><Number>1</Number></ComicInfo>`,
+		"001.png":       "oneshot-p1",
+	})
+
+	singleSource := contracts.LibrarySource{
+		ID:      "src-standalone",
+		Name:    "OneShot.cbz",
+		Path:    standaloneCBZ,
+		Enabled: true,
+	}
+
+	singleItems, _, err := ScanSource(singleSource, nil, nil)
+	if err != nil {
+		t.Fatalf("ScanSource for single archive failed: %v", err)
+	}
+	if len(singleItems) != 1 || singleItems[0].Title != "OneShot" || singleItems[0].PageCount != 1 {
+		t.Fatalf("unexpected single archive item: %+v", singleItems)
+	}
+
+	singleManifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{singleSource}, singleItems[0].ID)
+	if err != nil {
+		t.Fatalf("GetReaderManifestWithSources for single archive failed: %v", err)
+	}
+	if len(singleManifest.Chapters) != 1 || len(singleManifest.Chapters[0].Pages) != 1 {
+		t.Fatalf("unexpected single manifest: %+v", singleManifest)
+	}
+
+	// Test reading asset from single archive source
+	singlePageURL := singleManifest.Chapters[0].Pages[0].SourceURL
+	singleSourcesMap := map[string]string{"src-standalone": standaloneDir}
+	singleRC, singleCT, _, err := OpenMultiSourceArchiveAsset(singleSourcesMap, standaloneDir, singlePageURL)
+	if err != nil {
+		t.Fatalf("OpenMultiSourceArchiveAsset for single archive failed: %v", err)
+	}
+	defer singleRC.Close()
+	if singleCT != "image/png" {
+		t.Fatalf("expected image/png, got %q", singleCT)
+	}
+	singleData, err := io.ReadAll(singleRC)
+	if err != nil || string(singleData) != "oneshot-p1" {
+		t.Fatalf("unexpected data from single archive: %v, got %q", err, string(singleData))
+	}
+}

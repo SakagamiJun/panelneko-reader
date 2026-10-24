@@ -34,13 +34,14 @@ func readComicInfoFromDir(dir string) (ComicInfo, bool) {
 
 func readComicInfoFromArchive(files []archiveFile) (ComicInfo, bool) {
 	for _, file := range files {
-		if strings.EqualFold(file.Name(), "ComicInfo.xml") {
+		cleaned := strings.ReplaceAll(file.Name(), "\\", "/")
+		if strings.EqualFold(filepath.Base(cleaned), "ComicInfo.xml") {
 			rc, err := file.Open()
 			if err != nil {
 				return ComicInfo{}, false
 			}
-			defer rc.Close()
 			data, err := io.ReadAll(rc)
+			_ = rc.Close()
 			if err != nil {
 				return ComicInfo{}, false
 			}

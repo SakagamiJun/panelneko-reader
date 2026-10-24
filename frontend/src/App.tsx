@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Loader2, RefreshCw } from "lucide-react";
@@ -86,6 +86,58 @@ export default function App() {
     queryFn: () => appAdapter.getReaderManifest(selectedLibraryID!),
   });
 
+  const handleIncomingPaths = useCallback(
+    async (payload: unknown) => {
+      const paths = Array.isArray(payload) ? (payload as string[]) : [];
+      if (paths.length === 0) return;
+      let targetMangaIdToOpen: string | null = null;
+      for (const p of paths) {
+        try {
+          const name = p.split(/[/\\]/).pop() || p;
+          const isArchive = /\.(cbz|cbr|zip|rar)$/i.test(p);
+          const sourceID = `src-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          await appAdapter.addLibrarySource({
+            id: sourceID,
+            name,
+            path: p,
+            type: "local",
+            enabled: true,
+          });
+          if (isArchive && !targetMangaIdToOpen) {
+            const rawId = `${sourceID}::${name}`;
+            const bytes = new TextEncoder().encode(rawId);
+            let binary = "";
+            for (let i = 0; i < bytes.length; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            targetMangaIdToOpen = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+          }
+        } catch {
+          const isArchive = /\.(cbz|cbr|zip|rar)$/i.test(p);
+          if (isArchive && !targetMangaIdToOpen && settingsQuery.data?.librarySources) {
+            const existing = settingsQuery.data.librarySources.find((s) => s.path === p);
+            if (existing) {
+              const name = p.split(/[/\\]/).pop() || p;
+              const rawId = `${existing.id}::${name}`;
+              const bytes = new TextEncoder().encode(rawId);
+              let binary = "";
+              for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+              }
+              targetMangaIdToOpen = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+            }
+          }
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: ["settings"] });
+      await queryClient.invalidateQueries({ queryKey: ["library"] });
+      if (targetMangaIdToOpen) {
+        setSelectedLibraryID(targetMangaIdToOpen);
+      }
+    },
+    [queryClient, settingsQuery.data?.librarySources]
+  );
+
   useEffect(() => {
     const offSettings = appAdapter.subscribe(EVENTS.SETTINGS_UPDATED, () => {
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
@@ -94,27 +146,6 @@ export default function App() {
     const offLibrary = appAdapter.subscribe(EVENTS.LIBRARY_UPDATED, () => {
       void queryClient.invalidateQueries({ queryKey: ["library"] });
     });
-
-    const handleIncomingPaths = async (payload: unknown) => {
-      const paths = Array.isArray(payload) ? (payload as string[]) : [];
-      if (paths.length === 0) return;
-      for (const p of paths) {
-        try {
-          const name = p.split(/[/\\]/).pop() || p;
-          await appAdapter.addLibrarySource({
-            id: `src-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            name,
-            path: p,
-            type: "local",
-            enabled: true,
-          });
-        } catch {
-          // Ignore duplicate or unreadable paths silently
-        }
-      }
-      void queryClient.invalidateQueries({ queryKey: ["settings"] });
-      void queryClient.invalidateQueries({ queryKey: ["library"] });
-    };
 
     const offFilesDropped = appAdapter.subscribe(EVENTS.FILES_DROPPED, handleIncomingPaths);
     const offFilesOpened = appAdapter.subscribe(EVENTS.FILES_OPENED, handleIncomingPaths);
@@ -543,6 +574,20 @@ export default function App() {
         } else {
           handleOpenSettings("general");
         }
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === "o" || e.key === "O")) {
+        e.preventDefault();
+        void appAdapter
+          .selectDirectory({
+            title: t("library.openFileOrFolder"),
+          })
+          .then((selected) => {
+            if (selected) {
+              void handleIncomingPaths([selected]);
+            }
+          });
         return;
       }
 
