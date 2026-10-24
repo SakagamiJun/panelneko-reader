@@ -162,6 +162,7 @@ func (s *SQLiteStore) init() error {
 	s.addColumnIfNotExists("manga_online_links", "target_group", "TEXT NOT NULL DEFAULT ''")
 	s.addColumnIfNotExists("manga_online_links", "baseline_chapter_number", "REAL NOT NULL DEFAULT -1")
 	s.addColumnIfNotExists("manga_online_links", "baseline_chapter_title", "TEXT NOT NULL DEFAULT ''")
+	s.addColumnIfNotExists("copymanga_accounts", "platform", "TEXT NOT NULL DEFAULT 'copymanga'")
 
 	_, _ = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_library_manga_source ON library_manga (source_id)`)
 
@@ -785,7 +786,7 @@ func (s *SQLiteStore) DeleteMangaOnlineLink(mangaID string) error {
 }
 
 func (s *SQLiteStore) GetCopyMangaAccounts() ([]contracts.CopyMangaAccount, error) {
-	rows, err := s.db.Query(`SELECT username, password, token, limited_at, last_checked_at FROM copymanga_accounts ORDER BY limited_at ASC`)
+	rows, err := s.db.Query(`SELECT username, password, token, limited_at, last_checked_at, platform FROM copymanga_accounts ORDER BY limited_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("query copymanga accounts: %w", err)
 	}
@@ -794,8 +795,11 @@ func (s *SQLiteStore) GetCopyMangaAccounts() ([]contracts.CopyMangaAccount, erro
 	var list []contracts.CopyMangaAccount
 	for rows.Next() {
 		var a contracts.CopyMangaAccount
-		if err := rows.Scan(&a.Username, &a.Password, &a.Token, &a.LimitedAt, &a.LastCheckedAt); err != nil {
+		if err := rows.Scan(&a.Username, &a.Password, &a.Token, &a.LimitedAt, &a.LastCheckedAt, &a.Platform); err != nil {
 			return nil, fmt.Errorf("scan copymanga account: %w", err)
+		}
+		if a.Platform == "" {
+			a.Platform = "copymanga"
 		}
 		list = append(list, a)
 	}
@@ -803,16 +807,20 @@ func (s *SQLiteStore) GetCopyMangaAccounts() ([]contracts.CopyMangaAccount, erro
 }
 
 func (s *SQLiteStore) SaveCopyMangaAccount(a contracts.CopyMangaAccount) error {
+	if a.Platform == "" {
+		a.Platform = "copymanga"
+	}
 	const query = `
-		INSERT INTO copymanga_accounts (username, password, token, limited_at, last_checked_at)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO copymanga_accounts (username, password, token, limited_at, last_checked_at, platform)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(username) DO UPDATE SET
 			password = excluded.password,
 			token = excluded.token,
 			limited_at = excluded.limited_at,
-			last_checked_at = excluded.last_checked_at
+			last_checked_at = excluded.last_checked_at,
+			platform = excluded.platform
 	`
-	_, err := s.db.Exec(query, a.Username, a.Password, a.Token, a.LimitedAt, a.LastCheckedAt)
+	_, err := s.db.Exec(query, a.Username, a.Password, a.Token, a.LimitedAt, a.LastCheckedAt, a.Platform)
 	if err != nil {
 		return fmt.Errorf("save copymanga account: %w", err)
 	}
