@@ -701,6 +701,11 @@ export class MockAdapter implements AppAdapter {
     this.mockLinks.delete(mangaID);
   }
 
+  async previewMangaLink(input: MangaLinkPreviewInput): Promise<MangaLinkPreviewItem> {
+    const batch = await this.previewBatchMangaLinks([input]);
+    return batch[0];
+  }
+
   async previewBatchMangaLinks(inputs: MangaLinkPreviewInput[]): Promise<MangaLinkPreviewItem[]> {
     return inputs.map((inItem) => ({
       mangaId: inItem.mangaId,
@@ -711,6 +716,8 @@ export class MockAdapter implements AppAdapter {
       onlineLatestNumber: 5,
       diffType: "in_sync",
       diffCount: 0,
+      latestOnlyCount: 0,
+      gapCount: 0,
       pendingChapters: [],
       recommendedPolicy: "latest_only",
     }));

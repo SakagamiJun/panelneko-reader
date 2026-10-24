@@ -255,6 +255,28 @@ export class WailsAdapter implements AppAdapter {
     }
   }
 
+  async previewMangaLink(input: MangaLinkPreviewInput): Promise<MangaLinkPreviewItem> {
+    const fn = (App as any).PreviewMangaLink;
+    if (typeof fn === "function") {
+      return (await fn(input)) as MangaLinkPreviewItem;
+    }
+    const batch = await this.previewBatchMangaLinks([input]);
+    return batch[0] ?? {
+      mangaId: input.mangaId,
+      mangaTitle: "",
+      localLatestTitle: "",
+      localLatestNumber: -1,
+      onlineLatestTitle: "",
+      onlineLatestNumber: -1,
+      diffType: "in_sync",
+      diffCount: 0,
+      latestOnlyCount: 0,
+      gapCount: 0,
+      pendingChapters: [],
+      recommendedPolicy: "latest_only",
+    };
+  }
+
   async previewBatchMangaLinks(inputs: MangaLinkPreviewInput[]): Promise<MangaLinkPreviewItem[]> {
     const fn = (App as any).PreviewBatchMangaLinks;
     if (typeof fn === "function") {

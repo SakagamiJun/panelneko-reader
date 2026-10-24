@@ -217,6 +217,8 @@ export interface MangaLinkPreviewItem {
      */
     "diffType": string;
     "diffCount": number;
+    "latestOnlyCount": number;
+    "gapCount": number;
     "pendingChapters": string[] | null;
 
     /**

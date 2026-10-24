@@ -175,6 +175,8 @@ export interface MangaLinkPreviewItem {
   onlineLatestNumber: number;
   diffType: "in_sync" | "online_ahead" | "local_ahead";
   diffCount: number;
+  latestOnlyCount?: number;
+  gapCount?: number;
   pendingChapters: string[];
   recommendedPolicy: "latest_only" | "fill_gaps";
   errorMessage?: string;

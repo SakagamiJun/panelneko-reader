@@ -1258,6 +1258,16 @@ func (a *App) MatchLocalManga(mangaID string, provider string) ([]contracts.Onli
 	return items, nil
 }
 
+func (a *App) PreviewMangaLink(input contracts.MangaLinkPreviewInput) (contracts.MangaLinkPreviewItem, error) {
+	if err := a.ensureReady(); err != nil {
+		return contracts.MangaLinkPreviewItem{
+			MangaID:      input.MangaID,
+			ErrorMessage: err.Error(),
+		}, err
+	}
+	return a.previewMangaLinkInternal(input), nil
+}
+
 func (a *App) PreviewBatchMangaLinks(inputs []contracts.MangaLinkPreviewInput) ([]contracts.MangaLinkPreviewItem, error) {
 	if err := a.ensureReady(); err != nil {
 		return nil, err
@@ -1271,163 +1281,187 @@ func (a *App) PreviewBatchMangaLinks(inputs []contracts.MangaLinkPreviewInput) (
 		wg.Add(1)
 		go func(i int, input contracts.MangaLinkPreviewInput) {
 			defer wg.Done()
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-time.After(10 * time.Second):
-				results[i] = contracts.MangaLinkPreviewItem{
-					MangaID:      input.MangaID,
-					ErrorMessage: "preview timeout waiting for queue",
-				}
-				return
-			}
-
-			item := contracts.MangaLinkPreviewItem{
-				MangaID:            input.MangaID,
-				LocalLatestNumber:  -1,
-				OnlineLatestNumber: -1,
-				DiffType:           "in_sync",
-				RecommendedPolicy:  "latest_only",
-			}
-
-			localManga, found, err := a.store.GetLibraryManga(input.MangaID)
-			if err != nil || !found {
-				item.ErrorMessage = "local manga not found"
-				results[i] = item
-				return
-			}
-			item.MangaTitle = localManga.Title
-
-			onlineChapters, err := a.GetOnlineMangaChapters(input.OnlineSource, input.OnlineComicID)
-			if err != nil {
-				item.ErrorMessage = fmt.Sprintf("fetch online chapters: %v", err)
-				results[i] = item
-				return
-			}
-
-			manifest, err := library.GetReaderManifestWithSources(a.getActiveSources(), input.MangaID)
-			if err != nil {
-				item.ErrorMessage = fmt.Sprintf("scan local chapters: %v", err)
-				results[i] = item
-				return
-			}
-
-			allLocalNumbers := make(map[float64]bool)
-			var localMaxNum float64 = -1
-			var localMaxTitle string
-			type localInfo struct {
-				title     string
-				localPath string
-				number    float64
-			}
-			var localList []localInfo
-
-			for _, ch := range manifest.Chapters {
-				allLocalNumbers[ch.Number] = true
-				if ch.Number > localMaxNum {
-					localMaxNum = ch.Number
-					localMaxTitle = ch.Title
-				}
-				localList = append(localList, localInfo{
-					title:     ch.Title,
-					localPath: ch.LocalPath,
-					number:    ch.Number,
-				})
-			}
-			item.LocalLatestTitle = localMaxTitle
-			item.LocalLatestNumber = localMaxNum
-
-			var targetOnlineChapters []contracts.OnlineMangaChapter
-			for _, ch := range onlineChapters {
-				grp := strings.TrimSpace(ch.Group)
-				targetGroup := strings.TrimSpace(input.TargetGroup)
-				if targetGroup != "" && !strings.EqualFold(targetGroup, "all") {
-					matched := false
-					if strings.EqualFold(targetGroup, "default") || targetGroup == "话" {
-						matched = strings.EqualFold(grp, "default") || grp == "话" || grp == ""
-					} else if strings.EqualFold(targetGroup, "tankobon") || targetGroup == "单行本" || targetGroup == "卷" {
-						matched = strings.EqualFold(grp, "tankobon") || grp == "单行本" || grp == "卷"
-					} else {
-						matched = strings.EqualFold(grp, targetGroup)
-					}
-					if !matched {
-						continue
-					}
-				}
-				targetOnlineChapters = append(targetOnlineChapters, ch)
-			}
-
-			if len(targetOnlineChapters) == 0 {
-				targetOnlineChapters = onlineChapters
-			}
-
-			var onlineMaxNum float64 = -1
-			var onlineMaxTitle string
-			var missingChapters []string
-			var hasGapBelowLocalMax bool
-
-			for _, ch := range targetOnlineChapters {
-				effNum := ch.Number
-				if parsed := downloader.ExtractChapterNumber(ch.Title, -1); parsed >= 0 {
-					effNum = parsed
-				}
-				if effNum > onlineMaxNum {
-					onlineMaxNum = effNum
-					onlineMaxTitle = ch.Title
-				}
-
-				alreadyPresent := false
-				if allLocalNumbers[ch.Number] || allLocalNumbers[effNum] {
-					alreadyPresent = true
-				} else {
-					for _, loc := range localList {
-						if downloader.MatchChapterTitle(ch.Title, loc.title, loc.localPath) {
-							alreadyPresent = true
-							break
-						}
-					}
-				}
-
-				if !alreadyPresent {
-					missingChapters = append(missingChapters, ch.Title)
-					if localMaxNum >= 0 && effNum <= localMaxNum {
-						hasGapBelowLocalMax = true
-					}
-				}
-			}
-
-			item.OnlineLatestTitle = onlineMaxTitle
-			item.OnlineLatestNumber = onlineMaxNum
-			item.PendingChapters = missingChapters
-
-			if len(missingChapters) == 0 {
-				if localMaxNum > onlineMaxNum && onlineMaxNum >= 0 {
-					item.DiffType = "local_ahead"
-					item.DiffCount = int(localMaxNum - onlineMaxNum)
-					if item.DiffCount <= 0 {
-						item.DiffCount = 1
-					}
-				} else {
-					item.DiffType = "in_sync"
-					item.DiffCount = 0
-				}
-				item.RecommendedPolicy = "latest_only"
-			} else {
-				item.DiffType = "online_ahead"
-				item.DiffCount = len(missingChapters)
-				if hasGapBelowLocalMax {
-					item.RecommendedPolicy = "fill_gaps"
-				} else {
-					item.RecommendedPolicy = "latest_only"
-				}
-			}
-
-			results[i] = item
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			results[i] = a.previewMangaLinkInternal(input)
 		}(idx, in)
 	}
 
 	wg.Wait()
 	return results, nil
+}
+
+func (a *App) previewMangaLinkInternal(input contracts.MangaLinkPreviewInput) contracts.MangaLinkPreviewItem {
+	item := contracts.MangaLinkPreviewItem{
+		MangaID:            input.MangaID,
+		LocalLatestNumber:  -1,
+		OnlineLatestNumber: -1,
+		DiffType:           "in_sync",
+		RecommendedPolicy:  "latest_only",
+	}
+
+	localManga, found, err := a.store.GetLibraryManga(input.MangaID)
+	if err != nil || !found {
+		item.ErrorMessage = "local manga not found"
+		return item
+	}
+	item.MangaTitle = localManga.Title
+
+	onlineChapters, err := a.GetOnlineMangaChapters(input.OnlineSource, input.OnlineComicID)
+	if err != nil {
+		item.ErrorMessage = fmt.Sprintf("fetch online chapters: %v", err)
+		return item
+	}
+
+	manifest, err := library.GetReaderManifestWithSources(a.getActiveSources(), input.MangaID)
+	if err != nil {
+		item.ErrorMessage = fmt.Sprintf("scan local chapters: %v", err)
+		return item
+	}
+
+	allLocalNumbers := make(map[float64]bool)
+	var localMaxNum float64 = -1
+	var localMaxTitle string
+	type localInfo struct {
+		title     string
+		localPath string
+		number    float64
+	}
+	var localList []localInfo
+
+	for _, ch := range manifest.Chapters {
+		allLocalNumbers[ch.Number] = true
+		if ch.Number > localMaxNum {
+			localMaxNum = ch.Number
+			localMaxTitle = ch.Title
+		}
+		localList = append(localList, localInfo{
+			title:     ch.Title,
+			localPath: ch.LocalPath,
+			number:    ch.Number,
+		})
+	}
+	item.LocalLatestTitle = localMaxTitle
+	item.LocalLatestNumber = localMaxNum
+
+	var targetOnlineChapters []contracts.OnlineMangaChapter
+	for _, ch := range onlineChapters {
+		grp := strings.TrimSpace(ch.Group)
+		targetGroup := strings.TrimSpace(input.TargetGroup)
+		if targetGroup != "" && !strings.EqualFold(targetGroup, "all") {
+			matched := false
+			if strings.EqualFold(targetGroup, "default") || targetGroup == "话" {
+				matched = strings.EqualFold(grp, "default") || grp == "话" || grp == ""
+			} else if strings.EqualFold(targetGroup, "tankobon") || targetGroup == "单行本" || targetGroup == "卷" {
+				matched = strings.EqualFold(grp, "tankobon") || grp == "单行本" || grp == "卷"
+			} else {
+				matched = strings.EqualFold(grp, targetGroup)
+			}
+			if !matched {
+				continue
+			}
+		}
+		targetOnlineChapters = append(targetOnlineChapters, ch)
+	}
+
+	if len(targetOnlineChapters) == 0 {
+		targetOnlineChapters = onlineChapters
+	}
+
+	var onlineMaxNum float64 = -1
+	var onlineMaxTitle string
+	var missingChapters []string
+	var missingNewChapters []string
+	var missingGapChapters []string
+
+	for _, ch := range targetOnlineChapters {
+		effNum := ch.Number
+		if effNum <= 0 {
+			if parsed := downloader.ExtractChapterNumber(ch.Title, -1); parsed >= 0 {
+				effNum = parsed
+			}
+		}
+		if effNum > onlineMaxNum {
+			onlineMaxNum = effNum
+			onlineMaxTitle = ch.Title
+		}
+
+		alreadyPresent := false
+		if allLocalNumbers[ch.Number] || (effNum > 0 && allLocalNumbers[effNum]) {
+			alreadyPresent = true
+		} else {
+			for _, loc := range localList {
+				if downloader.MatchChapterTitle(ch.Title, loc.title, loc.localPath) {
+					alreadyPresent = true
+					break
+				}
+			}
+		}
+
+		if !alreadyPresent {
+			missingChapters = append(missingChapters, ch.Title)
+			if localMaxNum >= 0 && effNum <= localMaxNum {
+				missingGapChapters = append(missingGapChapters, ch.Title)
+			} else {
+				missingNewChapters = append(missingNewChapters, ch.Title)
+			}
+		}
+	}
+
+	item.OnlineLatestTitle = onlineMaxTitle
+	item.OnlineLatestNumber = onlineMaxNum
+	item.LatestOnlyCount = len(missingNewChapters)
+	item.GapCount = len(missingGapChapters)
+
+	policy := strings.TrimSpace(input.FollowPolicy)
+	if policy == "" {
+		st := a.settings.Get()
+		if st.Downloader.AutoFollowPolicy != "" {
+			policy = st.Downloader.AutoFollowPolicy
+		} else {
+			policy = "latest_only"
+		}
+	}
+	item.RecommendedPolicy = policy
+
+	if policy == "fill_gaps" {
+		item.PendingChapters = missingChapters
+		if len(missingChapters) > 0 {
+			item.DiffType = "online_ahead"
+			item.DiffCount = len(missingChapters)
+		} else {
+			if localMaxNum > onlineMaxNum && onlineMaxNum >= 0 {
+				item.DiffType = "local_ahead"
+				item.DiffCount = int(localMaxNum - onlineMaxNum)
+				if item.DiffCount <= 0 {
+					item.DiffCount = 1
+				}
+			} else {
+				item.DiffType = "in_sync"
+				item.DiffCount = 0
+			}
+		}
+	} else {
+		// "latest_only" default: only count new chapters ahead of local max
+		item.PendingChapters = missingNewChapters
+		if len(missingNewChapters) > 0 {
+			item.DiffType = "online_ahead"
+			item.DiffCount = len(missingNewChapters)
+		} else {
+			if localMaxNum > onlineMaxNum && onlineMaxNum >= 0 {
+				item.DiffType = "local_ahead"
+				item.DiffCount = int(localMaxNum - onlineMaxNum)
+				if item.DiffCount <= 0 {
+					item.DiffCount = 1
+				}
+			} else {
+				item.DiffType = "in_sync"
+				item.DiffCount = 0
+			}
+		}
+	}
+
+	return item
 }
 
 func (a *App) LinkMangaOnline(input contracts.MangaOnlineLink) error {
@@ -1589,8 +1623,10 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 		}
 
 		effectiveChapterNumber := ch.Number
-		if semanticNum := downloader.ExtractChapterNumber(ch.Title, -1); semanticNum >= 0 {
-			effectiveChapterNumber = semanticNum
+		if effectiveChapterNumber <= 0 {
+			if semanticNum := downloader.ExtractChapterNumber(ch.Title, -1); semanticNum >= 0 {
+				effectiveChapterNumber = semanticNum
+			}
 		}
 
 		alreadyDownloaded := false
@@ -1888,7 +1924,22 @@ func (a *App) GetCopyMangaAccounts() ([]contracts.CopyMangaAccount, error) {
 	if err := a.ensureReady(); err != nil {
 		return nil, err
 	}
-	return a.store.GetCopyMangaAccounts()
+	accounts, err := a.store.GetCopyMangaAccounts()
+	if err != nil {
+		return nil, err
+	}
+	machineID := crypto.GetMachineID()
+	for i := range accounts {
+		if accounts[i].Platform == "" {
+			accounts[i].Platform = "copymanga"
+		}
+		if accounts[i].Password != "" {
+			if plain, decErr := crypto.DecryptPassword(accounts[i].Password, machineID, accounts[i].Username); decErr == nil && plain != "" {
+				accounts[i].Password = plain
+			}
+		}
+	}
+	return accounts, nil
 }
 
 func (a *App) AddCopyMangaAccount(username string, password string, token string) error {

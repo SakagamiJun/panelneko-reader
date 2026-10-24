@@ -80,7 +80,8 @@ export function MangaBatchLinkDialog({
 
   // Step 2 review state
   const [previewItems, setPreviewItems] = useState<MangaLinkPreviewItem[]>([]);
-  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [checkingStatusMap, setCheckingStatusMap] = useState<Map<string, "pending" | "checking" | "done" | "error">>(new Map());
+  const [isCheckingQueue, setIsCheckingQueue] = useState(false);
   const [reviewSelectedIds, setReviewSelectedIds] = useState<Set<string>>(new Set());
   const [baselineChoices, setBaselineChoices] = useState<Map<string, "local" | "online" | "fill_gaps">>(new Map());
 
@@ -169,7 +170,8 @@ export function MangaBatchLinkDialog({
       setOpenGroupMenuMangaId(null);
       setCurrentStep("select");
       setPreviewItems([]);
-      setLoadingPreview(false);
+      setCheckingStatusMap(new Map());
+      setIsCheckingQueue(false);
       setReviewSelectedIds(new Set());
       setBaselineChoices(new Map());
     }
@@ -311,7 +313,23 @@ export function MangaBatchLinkDialog({
     }
   };
 
-  // Proceed from selection to review & baseline alignment step
+  // Helper to construct a single preview input
+  const getPreviewInput = useCallback(
+    (mangaId: string): MangaLinkPreviewInput | null => {
+      const match = selectedMatch.get(mangaId);
+      if (!match) return null;
+      return {
+        mangaId,
+        onlineSource: activeSource,
+        onlineComicId: match.id,
+        targetGroup: mangaGroups.get(mangaId) || "",
+        followPolicy: batchPolicy,
+      };
+    },
+    [selectedMatch, activeSource, mangaGroups, batchPolicy]
+  );
+
+  // Proceed from selection to review & baseline alignment step with progressive checking
   const handleProceedToReview = async (targetMangaIds?: string[]) => {
     const idsToPreview = targetMangaIds ?? Array.from(selectedIds);
     const itemsToPreview = idsToPreview
@@ -325,37 +343,115 @@ export function MangaBatchLinkDialog({
     if (itemsToPreview.length === 0) return;
 
     setCurrentStep("review");
-    setLoadingPreview(true);
 
-    const inputs: MangaLinkPreviewInput[] = itemsToPreview.map((item) => ({
+    // Initialize items with placeholder info
+    const initialItems: MangaLinkPreviewItem[] = itemsToPreview.map((item) => ({
       mangaId: item.manga.id,
-      onlineSource: activeSource,
-      onlineComicId: item.match.id,
-      targetGroup: mangaGroups.get(item.manga.id) || "",
-      followPolicy: batchPolicy,
+      mangaTitle: item.manga.title,
+      localLatestTitle: "",
+      localLatestNumber: -1,
+      onlineLatestTitle: "",
+      onlineLatestNumber: -1,
+      diffType: "in_sync",
+      diffCount: 0,
+      pendingChapters: [],
+      recommendedPolicy: "latest_only",
     }));
 
-    try {
-      const results = await appAdapter.previewBatchMangaLinks(inputs);
-      setPreviewItems(results);
-      const validIds = new Set<string>();
-      const initialBaselines = new Map<string, "local" | "online" | "fill_gaps">();
-      for (const r of results) {
-        if (!r.errorMessage) {
-          validIds.add(r.mangaId);
+    setPreviewItems(initialItems);
+    const initialStatus = new Map<string, "pending" | "checking" | "done" | "error">();
+    for (const item of itemsToPreview) {
+      initialStatus.set(item.manga.id, "pending");
+    }
+    setCheckingStatusMap(initialStatus);
+    setReviewSelectedIds(new Set());
+
+    // Run progressive queue with concurrency of 2 and delay
+    setIsCheckingQueue(true);
+    const poolLimit = 2;
+    let currentIndex = 0;
+
+    const worker = async () => {
+      while (currentIndex < itemsToPreview.length) {
+        const idx = currentIndex++;
+        const item = itemsToPreview[idx];
+        const input = getPreviewInput(item.manga.id);
+        if (!input) continue;
+
+        setCheckingStatusMap((prev) => new Map(prev).set(item.manga.id, "checking"));
+
+        try {
+          const res = await appAdapter.previewMangaLink(input);
+          setPreviewItems((prev) =>
+            prev.map((p) => (p.mangaId === item.manga.id ? res : p))
+          );
+
+          if (res.errorMessage) {
+            setCheckingStatusMap((prev) => new Map(prev).set(item.manga.id, "error"));
+          } else {
+            setCheckingStatusMap((prev) => new Map(prev).set(item.manga.id, "done"));
+            setReviewSelectedIds((prev) => new Set(prev).add(item.manga.id));
+            setBaselineChoices((prev) => {
+              const next = new Map(prev);
+              if (!next.has(item.manga.id)) {
+                next.set(item.manga.id, res.recommendedPolicy === "fill_gaps" ? "fill_gaps" : "local");
+              }
+              return next;
+            });
+          }
+        } catch (err: any) {
+          setCheckingStatusMap((prev) => new Map(prev).set(item.manga.id, "error"));
+          setPreviewItems((prev) =>
+            prev.map((p) =>
+              p.mangaId === item.manga.id
+                ? { ...p, errorMessage: err?.message || "Check failed" }
+                : p
+            )
+          );
         }
-        if (r.recommendedPolicy === "fill_gaps") {
-          initialBaselines.set(r.mangaId, "fill_gaps");
-        } else {
-          initialBaselines.set(r.mangaId, "local");
-        }
+
+        await new Promise((r) => setTimeout(r, 120));
       }
-      setReviewSelectedIds(validIds);
-      setBaselineChoices(initialBaselines);
-    } catch (err) {
-      console.error("Preview batch manga links error:", err);
-    } finally {
-      setLoadingPreview(false);
+    };
+
+    void Promise.all(
+      Array.from({ length: Math.min(poolLimit, itemsToPreview.length) }, () => worker())
+    ).finally(() => {
+      setIsCheckingQueue(false);
+    });
+  };
+
+  // Retry checking a single manga in review step
+  const handleRetrySingle = async (mangaId: string) => {
+    const input = getPreviewInput(mangaId);
+    if (!input) return;
+
+    setCheckingStatusMap((prev) => new Map(prev).set(mangaId, "checking"));
+    try {
+      const res = await appAdapter.previewMangaLink(input);
+      setPreviewItems((prev) => prev.map((p) => (p.mangaId === mangaId ? res : p)));
+      if (res.errorMessage) {
+        setCheckingStatusMap((prev) => new Map(prev).set(mangaId, "error"));
+      } else {
+        setCheckingStatusMap((prev) => new Map(prev).set(mangaId, "done"));
+        setReviewSelectedIds((prev) => new Set(prev).add(mangaId));
+        setBaselineChoices((prev) => {
+          const next = new Map(prev);
+          if (!next.has(mangaId)) {
+            next.set(mangaId, res.recommendedPolicy === "fill_gaps" ? "fill_gaps" : "local");
+          }
+          return next;
+        });
+      }
+    } catch (err: any) {
+      setCheckingStatusMap((prev) => new Map(prev).set(mangaId, "error"));
+      setPreviewItems((prev) =>
+        prev.map((p) =>
+          p.mangaId === mangaId
+            ? { ...p, errorMessage: err?.message || "Check failed" }
+            : p
+        )
+      );
     }
   };
 
@@ -430,13 +526,31 @@ export function MangaBatchLinkDialog({
     let inSync = 0;
     let onlineAhead = 0;
     let localAhead = 0;
+    let doneCount = 0;
     for (const item of previewItems) {
-      if (item.diffType === "in_sync") inSync++;
-      else if (item.diffType === "online_ahead") onlineAhead++;
-      else if (item.diffType === "local_ahead") localAhead++;
+      const status = checkingStatusMap.get(item.mangaId);
+      if (status === "done") {
+        doneCount++;
+        const choice = baselineChoices.get(item.mangaId) || "local";
+        if (choice === "online") {
+          inSync++;
+        } else if (choice === "fill_gaps") {
+          const total = (item.latestOnlyCount ?? 0) + (item.gapCount ?? item.diffCount);
+          if (total > 0) onlineAhead++;
+          else inSync++;
+        } else {
+          // "local"
+          const newCount = item.latestOnlyCount ?? (item.gapCount ? 0 : item.diffCount);
+          if (newCount > 0) onlineAhead++;
+          else if (item.localLatestNumber > item.onlineLatestNumber && item.onlineLatestNumber >= 0) localAhead++;
+          else inSync++;
+        }
+      } else if (status === "error") {
+        doneCount++;
+      }
     }
-    return { inSync, onlineAhead, localAhead, total: previewItems.length };
-  }, [previewItems]);
+    return { inSync, onlineAhead, localAhead, doneCount, total: previewItems.length };
+  }, [previewItems, checkingStatusMap, baselineChoices]);
 
   const uniformBaseline = useMemo(() => {
     if (previewItems.length === 0) return "";
@@ -1038,7 +1152,7 @@ export function MangaBatchLinkDialog({
                             variant="ghost"
                             onClick={() => void handleUnlink(manga.id)}
                             disabled={isSubmitting}
-                            className="h-7 text-xs text-muted-foreground hover:text-destructive cursor-pointer gap-1"
+                            className="h-7 text-xs text-muted-foreground hover:text-danger cursor-pointer gap-1"
                           >
                             <Unlink className="h-3 w-3" />
                             <span>{t("batchLink.unlink")}</span>
@@ -1115,7 +1229,7 @@ export function MangaBatchLinkDialog({
                     variant="outline"
                     onClick={() => void handleBatchUnlinkSelected()}
                     disabled={batchMatching}
-                    className="h-8 px-3 text-xs gap-1.5 cursor-pointer text-destructive border-destructive/40 hover:bg-destructive/10 font-medium"
+                    className="h-8 px-3 text-xs gap-1.5 cursor-pointer text-danger border-danger/40 hover:bg-danger/10 font-medium"
                   >
                     {batchMatching ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1148,14 +1262,22 @@ export function MangaBatchLinkDialog({
                   {t("batchLink.stepReview")} ({previewItems.length})
                 </span>
                 <div className="h-3.5 w-px bg-border/60 mx-1" />
-                <Badge tone="success" className="font-mono text-[11px] gap-1 py-0.5">
-                  <Check className="h-3 w-3" />
-                  <span>{t("batchLink.summaryInSync")}: {previewSummary.inSync}</span>
+                <Badge tone="default" className="font-mono text-[11px] gap-1 py-0.5">
+                  <span>{t("batchLink.previewProgress", { done: previewSummary.doneCount, total: previewItems.length })}</span>
+                  {isCheckingQueue && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
                 </Badge>
-                <Badge tone="primary" className="font-mono text-[11px] gap-1 py-0.5">
-                  <ArrowDownCircle className="h-3 w-3" />
-                  <span>{t("batchLink.summaryNeedUpdate")}: {previewSummary.onlineAhead}</span>
-                </Badge>
+                {previewSummary.inSync > 0 && (
+                  <Badge tone="success" className="font-mono text-[11px] gap-1 py-0.5">
+                    <Check className="h-3 w-3" />
+                    <span>{t("batchLink.summaryInSync")}: {previewSummary.inSync}</span>
+                  </Badge>
+                )}
+                {previewSummary.onlineAhead > 0 && (
+                  <Badge tone="primary" className="font-mono text-[11px] gap-1 py-0.5">
+                    <ArrowDownCircle className="h-3 w-3" />
+                    <span>{t("batchLink.summaryNeedUpdate")}: {previewSummary.onlineAhead}</span>
+                  </Badge>
+                )}
                 {previewSummary.localAhead > 0 && (
                   <Badge tone="warning" className="font-mono text-[11px] gap-1 py-0.5">
                     <ArrowUpCircle className="h-3 w-3" />
@@ -1184,12 +1306,7 @@ export function MangaBatchLinkDialog({
 
             {/* Step 2 Review Table */}
             <div className="flex-1 overflow-y-auto p-4">
-              {loadingPreview ? (
-                <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  <span className="text-xs font-medium">{t("batchLink.previewCalculating")}</span>
-                </div>
-              ) : previewItems.length === 0 ? (
+              {previewItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/60 text-xs">
                   <span>{t("batchLink.empty")}</span>
                 </div>
@@ -1223,14 +1340,38 @@ export function MangaBatchLinkDialog({
                     const manga = nonCollectionMangas.find((m) => m.id === item.mangaId);
                     const isSelected = reviewSelectedIds.has(item.mangaId);
                     const choice = baselineChoices.get(item.mangaId) || "local";
+                    const status = checkingStatusMap.get(item.mangaId) ?? "pending";
+
+                    const rowDiff = (() => {
+                      if (choice === "online") {
+                        return { type: "in_sync" as const, count: 0, pending: [] };
+                      }
+                      if (choice === "fill_gaps") {
+                        const totalMissing = (item.latestOnlyCount ?? 0) + (item.gapCount ?? item.diffCount);
+                        if (totalMissing > 0) {
+                          return { type: "online_ahead" as const, count: totalMissing, pending: item.pendingChapters };
+                        }
+                        return { type: item.diffType, count: item.diffCount, pending: item.pendingChapters };
+                      }
+                      // choice === "local" (latest_only)
+                      const newCount = item.latestOnlyCount ?? (item.gapCount ? 0 : item.diffCount);
+                      if (newCount > 0) {
+                        return { type: "online_ahead" as const, count: newCount, pending: item.pendingChapters };
+                      }
+                      if (item.localLatestNumber > item.onlineLatestNumber && item.onlineLatestNumber >= 0) {
+                        const ahead = Math.max(1, Math.round(item.localLatestNumber - item.onlineLatestNumber));
+                        return { type: "local_ahead" as const, count: ahead, pending: [] };
+                      }
+                      return { type: "in_sync" as const, count: 0, pending: [] };
+                    })();
 
                     return (
                       <div
                         key={item.mangaId}
                         className={cn(
                           "grid grid-cols-12 gap-3 px-3 py-2.5 items-center text-xs transition-colors",
-                          item.errorMessage
-                            ? "bg-destructive/5 opacity-80"
+                          item.errorMessage || status === "error"
+                            ? "bg-danger/5 opacity-80"
                             : isSelected
                             ? "bg-card hover:bg-muted/30"
                             : "opacity-60 bg-muted/10 hover:bg-muted/20"
@@ -1240,7 +1381,7 @@ export function MangaBatchLinkDialog({
                         <div className="col-span-4 flex items-center gap-2.5 min-w-0">
                           <button
                             type="button"
-                            disabled={Boolean(item.errorMessage)}
+                            disabled={Boolean(item.errorMessage) || status !== "done"}
                             onClick={() => handleToggleReviewSelect(item.mangaId)}
                             className="cursor-pointer text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                           >
@@ -1281,7 +1422,13 @@ export function MangaBatchLinkDialog({
 
                         {/* Col 2: Local Latest */}
                         <div className="col-span-2 flex flex-col min-w-0">
-                          {item.localLatestTitle ? (
+                          {status === "checking" ? (
+                            <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                            </div>
+                          ) : status === "pending" ? (
+                            <span className="text-muted-foreground/40 text-xs italic">-</span>
+                          ) : item.localLatestTitle ? (
                             <>
                               <span
                                 className="font-medium text-foreground truncate text-xs"
@@ -1300,7 +1447,13 @@ export function MangaBatchLinkDialog({
 
                         {/* Col 3: Online Latest */}
                         <div className="col-span-2 flex flex-col min-w-0">
-                          {item.onlineLatestTitle ? (
+                          {status === "checking" ? (
+                            <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                            </div>
+                          ) : status === "pending" ? (
+                            <span className="text-muted-foreground/40 text-xs italic">-</span>
+                          ) : item.onlineLatestTitle ? (
                             <>
                               <span
                                 className="font-medium text-foreground truncate text-xs"
@@ -1319,41 +1472,69 @@ export function MangaBatchLinkDialog({
 
                         {/* Col 4: Status / Chapter Diff */}
                         <div className="col-span-2 flex items-center min-w-0">
-                          {item.errorMessage ? (
-                            <Badge
-                              tone="danger"
-                              className="text-[10px] truncate max-w-[150px]"
-                              title={item.errorMessage}
-                            >
-                              <AlertCircle className="h-3 w-3 mr-1 shrink-0" />
-                              <span className="truncate">{item.errorMessage}</span>
+                          {status === "checking" ? (
+                            <Badge tone="running" className="gap-1 font-mono text-[10px]">
+                              <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                              <span>{t("batchLink.checkingStatus")}</span>
                             </Badge>
-                          ) : item.diffType === "in_sync" ? (
-                            <Badge tone="success" className="gap-1 font-mono text-[10px]">
+                          ) : status === "pending" ? (
+                            <span className="text-muted-foreground/40 text-[10px] font-mono">...</span>
+                          ) : item.errorMessage || status === "error" ? (
+                            <div className="flex items-center gap-1 min-w-0">
+                              <Badge
+                                tone="danger"
+                                className="text-[10px] truncate max-w-[110px]"
+                                title={item.errorMessage}
+                              >
+                                <AlertCircle className="h-3 w-3 mr-1 shrink-0" />
+                                <span className="truncate">{item.errorMessage}</span>
+                              </Badge>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => void handleRetrySingle(item.mangaId)}
+                                className="h-5 px-1 text-[10px] text-primary hover:bg-primary/10 cursor-pointer gap-0.5 shrink-0"
+                                title={t("batchLink.retryCheck")}
+                              >
+                                <RefreshCw className="h-2.5 w-2.5" />
+                                <span>{t("batchLink.retryCheck")}</span>
+                              </Button>
+                            </div>
+                          ) : rowDiff.type === "in_sync" ? (
+                            <Badge
+                              tone="success"
+                              className="gap-1 font-mono text-[10px]"
+                              title={
+                                choice === "local" && item.gapCount && item.gapCount > 0
+                                  ? t("batchLink.gapCountTooltip", { count: item.gapCount })
+                                  : undefined
+                              }
+                            >
                               <Check className="h-3 w-3" />
                               <span>{t("batchLink.inSyncBadge")}</span>
                             </Badge>
-                          ) : item.diffType === "online_ahead" ? (
+                          ) : rowDiff.type === "online_ahead" ? (
                             <Badge
                               tone="primary"
                               className="gap-1 font-mono text-[10px] cursor-help"
                               title={
-                                item.pendingChapters && item.pendingChapters.length > 0
+                                rowDiff.pending && rowDiff.pending.length > 0
                                   ? t("batchLink.pendingChaptersTooltip", {
                                       chapters:
-                                        item.pendingChapters.slice(0, 5).join(", ") +
-                                        (item.pendingChapters.length > 5 ? "..." : ""),
+                                        rowDiff.pending.slice(0, 5).join(", ") +
+                                        (rowDiff.pending.length > 5 ? "..." : ""),
                                     })
                                   : undefined
                               }
                             >
                               <ArrowDownCircle className="h-3 w-3 shrink-0" />
-                              <span>{t("batchLink.onlineAheadBadge", { count: item.diffCount })}</span>
+                              <span>{t("batchLink.onlineAheadBadge", { count: rowDiff.count })}</span>
                             </Badge>
                           ) : (
                             <Badge tone="warning" className="gap-1 font-mono text-[10px]">
                               <ArrowUpCircle className="h-3 w-3 shrink-0" />
-                              <span>{t("batchLink.localAheadBadge", { count: item.diffCount })}</span>
+                              <span>{t("batchLink.localAheadBadge", { count: rowDiff.count })}</span>
                             </Badge>
                           )}
                         </div>
@@ -1362,7 +1543,7 @@ export function MangaBatchLinkDialog({
                         <div className="col-span-2 flex justify-end">
                           <SegmentedControl
                             size="sm"
-                            disabled={Boolean(item.errorMessage)}
+                            disabled={Boolean(item.errorMessage) || status !== "done"}
                             value={choice}
                             onChange={(val) => {
                               setBaselineChoices((prev) =>

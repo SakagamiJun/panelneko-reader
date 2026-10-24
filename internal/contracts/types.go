@@ -307,6 +307,8 @@ type MangaLinkPreviewItem struct {
 	OnlineLatestNumber float64  `json:"onlineLatestNumber"`
 	DiffType           string   `json:"diffType"` // "in_sync" | "online_ahead" | "local_ahead"
 	DiffCount          int      `json:"diffCount"`
+	LatestOnlyCount    int      `json:"latestOnlyCount"`
+	GapCount           int      `json:"gapCount"`
 	PendingChapters    []string `json:"pendingChapters"`
 	RecommendedPolicy  string   `json:"recommendedPolicy"` // "latest_only" | "fill_gaps"
 	ErrorMessage       string   `json:"errorMessage,omitempty"`
