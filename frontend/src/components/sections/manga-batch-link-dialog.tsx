@@ -1344,14 +1344,14 @@ export function MangaBatchLinkDialog({
 
                     const rowDiff = (() => {
                       if (choice === "online") {
-                        return { type: "in_sync" as const, count: 0, pending: [] };
+                        return { type: "online_aligned" as const, count: 0, pending: [] };
                       }
                       if (choice === "fill_gaps") {
                         const totalMissing = (item.latestOnlyCount ?? 0) + (item.gapCount ?? item.diffCount);
                         if (totalMissing > 0) {
-                          return { type: "online_ahead" as const, count: totalMissing, pending: item.pendingChapters };
+                          return { type: "fill_gaps" as const, count: totalMissing, pending: item.pendingChapters };
                         }
-                        return { type: item.diffType, count: item.diffCount, pending: item.pendingChapters };
+                        return { type: "all_in_sync" as const, count: 0, pending: [] };
                       }
                       // choice === "local" (latest_only)
                       const newCount = item.latestOnlyCount ?? (item.gapCount ? 0 : item.diffCount);
@@ -1501,18 +1501,31 @@ export function MangaBatchLinkDialog({
                                 <span>{t("batchLink.retryCheck")}</span>
                               </Button>
                             </div>
-                          ) : rowDiff.type === "in_sync" ? (
+                          ) : rowDiff.type === "online_aligned" ? (
                             <Badge
-                              tone="success"
-                              className="gap-1 font-mono text-[10px]"
-                              title={
-                                choice === "local" && item.gapCount && item.gapCount > 0
-                                  ? t("batchLink.gapCountTooltip", { count: item.gapCount })
-                                  : undefined
-                              }
+                              tone="default"
+                              className="gap-1 font-mono text-[10px] cursor-help"
+                              title={t("batchLink.onlineAlignedTooltip")}
                             >
                               <Check className="h-3 w-3" />
-                              <span>{t("batchLink.inSyncBadge")}</span>
+                              <span>{t("batchLink.onlineAlignedBadge")}</span>
+                            </Badge>
+                          ) : rowDiff.type === "fill_gaps" ? (
+                            <Badge
+                              tone="primary"
+                              className="gap-1 font-mono text-[10px] cursor-help"
+                              title={
+                                rowDiff.pending && rowDiff.pending.length > 0
+                                  ? t("batchLink.pendingChaptersTooltip", {
+                                      chapters:
+                                        rowDiff.pending.slice(0, 5).join(", ") +
+                                        (rowDiff.pending.length > 5 ? "..." : ""),
+                                    })
+                                  : t("batchLink.fillGapsTooltip")
+                              }
+                            >
+                              <ArrowDownCircle className="h-3 w-3 shrink-0" />
+                              <span>{t("batchLink.fillGapsBadge", { count: rowDiff.count })}</span>
                             </Badge>
                           ) : rowDiff.type === "online_ahead" ? (
                             <Badge
@@ -1531,10 +1544,27 @@ export function MangaBatchLinkDialog({
                               <ArrowDownCircle className="h-3 w-3 shrink-0" />
                               <span>{t("batchLink.onlineAheadBadge", { count: rowDiff.count })}</span>
                             </Badge>
-                          ) : (
+                          ) : rowDiff.type === "local_ahead" ? (
                             <Badge tone="warning" className="gap-1 font-mono text-[10px]">
                               <ArrowUpCircle className="h-3 w-3 shrink-0" />
                               <span>{t("batchLink.localAheadBadge", { count: rowDiff.count })}</span>
+                            </Badge>
+                          ) : (
+                            <Badge
+                              tone="success"
+                              className="gap-1 font-mono text-[10px]"
+                              title={
+                                choice === "local" && item.gapCount && item.gapCount > 0
+                                  ? t("batchLink.gapCountTooltip", { count: item.gapCount })
+                                  : undefined
+                              }
+                            >
+                              <Check className="h-3 w-3" />
+                              <span>
+                                {rowDiff.type === "all_in_sync"
+                                  ? t("batchLink.allInSyncBadge")
+                                  : t("batchLink.inSyncBadge")}
+                              </span>
                             </Badge>
                           )}
                         </div>
