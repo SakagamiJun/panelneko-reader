@@ -100,6 +100,46 @@ func NormalizeChapterTitleForMatch(raw string) string {
 	return strings.TrimSpace(s)
 }
 
+func isASCIIDigitByte(b byte) bool {
+	return b >= '0' && b <= '9'
+}
+
+// containsWordBounded checks if needle is contained in haystack without bleeding across digit boundaries.
+// For instance, "60话" inside "160话" will fail because the '6' in needle is directly preceded by '1'.
+func containsWordBounded(haystack, needle string) bool {
+	if needle == "" || len(needle) > len(haystack) {
+		return false
+	}
+	start := 0
+	for {
+		idx := strings.Index(haystack[start:], needle)
+		if idx < 0 {
+			return false
+		}
+		actualIdx := start + idx
+		matchEnd := actualIdx + len(needle)
+
+		leftOK := true
+		if isASCIIDigitByte(needle[0]) && actualIdx > 0 && isASCIIDigitByte(haystack[actualIdx-1]) {
+			leftOK = false
+		}
+
+		rightOK := true
+		if isASCIIDigitByte(needle[len(needle)-1]) && matchEnd < len(haystack) && isASCIIDigitByte(haystack[matchEnd]) {
+			rightOK = false
+		}
+
+		if leftOK && rightOK {
+			return true
+		}
+
+		start = actualIdx + 1
+		if start >= len(haystack) {
+			return false
+		}
+	}
+}
+
 // MatchChapterTitle returns true if the online chapter title corresponds to the local chapter title or path.
 func MatchChapterTitle(onlineTitle, localTitle, localPath string) bool {
 	onNorm := NormalizeChapterTitleForMatch(onlineTitle)
@@ -124,19 +164,24 @@ func MatchChapterTitle(onlineTitle, localTitle, localPath string) bool {
 			return true
 		}
 
-		// 2. Substring containment check
-		// (e.g. "31.1第31.1话机翻" contains "31.1话机翻")
-		if len(onNorm) >= 3 && strings.Contains(locNorm, onNorm) {
-			return true
-		}
-		if len(locNorm) >= 3 && strings.Contains(onNorm, locNorm) {
-			return true
-		}
-
-		// 3. Extracted semantic chapter number check
+		// 2. Extracted semantic chapter number check
 		onNum := ExtractChapterNumber(onlineTitle, -1)
 		locNum := ExtractChapterNumber(cand, -2)
-		if onNum >= 0 && onNum == locNum {
+		if onNum >= 0 && locNum >= 0 {
+			if onNum == locNum {
+				return true
+			}
+			// If both titles explicitly contain recognized chapter numbers and they differ,
+			// they are definitively different chapters; never allow substring check to confuse them.
+			continue
+		}
+
+		// 3. Substring containment check with digit boundary safety
+		// Only applied when at least one side does not have a conflicting explicit number
+		if len(onNorm) >= 3 && containsWordBounded(locNorm, onNorm) {
+			return true
+		}
+		if len(locNorm) >= 3 && containsWordBounded(onNorm, locNorm) {
 			return true
 		}
 	}

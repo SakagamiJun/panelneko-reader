@@ -127,6 +127,26 @@ func TestMatchChapterTitle_Adversarial(t *testing.T) {
 	if MatchChapterTitle("15", "", "001 - 150.cbz") {
 		t.Errorf("false positive: '15' matched '150'")
 	}
+	// Substring digit boundary: Chapter 60 must NOT match Chapter 160
+	if MatchChapterTitle("第60话", "160 第160话", "") {
+		t.Errorf("false positive: '第60话' matched '160 第160话'")
+	}
+	if MatchChapterTitle("第1话", "161 第161话", "") {
+		t.Errorf("false positive: '第1话' matched '161 第161话'")
+	}
+	if MatchChapterTitle("第10话", "212 - 第210话", "") {
+		t.Errorf("false positive: '第10话' matched '212 - 第210话'")
+	}
+	if MatchChapterTitle("第11话", "213 - 第211话", "") {
+		t.Errorf("false positive: '第11话' matched '213 - 第211话'")
+	}
+	// Genuine matches must still succeed
+	if !MatchChapterTitle("第160话", "160 第160话", "") {
+		t.Errorf("expected genuine match: '第160话' with '160 第160话'")
+	}
+	if !MatchChapterTitle("第196话", "198 - 第196话", "") {
+		t.Errorf("expected genuine match: '第196话' with '198 - 第196话'")
+	}
 
 	// 5. Adversarial: empty inputs
 	if MatchChapterTitle("", "", "") {
