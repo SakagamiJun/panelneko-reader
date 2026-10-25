@@ -386,6 +386,8 @@ type ReaderChapter struct {
 	Pages       []ReaderPage `json:"pages"`
 	LocalPath   string       `json:"localPath"`
 	CompletedAt string       `json:"completedAt"`
+	Group       string       `json:"group,omitempty"`
+	Notes       string       `json:"notes,omitempty"`
 }
 
 type ReaderPage struct {
@@ -424,4 +426,10 @@ type FollowedUpdateCheckProgress struct {
 	Current  int  `json:"current"`
 	Total    int  `json:"total"`
 	Queued   int  `json:"queued"`
+}
+
+type ComicInfoNotes struct {
+	Source    string `json:"source,omitempty"`
+	MangaID   string `json:"mangaId,omitempty"`
+	ChapterID string `json:"chapterId,omitempty"`
 }

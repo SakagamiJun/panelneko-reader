@@ -789,26 +789,44 @@ func (c *Client) DownloadImageStream(ctx context.Context, targetURL string, writ
 }
 
 type ComicInfoXML struct {
-	XMLName xml.Name `xml:"ComicInfo"`
-	Title   string   `xml:"Title,omitempty"`
-	Series  string   `xml:"Series,omitempty"`
-	Number  string   `xml:"Number,omitempty"`
-	Writer  string   `xml:"Writer,omitempty"`
-	Summary string   `xml:"Summary,omitempty"`
-	Pages   int      `xml:"PageCount,omitempty"`
+	XMLName         xml.Name `xml:"ComicInfo"`
+	Title           string   `xml:"Title,omitempty"`
+	Series          string   `xml:"Series,omitempty"`
+	Number          string   `xml:"Number,omitempty"`
+	Writer          string   `xml:"Writer,omitempty"`
+	Summary         string   `xml:"Summary,omitempty"`
+	Pages           int      `xml:"PageCount,omitempty"`
+	ScanInformation string   `xml:"ScanInformation,omitempty"`
+	Web             string   `xml:"Web,omitempty"`
+	Notes           string   `xml:"Notes,omitempty"`
 }
 
-func (c *Client) BuildComicInfoXML(series, title, writer, summary string, number float64, pageCount int) ([]byte, error) {
-	numStr := fmt.Sprintf("%.1f", number)
+type ComicInfoOptions struct {
+	Series          string
+	Title           string
+	Writer          string
+	Summary         string
+	Number          float64
+	PageCount       int
+	ScanInformation string
+	Web             string
+	Notes           string
+}
+
+func (c *Client) BuildComicInfoXML(opts ComicInfoOptions) ([]byte, error) {
+	numStr := fmt.Sprintf("%.1f", opts.Number)
 	numStr = strings.TrimSuffix(numStr, ".0")
 
 	info := ComicInfoXML{
-		Title:   title,
-		Series:  series,
-		Number:  numStr,
-		Writer:  writer,
-		Summary: summary,
-		Pages:   pageCount,
+		Title:           opts.Title,
+		Series:          opts.Series,
+		Number:          numStr,
+		Writer:          opts.Writer,
+		Summary:         opts.Summary,
+		Pages:           opts.PageCount,
+		ScanInformation: opts.ScanInformation,
+		Web:             opts.Web,
+		Notes:           opts.Notes,
 	}
 	var buf bytes.Buffer
 	buf.WriteString(xml.Header)

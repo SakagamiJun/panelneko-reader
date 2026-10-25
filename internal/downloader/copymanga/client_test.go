@@ -53,7 +53,14 @@ func TestStreamSaveCBZWithComicInfo(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	client := NewClient("", "", 5)
-	xmlData, err := client.BuildComicInfoXML("One Piece", "Chapter 1", "Oda Eiichiro", "Great pirate era", 1.0, 3)
+	xmlData, err := client.BuildComicInfoXML(ComicInfoOptions{
+		Series:    "One Piece",
+		Title:     "Chapter 1",
+		Writer:    "Oda Eiichiro",
+		Summary:   "Great pirate era",
+		Number:    1.0,
+		PageCount: 3,
+	})
 	if err != nil {
 		t.Fatalf("build comicinfo xml: %v", err)
 	}

@@ -3,6 +3,7 @@ package downloader
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -381,11 +382,30 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 	_ = m.store.UpdateDownloadTaskProgress(task.ID, 0, totalPages, "")
 	m.emitProgress()
 
-	// Download images stream directly into CBZ
-	var xmlMetadata []byte
+	// Build ComicInfo.xml metadata
+	notesBytes, _ := json.Marshal(contracts.ComicInfoNotes{
+		Source:    task.Source,
+		MangaID:   task.MangaID,
+		ChapterID: task.ChapterID,
+	})
+	notesStr := string(notesBytes)
+
+	var webURL string
 	if task.Source == copymanga.SiteName {
-		xmlMetadata, _ = m.copyManga.BuildComicInfoXML(task.MangaTitle, task.ChapterTitle, "", "", task.ChapterNumber, totalPages)
+		webURL = fmt.Sprintf("https://copymanga.tv/comic/%s", task.MangaID)
+	} else if task.Source == klz9.SiteName {
+		webURL = fmt.Sprintf("https://klz9.com/%s", task.MangaID)
 	}
+
+	xmlMetadata, _ := m.copyManga.BuildComicInfoXML(copymanga.ComicInfoOptions{
+		Series:          task.MangaTitle,
+		Title:           task.ChapterTitle,
+		Number:          task.ChapterNumber,
+		PageCount:       totalPages,
+		ScanInformation: task.ChapterGroup,
+		Web:             webURL,
+		Notes:           notesStr,
+	})
 
 	downloadedCount := atomic.Int32{}
 	startTime := time.Now()
@@ -435,6 +455,9 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 	if format == "folder" {
 		if err := os.MkdirAll(finalFilePath, 0o755); err != nil {
 			return fmt.Errorf("create chapter dir: %w", err)
+		}
+		if len(xmlMetadata) > 0 {
+			_ = os.WriteFile(filepath.Join(finalFilePath, "ComicInfo.xml"), xmlMetadata, 0o644)
 		}
 		for i := 0; i < totalPages; i++ {
 			if ctx.Err() != nil {
