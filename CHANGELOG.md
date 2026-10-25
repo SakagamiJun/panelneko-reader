@@ -2,11 +2,6 @@
 
 ## v0.11.0
 
-[![macOS](https://img.shields.io/badge/macOS-Supported-000000?style=flat-square&logo=apple&logoColor=white)](https://apple.com)
-[![Windows](https://img.shields.io/badge/Windows-Supported-0078D6?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com)
-[![Linux](https://img.shields.io/badge/Linux-Supported-FCC624?style=flat-square&logo=linux&logoColor=black)](https://kernel.org)
-[![Version](https://img.shields.io/badge/Release-v0.11.0-10B981?style=flat-square)](https://github.com/SakagamiJun/panelneko-reader/releases)
-
 > 本次更新带来全新的多漫画库源体系架构、多档缩略图画质阶梯与磁盘缓存池、重名合并与离线网络源弹性容错降级，并针对全屏沉浸阅读体验进行了深度优化。
 
 ### 更新内容
@@ -30,11 +25,6 @@
 
 ## v0.10.0
 
-[![macOS](https://img.shields.io/badge/macOS-Supported-000000?style=flat-square&logo=apple&logoColor=white)](https://apple.com)
-[![Windows](https://img.shields.io/badge/Windows-Supported-0078D6?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com)
-[![Linux](https://img.shields.io/badge/Linux-Supported-FCC624?style=flat-square&logo=linux&logoColor=black)](https://kernel.org)
-[![Version](https://img.shields.io/badge/Release-v0.10.0-10B981?style=flat-square)](https://github.com/SakagamiJun/panelneko-reader/releases)
-
 > 本次更新聚焦于渲染性能优化、流式缓冲池机制、封面缩略图磁盘缓存以及全局国际化闭环。
 
 ### 更新内容
@@ -56,11 +46,6 @@
 ---
 
 ## v0.9.0
-
-[![macOS](https://img.shields.io/badge/macOS-Supported-000000?style=flat-square&logo=apple&logoColor=white)](https://apple.com)
-[![Windows](https://img.shields.io/badge/Windows-Supported-0078D6?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com)
-[![Linux](https://img.shields.io/badge/Linux-Supported-FCC624?style=flat-square&logo=linux&logoColor=black)](https://kernel.org)
-[![Version](https://img.shields.io/badge/Release-v0.9.0-10B981?style=flat-square)](https://github.com/SakagamiJun/panelneko-reader/releases)
 
 > 本次更新集中在 Wails 导出安全收敛与跨平台构建链路稳定化。
 
