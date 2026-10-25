@@ -145,6 +145,10 @@ export function PreviewBatchMangaLinks(inputs: contracts$0.MangaLinkPreviewInput
     return $Call.ByID(4086719864, inputs);
 }
 
+export function PreviewMangaLink(input: contracts$0.MangaLinkPreviewInput): $CancellablePromise<contracts$0.MangaLinkPreviewItem> {
+    return $Call.ByID(3328611069, input);
+}
+
 export function RelocateLibrarySource(sourceID: string, newPath: string): $CancellablePromise<contracts$0.AppSettings> {
     return $Call.ByID(3057094592, sourceID, newPath);
 }

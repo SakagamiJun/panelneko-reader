@@ -67,6 +67,7 @@ export interface AppAdapter {
   linkMangaOnline(input: MangaOnlineLink): Promise<void>;
   getMangaOnlineLink(mangaID: string): Promise<MangaOnlineLink>;
   unlinkMangaOnline(mangaID: string): Promise<void>;
+  previewMangaLink(input: MangaLinkPreviewInput): Promise<MangaLinkPreviewItem>;
   previewBatchMangaLinks(inputs: MangaLinkPreviewInput[]): Promise<MangaLinkPreviewItem[]>;
   checkMangaUpdates(mangaID: string): Promise<number>;
   checkAllFollowedUpdates(): Promise<number>;
