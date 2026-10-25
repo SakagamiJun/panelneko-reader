@@ -86,7 +86,7 @@ export const MangaCard = memo(function MangaCard({
 
           {/* Offline badge */}
           {item.isAvailable === false && (
-            <div className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-destructive/90 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm backdrop-blur-sm">
+            <div className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-danger/90 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm backdrop-blur-sm">
               <span>{t("library.offlineBadge")}</span>
             </div>
           )}

@@ -1,20 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Check,
-  Cpu,
-  Key,
-  Plus,
-  RefreshCw,
-  ShieldCheck,
-  Trash2,
-  Users,
-} from "lucide-react";
+import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import { appAdapter } from "@/lib/api";
 import type { CopyMangaAccount, DevInfo } from "@/lib/contracts";
+import { cn } from "@/lib/utils";
 
 export function DeveloperTab() {
   const { t } = useTranslation();
@@ -128,25 +120,25 @@ export function DeveloperTab() {
             <div className="text-xs text-muted-foreground">
               {t("settings.devAccountPoolDesc", { count: accounts.length })}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Button
                 variant="outline"
-                size="sm"
-                className="h-7 text-xs px-2"
+                size="xs"
+                className="h-7 w-7 p-0 flex items-center justify-center cursor-pointer"
                 onClick={loadData}
                 disabled={isLoading}
+                title={t("settings.refresh")}
               >
-                <RefreshCw className={`h-3.5 w-3.5 mr-1 ${isLoading ? "animate-spin" : ""}`} />
-                {t("settings.refresh")}
+                <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
               </Button>
               <Button
                 variant="primary"
-                size="sm"
-                className="h-7 text-xs px-2"
+                size="xs"
+                className="h-7 w-7 p-0 flex items-center justify-center cursor-pointer"
                 onClick={() => setShowAddForm(!showAddForm)}
+                title={t("settings.devAddAccount")}
               >
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                {t("settings.devAddAccount")}
+                <Plus className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
@@ -175,7 +167,7 @@ export function DeveloperTab() {
                   className="text-xs h-7"
                 />
               </div>
-              {actionError && <div className="text-[11px] text-destructive">{actionError}</div>}
+              {actionError && <div className="text-[11px] text-danger">{actionError}</div>}
               <div className="flex justify-end gap-2 pt-1">
                 <Button
                   variant="ghost"
@@ -200,9 +192,10 @@ export function DeveloperTab() {
           {/* Account Table */}
           <div className="border border-border/60 rounded-md overflow-hidden bg-card/50">
             <div className="grid grid-cols-12 px-3 py-1.5 text-[11px] font-medium text-muted-foreground border-b border-border/60 bg-muted/40">
-              <div className="col-span-4">{t("settings.devColUsername")}</div>
-              <div className="col-span-4">{t("settings.devColToken")}</div>
-              <div className="col-span-3">{t("settings.devColStatus")}</div>
+              <div className="col-span-3">{t("settings.devColUsername")}</div>
+              <div className="col-span-3">{t("settings.devColPassword")}</div>
+              <div className="col-span-3">{t("settings.devColToken")}</div>
+              <div className="col-span-2">{t("settings.devColStatus")}</div>
               <div className="col-span-1 text-right">{t("settings.devColAction")}</div>
             </div>
             {accounts.length === 0 ? (
@@ -215,13 +208,18 @@ export function DeveloperTab() {
                 return (
                   <div
                     key={acc.username}
-                    className="grid grid-cols-12 px-3 py-2 text-xs items-center border-b border-border/30 last:border-b-0 hover:bg-muted/30 transition-colors"
+                    className="grid grid-cols-12 px-3 py-2 text-xs items-center border-b border-border/30 last:border-b-0 hover:bg-muted/30 transition-colors gap-1.5"
                   >
-                    <div className="col-span-4 font-mono font-medium truncate">{acc.username}</div>
-                    <div className="col-span-4 font-mono text-muted-foreground truncate">
-                      {acc.token ? `${acc.token.slice(0, 6)}...${acc.token.slice(-4)}` : "None"}
+                    <div className="col-span-3 font-mono font-medium truncate select-all" title={acc.username}>
+                      {acc.username}
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-3 font-mono text-foreground/90 truncate select-all" title={acc.password}>
+                      {acc.password || "—"}
+                    </div>
+                    <div className="col-span-3 font-mono text-muted-foreground truncate select-all" title={acc.token}>
+                      {acc.token ? `${acc.token.slice(0, 8)}...${acc.token.slice(-6)}` : "None"}
+                    </div>
+                    <div className="col-span-2">
                       {inCooldown ? (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-500 border border-amber-500/30">
                           {t("settings.devStatusCooldown")}
@@ -236,7 +234,7 @@ export function DeveloperTab() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-danger cursor-pointer inline-flex items-center justify-center"
                         onClick={() => handleDeleteAccount(acc.username)}
                         disabled={isSubmitting}
                       >

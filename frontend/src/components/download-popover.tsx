@@ -172,7 +172,7 @@ export function DownloadPopover({
             updateFeedback.type === "none" &&
               "bg-muted/40 text-muted-foreground border-border/40",
             updateFeedback.type === "error" &&
-              "bg-destructive/10 text-destructive border-destructive/20"
+              "bg-danger/10 text-danger border-danger/20"
           )}
         >
           {updateFeedback.type === "success" && <Check className="h-3.5 w-3.5 shrink-0" />}
@@ -259,7 +259,7 @@ export function DownloadPopover({
                       isPaused && "text-amber-500 bg-amber-500/10",
                       isWaitingSource && "text-sky-500 bg-sky-500/10",
                       isCompleted && "text-emerald-500 bg-emerald-500/10",
-                      isFailed && "text-destructive bg-destructive/10"
+                      isFailed && "text-danger bg-danger/10"
                     )}
                   >
                     {isDownloading
@@ -286,7 +286,7 @@ export function DownloadPopover({
                         : isCompleted
                         ? "bg-emerald-500"
                         : isFailed
-                        ? "bg-destructive"
+                        ? "bg-danger"
                         : "bg-muted-foreground/40"
                     )}
                     style={{ width: `${pct}%` }}
@@ -307,7 +307,7 @@ export function DownloadPopover({
                     )}
                     {task.errorMessage && (
                       <span
-                        className="text-destructive truncate max-w-[140px]"
+                        className="text-danger truncate max-w-[140px]"
                         title={task.errorMessage}
                       >
                         {task.errorMessage}
@@ -361,7 +361,7 @@ export function DownloadPopover({
                         size="xs"
                         variant="ghost"
                         onClick={() => onCancelTask(task.id)}
-                        className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive cursor-pointer"
+                        className="h-5 w-5 p-0 text-muted-foreground hover:text-danger cursor-pointer"
                         title={t("downloader.cancel")}
                       >
                         <X className="h-2.5 w-2.5" />

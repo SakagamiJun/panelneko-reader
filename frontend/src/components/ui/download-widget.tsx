@@ -186,7 +186,7 @@ export function DownloadWidget({
                     isPaused && "text-amber-500 bg-amber-500/10",
                     isWaitingSource && "text-sky-500 bg-sky-500/10",
                     isCompleted && "text-emerald-500 bg-emerald-500/10",
-                    isFailed && "text-destructive bg-destructive/10"
+                    isFailed && "text-danger bg-danger/10"
                   )}
                 >
                   {isDownloading
@@ -208,7 +208,7 @@ export function DownloadWidget({
                 <div
                   className={cn(
                     "h-full transition-all duration-150 ease-out",
-                    isDownloading ? "bg-primary" : isCompleted ? "bg-emerald-500" : isFailed ? "bg-destructive" : "bg-muted-foreground/40"
+                    isDownloading ? "bg-primary" : isCompleted ? "bg-emerald-500" : isFailed ? "bg-danger" : "bg-muted-foreground/40"
                   )}
                   style={{ width: `${pct}%` }}
                 />
@@ -227,7 +227,7 @@ export function DownloadWidget({
                     </>
                   )}
                   {task.errorMessage && (
-                    <span className="text-destructive truncate max-w-[150px]" title={task.errorMessage}>
+                    <span className="text-danger truncate max-w-[150px]" title={task.errorMessage}>
                       {task.errorMessage}
                     </span>
                   )}
@@ -279,7 +279,7 @@ export function DownloadWidget({
                     size="xs"
                     variant="ghost"
                     onClick={() => onCancelTask(task.id)}
-                    className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive cursor-pointer"
+                    className="h-5 w-5 p-0 text-muted-foreground hover:text-danger cursor-pointer"
                     title={t("downloader.cancel")}
                   >
                     <X className="h-2.5 w-2.5" />

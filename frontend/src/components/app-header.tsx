@@ -408,7 +408,7 @@ export function AppHeader({
                         !activeSource?.enabled
                           ? "bg-muted-foreground/40"
                           : activeSource?.status === "offline"
-                          ? "bg-destructive"
+                          ? "bg-danger"
                           : "bg-emerald-500"
                       )}
                     />
@@ -417,7 +417,7 @@ export function AppHeader({
                     {isAllSources ? t("library.filterAllSources") : activeSource?.name || t("library.filterAllSources")}
                   </span>
                   {!isAllSources && activeSource?.status === "offline" && (
-                    <span className="text-[9px] font-mono text-destructive shrink-0">
+                    <span className="text-[9px] font-mono text-danger shrink-0">
                       [{t("library.offlineTag")}]
                     </span>
                   )}
@@ -484,7 +484,7 @@ export function AppHeader({
                                   !s.enabled
                                     ? "bg-muted-foreground/40"
                                     : isOffline
-                                    ? "bg-destructive"
+                                    ? "bg-danger"
                                     : "bg-emerald-500"
                                 )}
                               />
@@ -492,7 +492,7 @@ export function AppHeader({
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <span className="truncate flex-1 font-medium">{s.name}</span>
                                   {isOffline && (
-                                    <span className="text-[9px] font-mono text-destructive bg-destructive/10 px-1 py-0.5 rounded shrink-0">
+                                    <span className="text-[9px] font-mono text-danger bg-danger/10 px-1 py-0.5 rounded shrink-0">
                                       {t("library.offlineTag")}
                                     </span>
                                   )}

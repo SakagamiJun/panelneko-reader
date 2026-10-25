@@ -227,7 +227,7 @@ export function SourcesTab({
           </p>
 
           {sourceOpError && (
-            <div className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-2 flex items-center gap-1.5">
+            <div className="text-[11px] text-danger bg-danger/10 border border-danger/20 rounded-lg p-2 flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
               <span>{sourceOpError}</span>
             </div>
@@ -329,7 +329,7 @@ export function SourcesTab({
                 className={cn(
                   "rounded-xl border border-border/60 bg-card/60 p-3.5 transition-all duration-150 space-y-2.5",
                   !source.enabled && "opacity-60 bg-muted/20",
-                  isOffline && source.enabled && "border-destructive/40 bg-destructive/5"
+                  isOffline && source.enabled && "border-danger/40 bg-danger/5"
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -373,7 +373,7 @@ export function SourcesTab({
                           !source.enabled
                             ? "bg-muted-foreground/40"
                             : isOffline
-                            ? "bg-destructive"
+                            ? "bg-danger"
                             : "bg-emerald-500"
                         )}
                       />
@@ -427,7 +427,7 @@ export function SourcesTab({
                 </div>
 
                 {isOffline && source.enabled && (
-                  <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-2 text-[11px] text-destructive flex items-start gap-2">
+                  <div className="rounded-lg bg-danger/10 border border-danger/20 p-2 text-[11px] text-danger flex items-start gap-2">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                     <div className="min-w-0 flex-1">
                       {source.errorMessage || t("library.offlineAlertDesc")}
@@ -479,7 +479,7 @@ export function SourcesTab({
                         size="xs"
                         variant="ghost"
                         onClick={() => setSourceToDelete(source)}
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-danger hover:bg-danger/10"
                         title={t("settings.sourceRemove")}
                       >
                         <Trash2 className="h-3 w-3" />

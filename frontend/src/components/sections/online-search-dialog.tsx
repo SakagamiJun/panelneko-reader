@@ -369,8 +369,8 @@ export function OnlineSearchDialog({
                 </div>
               ) : searchError ? (
                 <div className="flex flex-col items-center justify-center p-6 text-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-destructive" />
-                  <span className="text-xs text-destructive">{searchError}</span>
+                  <AlertCircle className="h-5 w-5 text-danger" />
+                  <span className="text-xs text-danger">{searchError}</span>
                   <Button
                     type="button"
                     size="xs"
@@ -526,8 +526,8 @@ export function OnlineSearchDialog({
                     </div>
                   ) : chaptersError ? (
                     <div className="flex flex-col items-center justify-center p-6 text-center gap-2">
-                      <AlertCircle className="h-5 w-5 text-destructive" />
-                      <span className="text-xs text-destructive">{chaptersError}</span>
+                      <AlertCircle className="h-5 w-5 text-danger" />
+                      <span className="text-xs text-danger">{chaptersError}</span>
                       <Button
                         type="button"
                         size="xs"

@@ -16,7 +16,8 @@ export default {
         border: "rgb(var(--border) / <alpha-value>)",
         success: "rgb(var(--success) / <alpha-value>)",
         warning: "rgb(var(--warning) / <alpha-value>)",
-        danger: "rgb(var(--danger) / <alpha-value>)"
+        danger: "rgb(var(--danger) / <alpha-value>)",
+        destructive: "rgb(var(--danger) / <alpha-value>)"
       },
       boxShadow: {
         glow: "0 20px 70px rgba(20, 87, 180, 0.25)"

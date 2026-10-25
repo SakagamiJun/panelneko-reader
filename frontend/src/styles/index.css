@@ -14,6 +14,7 @@
   --color-success: rgb(var(--success));
   --color-warning: rgb(var(--warning));
   --color-danger: rgb(var(--danger));
+  --color-destructive: rgb(var(--danger));
   --shadow-glow: 0 20px 70px rgba(20, 87, 180, 0.25);
 }
 

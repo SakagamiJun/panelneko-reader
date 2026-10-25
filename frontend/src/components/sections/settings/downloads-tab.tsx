@@ -163,7 +163,7 @@ export function DownloadsTab({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                      className="h-7 text-xs text-muted-foreground hover:text-danger"
                       onClick={handleLogout}
                       disabled={isLoggingIn}
                     >
@@ -336,7 +336,11 @@ export function DownloadsTab({
       >
         <SettingRow
           title={t("settings.batchLinkTitle")}
-          description={t("settings.batchLinkDesc")}
+          description={
+            <span className="text-danger font-medium">
+              {t("settings.batchLinkWarningDesc")}
+            </span>
+          }
           control={
             <Button
               type="button"
