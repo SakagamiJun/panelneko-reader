@@ -9,12 +9,15 @@ import (
 )
 
 type ComicInfo struct {
-	XMLName xml.Name `xml:"ComicInfo"`
-	Series  string   `xml:"Series"`
-	Title   string   `xml:"Title"`
-	Number  string   `xml:"Number"`
-	Summary string   `xml:"Summary"`
-	Writer  string   `xml:"Writer"`
+	XMLName         xml.Name `xml:"ComicInfo"`
+	Series          string   `xml:"Series"`
+	Title           string   `xml:"Title"`
+	Number          string   `xml:"Number"`
+	Summary         string   `xml:"Summary"`
+	Writer          string   `xml:"Writer"`
+	ScanInformation string   `xml:"ScanInformation"`
+	Web             string   `xml:"Web"`
+	Notes           string   `xml:"Notes"`
 }
 
 func parseComicInfo(data []byte) (ComicInfo, error) {

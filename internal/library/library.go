@@ -55,6 +55,8 @@ type chapterSource struct {
 	number      float64
 	sourceURL   string
 	completedAt string
+	group       string
+	notes       string
 	localPath   string
 	pages       []contracts.ReaderPage
 	updatedAt   time.Time
@@ -73,6 +75,9 @@ type chapterMetadata struct {
 	number      float64
 	sourceURL   string
 	completedAt string
+	group       string
+	web         string
+	notes       string
 }
 
 type archiveEntry struct {
@@ -1075,6 +1080,8 @@ func loadMangaManifestWithSource(outputRoot string, sourceID string, mangaPath s
 			Pages:       source.pages,
 			LocalPath:   source.localPath,
 			CompletedAt: source.completedAt,
+			Group:       source.group,
+			Notes:       source.notes,
 		}
 		if coverImageURL == "" && len(source.pages) > 0 {
 			coverImageURL = source.pages[0].SourceURL
@@ -1140,6 +1147,8 @@ func loadDirectoryChapterSource(outputRoot string, sourceID string, descriptor c
 		number:      metadata.number,
 		sourceURL:   metadata.sourceURL,
 		completedAt: metadata.completedAt,
+		group:       metadata.group,
+		notes:       metadata.notes,
 		localPath:   chapterDir,
 		pages:       pages,
 		updatedAt:   stat.ModTime(),
@@ -1184,6 +1193,8 @@ func loadArchiveChapterSource(outputRoot string, sourceID string, descriptor cha
 		number:      metadata.number,
 		sourceURL:   metadata.sourceURL,
 		completedAt: metadata.completedAt,
+		group:       metadata.group,
+		notes:       metadata.notes,
 		localPath:   archivePath,
 		pages:       pages,
 		updatedAt:   stat.ModTime(),
@@ -1412,6 +1423,9 @@ func resolveChapterMetadata(baseName string, info ComicInfo, hasInfo bool) chapt
 	if info.Title != "" {
 		metadata.title = info.Title
 	}
+	metadata.group = strings.TrimSpace(info.ScanInformation)
+	metadata.web = strings.TrimSpace(info.Web)
+	metadata.notes = strings.TrimSpace(info.Notes)
 	return metadata
 }
 
