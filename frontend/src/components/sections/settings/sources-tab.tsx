@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Folder,
@@ -36,6 +37,7 @@ export function SourcesTab({
   onSave,
 }: SourcesTabProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
 
   const [isAddingSource, setIsAddingSource] = useState(false);
   const [newSourcePath, setNewSourcePath] = useState("");
@@ -94,6 +96,7 @@ export function SourcesTab({
       });
       onUpdateForm(updated);
       onSave(updated);
+      void queryClient.invalidateQueries({ queryKey: ["library"] });
       setIsAddingSource(false);
       setNewSourceName("");
       setNewSourcePath("");
@@ -112,6 +115,7 @@ export function SourcesTab({
       });
       onUpdateForm(updated);
       onSave(updated);
+      void queryClient.invalidateQueries({ queryKey: ["library"] });
     } catch (err) {
       console.error("Failed to toggle source:", err);
     }
@@ -127,6 +131,7 @@ export function SourcesTab({
         const updated = await appAdapter.relocateLibrarySource(source.id, selected);
         onUpdateForm(updated);
         onSave(updated);
+        void queryClient.invalidateQueries({ queryKey: ["library"] });
       }
     } catch (err) {
       console.error("Failed to relocate source:", err);
@@ -140,6 +145,7 @@ export function SourcesTab({
       const fresh = await appAdapter.getSettings();
       onUpdateForm(fresh);
       onSave(fresh);
+      void queryClient.invalidateQueries({ queryKey: ["library"] });
     } catch (err) {
       console.error("Failed to rescan source:", err);
     } finally {
@@ -153,6 +159,7 @@ export function SourcesTab({
       const updated = await appAdapter.removeLibrarySource(sourceToDelete.id);
       onUpdateForm(updated);
       onSave(updated);
+      void queryClient.invalidateQueries({ queryKey: ["library"] });
       setSourceToDelete(null);
     } catch (err) {
       console.error("Failed to remove source:", err);
