@@ -24,14 +24,12 @@ export interface DownloadsTabProps {
   form: AppSettings;
   updateDownloader: (patch: Partial<NonNullable<AppSettings["downloader"]>>) => void;
   onOpenBatchLink?: () => void;
-  onDevModeUnlocked?: () => void;
 }
 
 export function DownloadsTab({
   form,
   updateDownloader,
   onOpenBatchLink,
-  onDevModeUnlocked,
 }: DownloadsTabProps) {
   const { t } = useTranslation();
   const [usernameInput, setUsernameInput] = useState("");
@@ -80,13 +78,6 @@ export function DownloadsTab({
     setLoginStatusMessage("");
     try {
       const res = await appAdapter.loginCopyManga(usernameInput, passwordInput);
-      if (res.isDevMode) {
-        setLoginStatusMessage(t("settings.devModeActivated"));
-        onDevModeUnlocked?.();
-        setUsernameInput("");
-        setPasswordInput("");
-        return;
-      }
       if (res.success) {
         updateDownloader({
           copyMangaUsername: res.username,

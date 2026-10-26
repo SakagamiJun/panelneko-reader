@@ -177,6 +177,10 @@ export function SearchOnlineManga(source: string, query: string, page: number, l
     return $Call.ByID(1245704362, source, query, page, limit);
 }
 
+export function SetDevMode(enabled: boolean): $CancellablePromise<void> {
+    return $Call.ByID(3377656721, enabled);
+}
+
 export function ToggleCollection(mangaID: string): $CancellablePromise<boolean> {
     return $Call.ByID(2397913529, mangaID);
 }

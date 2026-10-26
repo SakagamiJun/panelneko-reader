@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink, FolderOpen, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,14 +13,29 @@ export interface AboutTabProps {
   updateField: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
   version?: string;
   commit?: string;
+  onDevModeUnlocked?: () => void;
 }
 
-export function AboutTab({ form, updateField, version, commit }: AboutTabProps) {
+export function AboutTab({ form, updateField, version, commit, onDevModeUnlocked }: AboutTabProps) {
   const { t } = useTranslation();
 
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const iconClicksRef = useRef<number[]>([]);
+
+  const handleIconClick = () => {
+    const now = Date.now();
+    const windowMs = 20000;
+    const clicks = iconClicksRef.current.filter((ts) => now - ts <= windowMs);
+    clicks.push(now);
+    iconClicksRef.current = clicks;
+
+    if (clicks.length >= 10) {
+      iconClicksRef.current = [];
+      onDevModeUnlocked?.();
+    }
+  };
 
   const handleCheckUpdate = async () => {
     setIsCheckingUpdate(true);
@@ -44,7 +59,8 @@ export function AboutTab({ form, updateField, version, commit }: AboutTabProps) 
             <img
               src="/appicon.png"
               alt="PanelNeko Reader"
-              className="h-11 w-11 rounded-xl shadow-xs object-cover border border-border/40 shrink-0 select-none pointer-events-none"
+              onClick={handleIconClick}
+              className="h-11 w-11 rounded-xl shadow-xs object-cover border border-border/40 shrink-0 select-none cursor-pointer active:scale-95 transition-transform"
             />
             <div>
               <h4 className="text-base font-bold text-foreground">

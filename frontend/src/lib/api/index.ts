@@ -158,6 +158,9 @@ export const appAdapter: AppAdapter = {
   getIsDevMode() {
     return currentAdapter().getIsDevMode();
   },
+  setDevMode(enabled: boolean) {
+    return currentAdapter().setDevMode(enabled);
+  },
   getDevInfo() {
     return currentAdapter().getDevInfo();
   },

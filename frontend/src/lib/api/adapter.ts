@@ -78,6 +78,7 @@ export interface AppAdapter {
   loginCopyManga(username: string, password: string): Promise<CopyMangaLoginResult>;
   logoutCopyManga(): Promise<void>;
   getIsDevMode(): Promise<boolean>;
+  setDevMode(enabled: boolean): Promise<void>;
   getDevInfo(): Promise<DevInfo>;
   getCopyMangaAccounts(): Promise<CopyMangaAccount[]>;
   addCopyMangaAccount(username: string, password: string, token: string): Promise<void>;

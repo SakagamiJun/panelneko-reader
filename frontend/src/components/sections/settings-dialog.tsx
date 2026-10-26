@@ -260,10 +260,6 @@ export function SettingsDialog({
                 form={form}
                 updateDownloader={updateDownloader}
                 onOpenBatchLink={onOpenBatchLink}
-                onDevModeUnlocked={() => {
-                  setIsDevMode(true);
-                  setActiveTab("developer");
-                }}
               />
             )}
 
@@ -287,6 +283,15 @@ export function SettingsDialog({
                 updateField={updateField}
                 version={version}
                 commit={commit}
+                onDevModeUnlocked={async () => {
+                  try {
+                    await appAdapter.setDevMode(true);
+                  } catch (err) {
+                    console.error("Failed to unlock dev mode on backend:", err);
+                  }
+                  setIsDevMode(true);
+                  setActiveTab("developer");
+                }}
               />
             )}
 

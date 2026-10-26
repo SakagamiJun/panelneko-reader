@@ -1060,13 +1060,9 @@ func TestLoginCopyMangaDeveloperModeAndAccounts(t *testing.T) {
 		t.Fatal("expected dev mode to be false initially")
 	}
 
-	// Login with root / dev activates dev mode without network call
-	res, err := app.LoginCopyManga("root", "dev")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.Success || !res.IsDevMode {
-		t.Fatalf("expected dev mode activated, got %+v", res)
+	// Developer mode can be set directly via SetDevMode
+	if err := app.SetDevMode(true); err != nil {
+		t.Fatalf("SetDevMode(true) failed: %v", err)
 	}
 	if !app.GetIsDevMode() {
 		t.Fatal("expected GetIsDevMode to return true")

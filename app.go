@@ -1846,19 +1846,6 @@ func (a *App) LoginCopyManga(username string, password string) (contracts.CopyMa
 	username = strings.TrimSpace(username)
 	password = strings.TrimSpace(password)
 
-	// Local Developer Mode: root / dev activates in-memory dev mode without network requests
-	if username == "root" && password == "dev" {
-		a.devModeLock.Lock()
-		a.isDevMode = true
-		a.devModeLock.Unlock()
-		logger.Get().Info("Local Developer Mode unlocked via root/dev credentials")
-		return contracts.CopyMangaLoginResult{
-			Success:   true,
-			IsDevMode: true,
-			Message:   "developer_mode_activated",
-		}, nil
-	}
-
 	if username == "" || password == "" {
 		return contracts.CopyMangaLoginResult{Success: false}, fmt.Errorf("username and password cannot be empty")
 	}
@@ -1923,6 +1910,14 @@ func (a *App) GetIsDevMode() bool {
 	a.devModeLock.RLock()
 	defer a.devModeLock.RUnlock()
 	return a.isDevMode
+}
+
+func (a *App) SetDevMode(enabled bool) error {
+	a.devModeLock.Lock()
+	a.isDevMode = enabled
+	a.devModeLock.Unlock()
+	logger.Get().Info("Developer mode updated to %v", enabled)
+	return nil
 }
 
 func (a *App) GetDevInfo() (contracts.DevInfo, error) {

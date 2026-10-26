@@ -787,15 +787,6 @@ export class MockAdapter implements AppAdapter {
     const trimmedUser = username.trim();
     const trimmedPwd = password.trim();
 
-    if (trimmedUser === "root" && trimmedPwd === "dev") {
-      this.isDevMode = true;
-      return {
-        success: true,
-        isDevMode: true,
-        message: "developer_mode_activated",
-      };
-    }
-
     if (!trimmedUser || !trimmedPwd) {
       throw new Error("username and password cannot be empty");
     }
@@ -839,6 +830,10 @@ export class MockAdapter implements AppAdapter {
 
   async getIsDevMode(): Promise<boolean> {
     return this.isDevMode;
+  }
+
+  async setDevMode(enabled: boolean): Promise<void> {
+    this.isDevMode = enabled;
   }
 
   async getDevInfo(): Promise<DevInfo> {

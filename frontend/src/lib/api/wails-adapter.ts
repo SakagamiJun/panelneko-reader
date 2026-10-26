@@ -357,6 +357,10 @@ export class WailsAdapter implements AppAdapter {
     return (await App.GetIsDevMode()) ?? false;
   }
 
+  async setDevMode(enabled: boolean): Promise<void> {
+    await App.SetDevMode(enabled);
+  }
+
   async getDevInfo(): Promise<DevInfo> {
     return (await App.GetDevInfo()) as DevInfo;
   }
