@@ -294,6 +294,8 @@ export interface ReaderChapter {
     "pages": ReaderPage[] | null;
     "localPath": string;
     "completedAt": string;
+    "group"?: string;
+    "notes"?: string;
 }
 
 export enum ReaderDirection {
