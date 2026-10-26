@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -1538,6 +1539,7 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 	groupMaxNumber := make(map[string]float64)
 	allLocalNumbers := make(map[float64]bool)
 	var globalMaxLocalNumber float64 = -1
+	localDownloadedChapterIDs := make(map[string]bool)
 
 	// Collect known groups from online chapters
 	knownGroups := make(map[string]bool)
@@ -1562,11 +1564,32 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 			globalMaxLocalNumber = ch.Number
 		}
 
+		if strings.HasPrefix(ch.Notes, "{") {
+			var notes contracts.ComicInfoNotes
+			if err := json.Unmarshal([]byte(ch.Notes), &notes); err == nil && notes.ChapterID != "" {
+				localDownloadedChapterIDs[notes.ChapterID] = true
+			}
+		}
+
 		var matchedGroup string
-		for g := range knownGroups {
-			if strings.Contains(ch.LocalPath, g) || strings.Contains(ch.Title, g) {
-				matchedGroup = g
-				break
+		if ch.Group != "" {
+			if knownGroups[ch.Group] {
+				matchedGroup = ch.Group
+			} else {
+				for g := range knownGroups {
+					if strings.EqualFold(ch.Group, g) {
+						matchedGroup = g
+						break
+					}
+				}
+			}
+		}
+		if matchedGroup == "" {
+			for g := range knownGroups {
+				if strings.Contains(ch.LocalPath, g) || strings.Contains(ch.Title, g) {
+					matchedGroup = g
+					break
+				}
 			}
 		}
 		if matchedGroup != "" {
@@ -1592,7 +1615,7 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 	var lastChapterTitle string
 
 	for _, ch := range onlineChapters {
-		if existingTaskChapters[ch.ID] {
+		if existingTaskChapters[ch.ID] || localDownloadedChapterIDs[ch.ID] {
 			continue
 		}
 
