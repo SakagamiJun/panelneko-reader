@@ -1153,3 +1153,79 @@ func TestApp_FollowedUpdateCheckStatusAndConcurrency(t *testing.T) {
 		t.Fatalf("expected status not checking after complete, got %+v", status)
 	}
 }
+
+func TestImportCopyMangaAccountsAdversarial(t *testing.T) {
+	tempDir := t.TempDir()
+	sqliteStore, err := store.Open(tempDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	settingsService, err := settings.NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	app := &App{
+		store:    sqliteStore,
+		settings: settingsService,
+	}
+
+	// 1. Boundary: Empty input slice
+	emptyRes, err := app.ImportCopyMangaAccounts([]contracts.CopyMangaAccountInput{})
+	if err != nil {
+		t.Fatalf("empty slice failed: %v", err)
+	}
+	if emptyRes.Total != 0 || emptyRes.Imported != 0 || emptyRes.Updated != 0 || emptyRes.Skipped != 0 {
+		t.Fatalf("expected all zeros for empty input, got %+v", emptyRes)
+	}
+
+	// 2. Adversarial inputs: Whitespace usernames, deformed entries, valid entries
+	mixedRes, err := app.ImportCopyMangaAccounts([]contracts.CopyMangaAccountInput{
+		{Username: "   ", Password: "pwd", Token: "tok"},
+		{Username: "", Password: "pwd", Token: "tok"},
+		{Username: "user_a", Password: "initial_pwd", Token: "tok_a"},
+		{Username: "user_b", Password: "initial_pwd_b", Token: ""},
+	})
+	if err != nil {
+		t.Fatalf("mixed import failed: %v", err)
+	}
+	if mixedRes.Total != 4 || mixedRes.Imported != 2 || mixedRes.Skipped != 2 || mixedRes.Updated != 0 {
+		t.Fatalf("expected total=4, imported=2, skipped=2, updated=0, got %+v", mixedRes)
+	}
+
+	// 3. Upsert update test: user_a with new token and empty password (should keep old password)
+	updateRes, err := app.ImportCopyMangaAccounts([]contracts.CopyMangaAccountInput{
+		{Username: "user_a", Password: "", Token: "new_tok_a"},
+		{Username: "user_c", Password: "pwd_c", Token: "tok_c"},
+	})
+	if err != nil {
+		t.Fatalf("update import failed: %v", err)
+	}
+	if updateRes.Total != 2 || updateRes.Imported != 1 || updateRes.Updated != 1 || updateRes.Skipped != 0 {
+		t.Fatalf("expected total=2, imported=1, updated=1, skipped=0, got %+v", updateRes)
+	}
+
+	// Check that user_a still has decrypted password
+	accounts, err := app.GetCopyMangaAccounts()
+	if err != nil {
+		t.Fatalf("GetCopyMangaAccounts failed: %v", err)
+	}
+	var foundUserA *contracts.CopyMangaAccount
+	for i := range accounts {
+		if accounts[i].Username == "user_a" {
+			foundUserA = &accounts[i]
+			break
+		}
+	}
+	if foundUserA == nil {
+		t.Fatal("user_a not found in accounts")
+	}
+	if foundUserA.Password != "initial_pwd" {
+		t.Fatalf("expected user_a to retain initial_pwd, got %q", foundUserA.Password)
+	}
+	if foundUserA.Token != "new_tok_a" {
+		t.Fatalf("expected user_a to update to new_tok_a, got %q", foundUserA.Token)
+	}
+}

@@ -16,6 +16,8 @@ import type {
   CopyMangaLoginResult,
   DevInfo,
   CopyMangaAccount,
+  CopyMangaAccountImportResult,
+  CopyMangaAccountInput,
   FollowedUpdateCheckProgress,
   MangaLinkPreviewInput,
   MangaLinkPreviewItem,
@@ -375,6 +377,10 @@ export class WailsAdapter implements AppAdapter {
 
   async deleteCopyMangaAccount(username: string): Promise<void> {
     await App.DeleteCopyMangaAccount(username);
+  }
+
+  async importCopyMangaAccounts(accounts: CopyMangaAccountInput[]): Promise<CopyMangaAccountImportResult> {
+    return (await App.ImportCopyMangaAccounts(accounts as any)) as CopyMangaAccountImportResult;
   }
 
   subscribe(eventName: string, callback: (payload: unknown) => void) {

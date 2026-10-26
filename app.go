@@ -2003,3 +2003,72 @@ func (a *App) DeleteCopyMangaAccount(username string) error {
 	}
 	return a.store.DeleteCopyMangaAccount(strings.TrimSpace(username))
 }
+
+func (a *App) ImportCopyMangaAccounts(inputs []contracts.CopyMangaAccountInput) (contracts.CopyMangaAccountImportResult, error) {
+	result := contracts.CopyMangaAccountImportResult{
+		Total: len(inputs),
+	}
+	if err := a.ensureReady(); err != nil {
+		return result, err
+	}
+	if a.store == nil {
+		return result, fmt.Errorf("store not initialized")
+	}
+
+	existingAccounts, err := a.store.GetCopyMangaAccounts()
+	if err != nil {
+		return result, err
+	}
+	existingMap := make(map[string]contracts.CopyMangaAccount, len(existingAccounts))
+	for _, acc := range existingAccounts {
+		existingMap[acc.Username] = acc
+	}
+
+	machineID := crypto.GetMachineID()
+	now := time.Now().Unix()
+
+	for _, item := range inputs {
+		username := strings.TrimSpace(item.Username)
+		password := strings.TrimSpace(item.Password)
+		token := strings.TrimSpace(item.Token)
+
+		if username == "" {
+			result.Skipped++
+			continue
+		}
+
+		encPwd, _ := crypto.EncryptPassword(password, machineID, username)
+		acc := contracts.CopyMangaAccount{
+			Username:      username,
+			Password:      encPwd,
+			Token:         token,
+			LimitedAt:     0,
+			LastCheckedAt: now,
+		}
+
+		if old, exists := existingMap[username]; exists {
+			if password == "" {
+				acc.Password = old.Password
+			}
+			if token == "" {
+				acc.Token = old.Token
+			}
+			acc.LimitedAt = old.LimitedAt
+			if err := a.store.SaveCopyMangaAccount(acc); err != nil {
+				result.Skipped++
+				continue
+			}
+			existingMap[username] = acc
+			result.Updated++
+		} else {
+			if err := a.store.SaveCopyMangaAccount(acc); err != nil {
+				result.Skipped++
+				continue
+			}
+			existingMap[username] = acc
+			result.Imported++
+		}
+	}
+
+	return result, nil
+}

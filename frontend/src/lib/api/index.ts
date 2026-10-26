@@ -173,4 +173,7 @@ export const appAdapter: AppAdapter = {
   deleteCopyMangaAccount(username) {
     return currentAdapter().deleteCopyMangaAccount(username);
   },
+  importCopyMangaAccounts(accounts) {
+    return currentAdapter().importCopyMangaAccounts(accounts);
+  },
 };

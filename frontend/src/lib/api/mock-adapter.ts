@@ -16,6 +16,8 @@ import {
   type CopyMangaLoginResult,
   type DevInfo,
   type CopyMangaAccount,
+  type CopyMangaAccountImportResult,
+  type CopyMangaAccountInput,
   type FollowedUpdateCheckProgress,
   type DownloaderSettings,
   type MangaLinkPreviewInput,
@@ -867,6 +869,43 @@ export class MockAdapter implements AppAdapter {
   async deleteCopyMangaAccount(username: string): Promise<void> {
     const trimmedUser = username.trim();
     this.mockAccounts = this.mockAccounts.filter((a) => a.username !== trimmedUser);
+  }
+
+  async importCopyMangaAccounts(accounts: CopyMangaAccountInput[]): Promise<CopyMangaAccountImportResult> {
+    const result: CopyMangaAccountImportResult = {
+      total: accounts.length,
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+    };
+    for (const item of accounts) {
+      const u = item.username?.trim();
+      if (!u) {
+        result.skipped++;
+        continue;
+      }
+      const existingIdx = this.mockAccounts.findIndex((a) => a.username === u);
+      if (existingIdx >= 0) {
+        const old = this.mockAccounts[existingIdx];
+        this.mockAccounts[existingIdx] = {
+          ...old,
+          password: item.password?.trim() || old.password,
+          token: item.token?.trim() || old.token,
+          lastCheckedAt: Math.floor(Date.now() / 1000),
+        };
+        result.updated++;
+      } else {
+        this.mockAccounts.push({
+          username: u,
+          password: item.password?.trim() || "",
+          token: item.token?.trim() || "",
+          limitedAt: 0,
+          lastCheckedAt: Math.floor(Date.now() / 1000),
+        });
+        result.imported++;
+      }
+    }
+    return result;
   }
 
   private readSettings(): AppSettings {

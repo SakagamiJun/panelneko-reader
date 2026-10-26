@@ -16,6 +16,8 @@ import type {
   CopyMangaLoginResult,
   DevInfo,
   CopyMangaAccount,
+  CopyMangaAccountImportResult,
+  CopyMangaAccountInput,
   FollowedUpdateCheckProgress,
   MangaLinkPreviewInput,
   MangaLinkPreviewItem,
@@ -83,4 +85,5 @@ export interface AppAdapter {
   getCopyMangaAccounts(): Promise<CopyMangaAccount[]>;
   addCopyMangaAccount(username: string, password: string, token: string): Promise<void>;
   deleteCopyMangaAccount(username: string): Promise<void>;
+  importCopyMangaAccounts(accounts: CopyMangaAccountInput[]): Promise<CopyMangaAccountImportResult>;
 }

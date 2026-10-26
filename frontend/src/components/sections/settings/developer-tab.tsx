@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Check, ClipboardPaste, Copy, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import { appAdapter } from "@/lib/api";
+import { parseAccountsClipboardText } from "@/lib/account-parser";
 import type { CopyMangaAccount, DevInfo } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,18 @@ export function DeveloperTab() {
   const [newToken, setNewToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [actionNotice, setActionNotice] = useState("");
+  const [hasCopied, setHasCopied] = useState(false);
+
+  const copyTimeoutRef = useRef<number | null>(null);
+  const noticeTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) window.clearTimeout(copyTimeoutRef.current);
+      if (noticeTimeoutRef.current) window.clearTimeout(noticeTimeoutRef.current);
+    };
+  }, []);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -65,6 +78,60 @@ export function DeveloperTab() {
       await loadData();
     } catch (err) {
       console.error("Delete failed:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCopyAccounts = async () => {
+    setActionError("");
+    setActionNotice("");
+    try {
+      const exportData = accounts.map((a) => ({
+        username: a.username,
+        password: a.password || "",
+        token: a.token || "",
+      }));
+      await navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
+      setHasCopied(true);
+      setActionNotice(t("settings.devCopiedToClipboard", { count: accounts.length }));
+      if (copyTimeoutRef.current) window.clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = window.setTimeout(() => setHasCopied(false), 2000);
+      if (noticeTimeoutRef.current) window.clearTimeout(noticeTimeoutRef.current);
+      noticeTimeoutRef.current = window.setTimeout(() => setActionNotice(""), 4000);
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to copy to clipboard");
+    }
+  };
+
+  const handleImportAccounts = async () => {
+    setIsSubmitting(true);
+    setActionError("");
+    setActionNotice("");
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text || !text.trim()) {
+        setActionError(t("settings.devClipboardEmpty"));
+        return;
+      }
+      const parsed = parseAccountsClipboardText(text);
+      if (parsed.length === 0) {
+        setActionError(t("settings.devClipboardNoValidAccounts"));
+        return;
+      }
+      const res = await appAdapter.importCopyMangaAccounts(parsed);
+      await loadData();
+      setActionNotice(
+        t("settings.devImportSummary", {
+          imported: res.imported,
+          updated: res.updated,
+          skipped: res.skipped,
+        })
+      );
+      if (noticeTimeoutRef.current) window.clearTimeout(noticeTimeoutRef.current);
+      noticeTimeoutRef.current = window.setTimeout(() => setActionNotice(""), 5000);
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to import from clipboard");
     } finally {
       setIsSubmitting(false);
     }
@@ -125,6 +192,30 @@ export function DeveloperTab() {
                 variant="outline"
                 size="xs"
                 className="h-7 w-7 p-0 flex items-center justify-center cursor-pointer"
+                onClick={handleCopyAccounts}
+                disabled={isLoading || isSubmitting}
+                title={t("settings.devCopyToClipboard")}
+              >
+                {hasCopied ? (
+                  <Check className="h-3.5 w-3.5 text-success" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                className="h-7 w-7 p-0 flex items-center justify-center cursor-pointer"
+                onClick={handleImportAccounts}
+                disabled={isLoading || isSubmitting}
+                title={t("settings.devImportFromClipboard")}
+              >
+                <ClipboardPaste className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                className="h-7 w-7 p-0 flex items-center justify-center cursor-pointer"
                 onClick={loadData}
                 disabled={isLoading}
                 title={t("settings.refresh")}
@@ -142,6 +233,17 @@ export function DeveloperTab() {
               </Button>
             </div>
           </div>
+
+          {actionNotice && (
+            <div className="text-[11px] px-2.5 py-1 rounded bg-success/10 text-success border border-success/30 font-medium">
+              {actionNotice}
+            </div>
+          )}
+          {actionError && (
+            <div className="text-[11px] px-2.5 py-1 rounded bg-danger/10 text-danger border border-danger/30 font-medium">
+              {actionError}
+            </div>
+          )}
 
           {showAddForm && (
             <div className="p-3 bg-card border border-border/80 rounded-md space-y-2">

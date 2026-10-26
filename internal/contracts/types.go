@@ -323,6 +323,19 @@ type CopyMangaAccount struct {
 	Platform      string `json:"platform,omitempty"`
 }
 
+type CopyMangaAccountInput struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Token    string `json:"token"`
+}
+
+type CopyMangaAccountImportResult struct {
+	Total    int `json:"total"`
+	Imported int `json:"imported"`
+	Updated  int `json:"updated"`
+	Skipped  int `json:"skipped"`
+}
+
 type CopyMangaLoginResult struct {
 	Success   bool   `json:"success"`
 	Username  string `json:"username,omitempty"`

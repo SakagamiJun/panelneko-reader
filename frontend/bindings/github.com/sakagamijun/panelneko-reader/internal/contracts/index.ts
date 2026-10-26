@@ -19,6 +19,8 @@ export type {
     AppSettings,
     AppVersionInfo,
     CopyMangaAccount,
+    CopyMangaAccountImportResult,
+    CopyMangaAccountInput,
     CopyMangaLoginResult,
     CreateDownloadTaskInput,
     DevInfo,

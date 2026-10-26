@@ -109,6 +109,10 @@ export function GetThumbnailCacheSize(): $CancellablePromise<number> {
     return $Call.ByID(2849375100);
 }
 
+export function ImportCopyMangaAccounts(inputs: contracts$0.CopyMangaAccountInput[] | null): $CancellablePromise<contracts$0.CopyMangaAccountImportResult> {
+    return $Call.ByID(2133604867, inputs);
+}
+
 export function LinkMangaOnline(input: contracts$0.MangaOnlineLink): $CancellablePromise<void> {
     return $Call.ByID(3464908720, input);
 }

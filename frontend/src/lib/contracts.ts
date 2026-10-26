@@ -298,3 +298,16 @@ export interface CopyMangaAccount {
   platform?: string;
 }
 
+export interface CopyMangaAccountInput {
+  username: string;
+  password?: string;
+  token?: string;
+}
+
+export interface CopyMangaAccountImportResult {
+  total: number;
+  imported: number;
+  updated: number;
+  skipped: number;
+}
+
