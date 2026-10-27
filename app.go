@@ -424,6 +424,10 @@ func (a *App) bootstrap() error {
 	a.klz9 = klzClient
 	a.downloads = downloadMgr
 
+	if previousTasks, err := storeValue.GetDownloadTasks(); err == nil && len(previousTasks) > 0 {
+		a.autoLinkFromTasks(previousTasks)
+	}
+
 	if st.Downloader.AutoCheckComicUpdates {
 		go func() {
 			time.Sleep(2 * time.Second)
@@ -1160,7 +1164,14 @@ func (a *App) CreateDownloadTasks(inputs []contracts.CreateDownloadTaskInput) ([
 	if a.downloads == nil {
 		return nil, fmt.Errorf("download manager not initialized")
 	}
-	return a.downloads.CreateTasks(inputs)
+	tasks, err := a.downloads.CreateTasks(inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	a.autoLinkDownloadTasks(inputs)
+
+	return tasks, nil
 }
 
 func (a *App) PauseDownloadTask(taskID string) error {
@@ -1495,6 +1506,164 @@ func (a *App) UnlinkMangaOnline(mangaID string) error {
 		return err
 	}
 	return a.store.DeleteMangaOnlineLink(mangaID)
+}
+
+func (a *App) autoLinkDownloadTasks(inputs []contracts.CreateDownloadTaskInput) {
+	if len(inputs) == 0 || a.store == nil {
+		return
+	}
+
+	type mangaGroup struct {
+		source        string
+		comicID       string
+		title         string
+		targetSrcID   string
+		targetGroup   string
+		maxChapterNum float64
+		maxChapterTit string
+	}
+
+	grouped := make(map[string]*mangaGroup)
+	for _, in := range inputs {
+		src := strings.TrimSpace(in.Source)
+		mID := strings.TrimSpace(in.MangaID)
+		if src == "" || mID == "" {
+			continue
+		}
+		key := fmt.Sprintf("%s::%s", src, mID)
+		g, ok := grouped[key]
+		if !ok {
+			title := strings.TrimSpace(in.MangaTitle)
+			if title == "" {
+				title = mID
+			}
+			g = &mangaGroup{
+				source:        src,
+				comicID:       mID,
+				title:         title,
+				targetSrcID:   in.TargetSourceID,
+				maxChapterNum: -1,
+			}
+			grouped[key] = g
+		}
+
+		chNum := in.ChapterNumber
+		if chNum <= 0 {
+			if semanticNum := downloader.ExtractChapterNumber(in.ChapterTitle, -1); semanticNum >= 0 {
+				chNum = semanticNum
+			}
+		}
+
+		if chNum > g.maxChapterNum {
+			g.maxChapterNum = chNum
+			g.maxChapterTit = in.ChapterTitle
+		}
+		grp := strings.TrimSpace(in.ChapterGroup)
+		if g.targetGroup == "" && grp != "" && !strings.EqualFold(grp, "default") {
+			g.targetGroup = grp
+		}
+		if g.targetSrcID == "" && in.TargetSourceID != "" {
+			g.targetSrcID = in.TargetSourceID
+		}
+	}
+
+	var st contracts.AppSettings
+	if a.settings != nil {
+		st = a.settings.Get()
+	}
+	existingMangas, _ := a.store.ListLibraryManga()
+
+	for _, g := range grouped {
+		targetSrcID := g.targetSrcID
+		if strings.TrimSpace(targetSrcID) == "" {
+			targetSrcID = st.Downloader.TargetSourceID
+		}
+		if targetSrcID == "" && len(st.LibrarySources) > 0 {
+			for _, src := range st.LibrarySources {
+				if src.Enabled {
+					targetSrcID = src.ID
+					break
+				}
+			}
+			if targetSrcID == "" {
+				targetSrcID = st.LibrarySources[0].ID
+			}
+		}
+		if targetSrcID == "" {
+			targetSrcID = "default"
+		}
+
+		safeManga := downloader.SanitizeFilename(g.title)
+		localMangaID := library.EncodeMangaIDWithSource(targetSrcID, safeManga)
+
+		for _, m := range existingMangas {
+			if (m.SourceID == targetSrcID || targetSrcID == "default") &&
+				(strings.EqualFold(m.Title, g.title) || strings.EqualFold(m.RelativePath, safeManga)) {
+				localMangaID = m.ID
+				break
+			}
+		}
+
+		existingLink, found, err := a.store.GetMangaOnlineLink(localMangaID)
+		if err == nil && found {
+			updated := false
+			if existingLink.OnlineSource == "" || existingLink.OnlineComicID == "" {
+				existingLink.OnlineSource = g.source
+				existingLink.OnlineComicID = g.comicID
+				existingLink.OnlineTitle = g.title
+				updated = true
+			}
+			if g.maxChapterNum > existingLink.BaselineChapterNumber {
+				existingLink.BaselineChapterNumber = g.maxChapterNum
+				existingLink.BaselineChapterTitle = g.maxChapterTit
+				updated = true
+			}
+			if existingLink.TargetGroup == "" && g.targetGroup != "" {
+				existingLink.TargetGroup = g.targetGroup
+				updated = true
+			}
+			if updated {
+				_ = a.store.SaveMangaOnlineLink(existingLink)
+			}
+		} else {
+			newLink := contracts.MangaOnlineLink{
+				MangaID:               localMangaID,
+				OnlineSource:          g.source,
+				OnlineComicID:         g.comicID,
+				OnlineTitle:           g.title,
+				TargetGroup:           g.targetGroup,
+				BaselineChapterNumber: g.maxChapterNum,
+				BaselineChapterTitle:  g.maxChapterTit,
+				AutoFollow:            true,
+				FollowPolicy:          "latest_only",
+			}
+			if err := a.store.SaveMangaOnlineLink(newLink); err != nil {
+				logger.Get().Warn("Failed to auto-link downloaded manga %s: %v", localMangaID, err)
+			} else {
+				logger.Get().Info("Auto-linked downloaded manga %s (%s) to %s/%s", localMangaID, g.title, g.source, g.comicID)
+			}
+		}
+	}
+}
+
+func (a *App) autoLinkFromTasks(tasks []contracts.DownloadTask) {
+	if len(tasks) == 0 {
+		return
+	}
+	inputs := make([]contracts.CreateDownloadTaskInput, len(tasks))
+	for i, t := range tasks {
+		inputs[i] = contracts.CreateDownloadTaskInput{
+			Source:         t.Source,
+			MangaID:        t.MangaID,
+			MangaTitle:     t.MangaTitle,
+			ChapterID:      t.ChapterID,
+			ChapterTitle:   t.ChapterTitle,
+			ChapterNumber:  t.ChapterNumber,
+			ChapterGroup:   t.ChapterGroup,
+			TargetSourceID: t.TargetSourceID,
+		}
+	}
+	a.autoLinkDownloadTasks(inputs)
 }
 
 func (a *App) CheckMangaUpdates(mangaID string) (int, error) {

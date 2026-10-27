@@ -601,6 +601,22 @@ export class MockAdapter implements AppAdapter {
       }
     }
 
+    for (const inTask of inputs) {
+      const localId = inTask.mangaID;
+      if (!this.mockLinks.has(localId)) {
+        this.mockLinks.set(localId, {
+          mangaId: localId,
+          onlineSource: inTask.source,
+          onlineComicId: inTask.mangaID,
+          onlineTitle: inTask.mangaTitle,
+          autoFollow: true,
+          followPolicy: "latest_only",
+          baselineChapterNumber: inTask.chapterNumber,
+          baselineChapterTitle: inTask.chapterTitle,
+        });
+      }
+    }
+
     this.emit(EVENTS.DOWNLOAD_TASKS_UPDATED, this.mockTasks);
     this.emit(EVENTS.DOWNLOAD_PROGRESS, this.getDownloadProgressSync());
     return created;

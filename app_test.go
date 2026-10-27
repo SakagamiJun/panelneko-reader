@@ -1000,6 +1000,7 @@ func TestCheckMangaUpdatesGroupAware(t *testing.T) {
 	serverHost := strings.TrimPrefix(server.URL, "http://")
 	app.copyManga = copymanga.NewClient(serverHost, "", 5)
 	app.klz9 = klz9.NewClient(app.store, "https://klz9.com", 5)
+	app.klz9 = klz9.NewClient(app.store, "https://klz9.com", 5)
 	app.downloads = downloader.NewManager(app.store, app.settings, app.copyManga, app.klz9)
 	defer app.downloads.Close()
 
@@ -1227,5 +1228,92 @@ func TestImportCopyMangaAccountsAdversarial(t *testing.T) {
 	}
 	if foundUserA.Token != "new_tok_a" {
 		t.Fatalf("expected user_a to update to new_tok_a, got %q", foundUserA.Token)
+	}
+}
+
+func TestCreateDownloadTasksAutoLink(t *testing.T) {
+	app, cleanup := newAssetTestApp(t, t.TempDir())
+	defer cleanup()
+
+	app.klz9 = klz9.NewClient(app.store, "https://klz9.com", 5)
+	app.downloads = downloader.NewManager(app.store, app.settings, app.copyManga, app.klz9)
+	defer app.downloads.Close()
+
+	inputs := []contracts.CreateDownloadTaskInput{
+		{
+			Source:         klz9.SiteName,
+			MangaID:        "sore-wa-furitsumoru-yuki-no-youna",
+			MangaTitle:     "SORE WA, FURITSUMORU YUKI NO YOUNA",
+			ChapterID:      "436091",
+			ChapterTitle:   "Chapter 5.1",
+			ChapterNumber:  5.1,
+			ChapterGroup:   "default",
+			TargetSourceID: "default",
+		},
+		{
+			Source:         klz9.SiteName,
+			MangaID:        "sore-wa-furitsumoru-yuki-no-youna",
+			MangaTitle:     "SORE WA, FURITSUMORU YUKI NO YOUNA",
+			ChapterID:      "436090",
+			ChapterTitle:   "Chapter 4.2",
+			ChapterNumber:  4.2,
+			ChapterGroup:   "default",
+			TargetSourceID: "default",
+		},
+	}
+
+	created, err := app.CreateDownloadTasks(inputs)
+	if err != nil {
+		t.Fatalf("CreateDownloadTasks failed: %v", err)
+	}
+	if len(created) != 2 {
+		t.Fatalf("expected 2 tasks created, got %d", len(created))
+	}
+
+	// Verify online link was automatically created
+	expectedMangaID := library.EncodeMangaIDWithSource("default", "SORE WA, FURITSUMORU YUKI NO YOUNA")
+	link, found, err := app.store.GetMangaOnlineLink(expectedMangaID)
+	if err != nil {
+		t.Fatalf("GetMangaOnlineLink failed: %v", err)
+	}
+	if !found {
+		t.Fatalf("expected manga link to be auto-created for %s", expectedMangaID)
+	}
+	if link.OnlineSource != klz9.SiteName || link.OnlineComicID != "sore-wa-furitsumoru-yuki-no-youna" {
+		t.Errorf("unexpected online source/id: %s / %s", link.OnlineSource, link.OnlineComicID)
+	}
+	if !link.AutoFollow {
+		t.Errorf("expected AutoFollow to be true by default")
+	}
+	if link.FollowPolicy != "latest_only" {
+		t.Errorf("expected follow policy latest_only, got %s", link.FollowPolicy)
+	}
+	if link.BaselineChapterNumber != 5.1 {
+		t.Errorf("expected baseline chapter number 5.1, got %v", link.BaselineChapterNumber)
+	}
+
+	// Downloading higher chapter updates baseline
+	higherInputs := []contracts.CreateDownloadTaskInput{
+		{
+			Source:         klz9.SiteName,
+			MangaID:        "sore-wa-furitsumoru-yuki-no-youna",
+			MangaTitle:     "SORE WA, FURITSUMORU YUKI NO YOUNA",
+			ChapterID:      "436092",
+			ChapterTitle:   "Chapter 6.0",
+			ChapterNumber:  6.0,
+			ChapterGroup:   "default",
+			TargetSourceID: "default",
+		},
+	}
+	if _, err := app.CreateDownloadTasks(higherInputs); err != nil {
+		t.Fatalf("CreateDownloadTasks higher failed: %v", err)
+	}
+
+	linkUpdated, found, err := app.store.GetMangaOnlineLink(expectedMangaID)
+	if err != nil || !found {
+		t.Fatalf("GetMangaOnlineLink after update failed: %v", err)
+	}
+	if linkUpdated.BaselineChapterNumber != 6.0 {
+		t.Errorf("expected updated baseline chapter number 6.0, got %v", linkUpdated.BaselineChapterNumber)
 	}
 }

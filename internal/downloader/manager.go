@@ -375,8 +375,14 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 	}
 
 	if task.Source == copymanga.SiteName {
+		if m.copyManga == nil {
+			return fmt.Errorf("copymanga client not initialized")
+		}
 		pageURLs, err = m.copyManga.GetChapterImageURLs(ctx, task.MangaID, task.ChapterID)
 	} else if task.Source == klz9.SiteName {
+		if m.klz9 == nil {
+			return fmt.Errorf("klz9 client not initialized")
+		}
 		pageURLs, err = m.klz9.GetChapterPages(ctx, task.ChapterID)
 	} else {
 		return fmt.Errorf("unknown downloader source: %s", task.Source)

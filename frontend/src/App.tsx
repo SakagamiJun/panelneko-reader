@@ -145,6 +145,7 @@ export default function App() {
     });
     const offLibrary = appAdapter.subscribe(EVENTS.LIBRARY_UPDATED, () => {
       void queryClient.invalidateQueries({ queryKey: ["library"] });
+      void queryClient.invalidateQueries({ queryKey: ["mangaOnlineLinks"] });
     });
 
     const offFilesDropped = appAdapter.subscribe(EVENTS.FILES_DROPPED, handleIncomingPaths);
@@ -859,6 +860,8 @@ export default function App() {
         onDownloadStarted={() => {
           void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
           void appAdapter.getDownloadProgress().then(setDownloadProgress).catch(() => {});
+          void onlineLinksQuery.refetch();
+          void queryClient.invalidateQueries({ queryKey: ["mangaOnlineLinks"] });
         }}
       />
 
