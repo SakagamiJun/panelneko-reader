@@ -479,6 +479,11 @@ func (c *Client) GetMangaChapters(ctx context.Context, slug string) ([]contracts
 }
 
 func (c *Client) GetChapterPages(ctx context.Context, chapterID string) ([]string, error) {
+	chapterID = strings.TrimSpace(chapterID)
+	if chapterID == "" {
+		return nil, fmt.Errorf("empty chapter id")
+	}
+
 	profile, err := c.GetProfile(ctx, false)
 	if err != nil {
 		return nil, err
@@ -490,23 +495,31 @@ func (c *Client) GetChapterPages(ctx context.Context, chapterID string) ([]strin
 		return nil, err
 	}
 
-	pagesRaw, _ := payload["pages"].([]any)
-	pages := make([]string, 0, len(pagesRaw))
-	ignoreMap := make(map[string]bool)
+	rawURLs := extractPageURLsFromPayload(payload)
+	if len(rawURLs) == 0 {
+		return nil, fmt.Errorf("no page urls found for chapter %s", chapterID)
+	}
+
+	ignoreMap := make(map[string]bool, len(profile.IgnorePageURLs))
 	for _, ign := range profile.IgnorePageURLs {
 		ignoreMap[ign] = true
 	}
 
-	for _, raw := range pagesRaw {
-		pageURL, ok := raw.(string)
-		if !ok || pageURL == "" {
-			continue
-		}
-		if ignoreMap[pageURL] {
+	pages := make([]string, 0, len(rawURLs))
+	for _, rawURL := range rawURLs {
+		if rawURL == "" || ignoreMap[rawURL] {
 			continue
 		}
 
+		pageURL := rawURL
+		if strings.HasPrefix(pageURL, "http://") {
+			pageURL = "https://" + strings.TrimPrefix(pageURL, "http://")
+		}
+
 		for orig, target := range profile.ImageHostRewrite {
+			if orig == "http://" {
+				continue
+			}
 			if strings.Contains(pageURL, orig) {
 				pageURL = strings.ReplaceAll(pageURL, orig, target)
 			}
@@ -517,11 +530,92 @@ func (c *Client) GetChapterPages(ctx context.Context, chapterID string) ([]strin
 	return pages, nil
 }
 
+func extractPageURLsFromPayload(payload map[string]any) []string {
+	if payload == nil {
+		return nil
+	}
+
+	// 1. Try "pages" array
+	if pagesRaw, ok := payload["pages"].([]any); ok && len(pagesRaw) > 0 {
+		var list []string
+		for _, raw := range pagesRaw {
+			if s, ok := raw.(string); ok && strings.TrimSpace(s) != "" {
+				list = append(list, strings.TrimSpace(s))
+			}
+		}
+		if len(list) > 0 {
+			return list
+		}
+	}
+
+	// 2. Try "content" array
+	if contentRaw, ok := payload["content"].([]any); ok && len(contentRaw) > 0 {
+		var list []string
+		for _, raw := range contentRaw {
+			if s, ok := raw.(string); ok && strings.TrimSpace(s) != "" {
+				list = append(list, strings.TrimSpace(s))
+			}
+		}
+		if len(list) > 0 {
+			return list
+		}
+	}
+
+	// 3. Try "content" string (can be newline-delimited URLs or JSON string)
+	contentStr := getString(payload, "content")
+	if contentStr != "" {
+		trimmed := strings.TrimSpace(contentStr)
+		if strings.HasPrefix(trimmed, "[") {
+			var parsed []string
+			if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil && len(parsed) > 0 {
+				return parsed
+			}
+		}
+
+		lines := strings.FieldsFunc(contentStr, func(r rune) bool {
+			return r == '\n' || r == '\r'
+		})
+		var list []string
+		for _, line := range lines {
+			u := strings.TrimSpace(line)
+			if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+				list = append(list, u)
+			}
+		}
+		if len(list) > 0 {
+			return list
+		}
+	}
+
+	return nil
+}
+
 func getString(m map[string]any, keys ...string) string {
 	for _, k := range keys {
 		if val, ok := m[k]; ok && val != nil {
-			if s, ok := val.(string); ok && strings.TrimSpace(s) != "" {
-				return strings.TrimSpace(s)
+			switch v := val.(type) {
+			case string:
+				if s := strings.TrimSpace(v); s != "" {
+					return s
+				}
+			case float64:
+				if v == float64(int64(v)) {
+					return strconv.FormatInt(int64(v), 10)
+				}
+				return strconv.FormatFloat(v, 'f', -1, 64)
+			case float32:
+				if v == float32(int64(v)) {
+					return strconv.FormatInt(int64(v), 10)
+				}
+				return strconv.FormatFloat(float64(v), 'f', -1, 32)
+			case int:
+				return strconv.Itoa(v)
+			case int64:
+				return strconv.FormatInt(v, 10)
+			case json.Number:
+				if s := strings.TrimSpace(v.String()); s != "" {
+					return s
+				}
 			}
 		}
 	}
@@ -540,8 +634,12 @@ func getFloat(m map[string]any, keys ...string) float64 {
 				return float64(v)
 			case int64:
 				return float64(v)
+			case json.Number:
+				if f, err := v.Float64(); err == nil {
+					return f
+				}
 			case string:
-				if f, err := strconv.ParseFloat(v, 64); err == nil {
+				if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
 					return f
 				}
 			}

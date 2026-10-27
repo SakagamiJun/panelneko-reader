@@ -630,6 +630,13 @@ func (s *SQLiteStore) UpdateDownloadTaskStatus(id string, status contracts.Downl
 	return err
 }
 
+func (s *SQLiteStore) UpdateDownloadTaskChapterID(id string, chapterID string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	const query = `UPDATE download_tasks SET chapter_id = ?, updated_at = ? WHERE id = ?`
+	_, err := s.db.Exec(query, chapterID, now, id)
+	return err
+}
+
 func (s *SQLiteStore) UpdateDownloadTaskProgress(id string, downloadedPages int, totalPages int, speed string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	const query = `UPDATE download_tasks SET downloaded_pages = ?, total_pages = ?, speed = ?, updated_at = ? WHERE id = ?`

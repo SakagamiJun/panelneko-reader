@@ -362,6 +362,18 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 
 	var pageURLs []string
 
+	if task.Source == klz9.SiteName && task.ChapterID == "" && task.MangaID != "" {
+		if chs, chErr := m.klz9.GetMangaChapters(ctx, task.MangaID); chErr == nil {
+			for _, ch := range chs {
+				if ch.Number == task.ChapterNumber || (task.ChapterTitle != "" && ch.Title == task.ChapterTitle) {
+					task.ChapterID = ch.ID
+					_ = m.store.UpdateDownloadTaskChapterID(task.ID, ch.ID)
+					break
+				}
+			}
+		}
+	}
+
 	if task.Source == copymanga.SiteName {
 		pageURLs, err = m.copyManga.GetChapterImageURLs(ctx, task.MangaID, task.ChapterID)
 	} else if task.Source == klz9.SiteName {
