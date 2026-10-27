@@ -630,3 +630,40 @@ func TestCopyMangaGetMangaChaptersWithOrdered(t *testing.T) {
 		t.Errorf("ch-fallback: expected Number=4.0 Ordered=0, got Number=%f Ordered=%d", chapters[3].Number, chapters[3].Ordered)
 	}
 }
+
+func TestGenerateNaturalIDAndPassword(t *testing.T) {
+	seenIDs := make(map[string]struct{}, 2000)
+
+	for i := 0; i < 2000; i++ {
+		id := generateNaturalID()
+		if len(id) < 6 || len(id) > 20 {
+			t.Fatalf("unexpected ID length: %d for ID: %s", len(id), id)
+		}
+		// Must start with letter
+		if id[0] < 'a' || id[0] > 'z' {
+			t.Fatalf("ID must start with a lowercase letter, got: %s", id)
+		}
+		// Strict check: pure lowercase alphanumeric only, NO symbols like _ -
+		for _, ch := range id {
+			if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+				t.Fatalf("ID contains illegal character %q in %s", ch, id)
+			}
+		}
+		seenIDs[id] = struct{}{}
+
+		pwd := generateRandomPassword()
+		if len(pwd) != 12 {
+			t.Fatalf("unexpected password length: %d", len(pwd))
+		}
+		for _, ch := range pwd {
+			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) {
+				t.Fatalf("password contains illegal character %q in %s", ch, pwd)
+			}
+		}
+	}
+
+	// In 2000 samples, collision count should be virtually zero
+	if len(seenIDs) < 1995 {
+		t.Fatalf("high collision rate: got %d unique IDs out of 2000", len(seenIDs))
+	}
+}

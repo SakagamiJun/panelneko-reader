@@ -948,11 +948,49 @@ func (c *Client) loginWithAccount(ctx context.Context, username, password string
 	return loginData.Token, nil
 }
 
-func (c *Client) registerAndSaveNewAccount(ctx context.Context) (contracts.CopyMangaAccount, error) {
-	randNum := rand.Intn(90000) + 10000
-	username := fmt.Sprintf("pneko%d", randNum)
-	password := fmt.Sprintf("pwd%d", randNum)
+var (
+	idBaseWords = []string{
+		"sakura", "miku", "kuro", "shiro", "yuki", "haru", "rin", "sora", "ren",
+		"luna", "kaede", "kotori", "asuka", "natsuki", "ayumu", "kaito", "akira",
+		"hinata", "kanna", "subaru", "chiyo", "touma", "shiki", "reiko", "shadow",
+		"nova", "frost", "pixel", "cloud", "amber", "echo", "silver", "momo",
+		"kana", "mio", "tsumugi", "nanami", "hikari", "ayaka", "chika",
+	}
+	idModifiers = []string{
+		"cat", "neko", "fox", "sky", "wind", "moon", "star", "tea", "rain", "leaf",
+		"bird", "box", "wolf", "dream", "night",
+	}
+)
 
+func generateNaturalID() string {
+	mode := rand.Intn(100)
+	base := idBaseWords[rand.Intn(len(idBaseWords))]
+
+	switch {
+	case mode < 45: // 双词连写 + 2-3位数字: e.g. shironeko728
+		mod := idModifiers[rand.Intn(len(idModifiers))]
+		num := rand.Intn(900) + 100
+		return fmt.Sprintf("%s%s%d", base, mod, num)
+	case mode < 80: // 单词 + 5-6位随机数字: e.g. haruto829104
+		num := rand.Intn(900000) + 100000
+		return fmt.Sprintf("%s%d", base, num)
+	default: // 年份 + 1-2位数字: e.g. miku20038
+		year := rand.Intn(10) + 1998 // 1998 - 2007
+		tail := rand.Intn(90) + 10
+		return fmt.Sprintf("%s%d%d", base, year, tail)
+	}
+}
+
+func generateRandomPassword() string {
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, 12)
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(b)
+}
+
+func (c *Client) registerAndSaveNewAccount(ctx context.Context) (contracts.CopyMangaAccount, error) {
 	scheme := "https"
 	domain := c.getDomain()
 	if strings.HasPrefix(domain, "127.0.0.1") || strings.HasPrefix(domain, "localhost") {
@@ -960,42 +998,61 @@ func (c *Client) registerAndSaveNewAccount(ctx context.Context) (contracts.CopyM
 	}
 	regURL := fmt.Sprintf("%s://%s/api/v3/register", scheme, domain)
 
-	form := url.Values{}
-	form.Set("username", username)
-	form.Set("password", password)
-	form.Set("source", "freeSite")
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		select {
+		case <-ctx.Done():
+			return contracts.CopyMangaAccount{}, ctx.Err()
+		default:
+		}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, regURL, strings.NewReader(form.Encode()))
-	if err != nil {
-		return contracts.CopyMangaAccount{}, err
+		username := generateNaturalID()
+		password := generateRandomPassword()
+
+		form := url.Values{}
+		form.Set("username", username)
+		form.Set("password", password)
+		form.Set("source", "freeSite")
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, regURL, strings.NewReader(form.Encode()))
+		if err != nil {
+			return contracts.CopyMangaAccount{}, err
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		c.defaultHeaders(req, "")
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		_ = resp.Body.Close()
+
+		token, err := c.loginWithAccount(ctx, username, password)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		acc := contracts.CopyMangaAccount{
+			Username:      username,
+			Password:      password,
+			Token:         token,
+			LimitedAt:     0,
+			LastCheckedAt: time.Now().Unix(),
+		}
+
+		if c.store != nil {
+			_ = c.store.SaveCopyMangaAccount(acc)
+		}
+
+		return acc, nil
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	c.defaultHeaders(req, "")
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return contracts.CopyMangaAccount{}, err
+	if lastErr != nil {
+		return contracts.CopyMangaAccount{}, fmt.Errorf("register account failed after 3 attempts: %w", lastErr)
 	}
-	_ = resp.Body.Close()
-
-	token, err := c.loginWithAccount(ctx, username, password)
-	if err != nil {
-		return contracts.CopyMangaAccount{}, err
-	}
-
-	acc := contracts.CopyMangaAccount{
-		Username:      username,
-		Password:      password,
-		Token:         token,
-		LimitedAt:     0,
-		LastCheckedAt: time.Now().Unix(),
-	}
-
-	if c.store != nil {
-		_ = c.store.SaveCopyMangaAccount(acc)
-	}
-
-	return acc, nil
+	return contracts.CopyMangaAccount{}, fmt.Errorf("register account failed after 3 attempts")
 }
 
 // RegisterTemporaryAccount allows generating a guest account if risk control 210 occurs
