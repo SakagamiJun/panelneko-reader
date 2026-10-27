@@ -60,7 +60,7 @@ export function AboutTab({ form, updateField, version, commit, onDevModeUnlocked
               src="/appicon.png"
               alt="PanelNeko Reader"
               onClick={handleIconClick}
-              className="h-11 w-11 rounded-xl shadow-xs object-cover border border-border/40 shrink-0 select-none cursor-pointer active:scale-95 transition-transform"
+              className="h-11 w-11 rounded-xl shadow-xs object-cover border border-border/40 shrink-0 select-none cursor-default"
             />
             <div>
               <h4 className="text-base font-bold text-foreground">
