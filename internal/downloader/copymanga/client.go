@@ -839,7 +839,13 @@ func (c *Client) BuildComicInfoXML(opts ComicInfoOptions) ([]byte, error) {
 }
 
 // StreamSaveCBZ saves a list of image byte-producers directly into a .cbz archive atomically
-func StreamSaveCBZ(finalFilePath string, xmlMetadata []byte, totalPages int, fetchImage func(ctx context.Context, pageIndex int, writer io.Writer) error) error {
+func StreamSaveCBZ(
+	finalFilePath string,
+	xmlMetadata []byte,
+	totalPages int,
+	fetchImage func(ctx context.Context, pageIndex int, writer io.Writer) error,
+	getPageFilename ...func(pageIndex int) string,
+) error {
 	dir := filepath.Dir(finalFilePath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
@@ -872,6 +878,11 @@ func StreamSaveCBZ(finalFilePath string, xmlMetadata []byte, totalPages int, fet
 	// Write images sequentially into zip
 	for i := 0; i < totalPages; i++ {
 		entryName := fmt.Sprintf("%03d.webp", i+1)
+		if len(getPageFilename) > 0 && getPageFilename[0] != nil {
+			if customName := getPageFilename[0](i); customName != "" {
+				entryName = customName
+			}
+		}
 		entryWriter, err := zipWriter.Create(entryName)
 		if err != nil {
 			return fmt.Errorf("create zip entry %s: %w", entryName, err)

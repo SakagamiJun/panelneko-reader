@@ -481,14 +481,19 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			imgFile := filepath.Join(finalFilePath, fmt.Sprintf("%03d.webp", i+1))
 			// Resume already downloaded valid pages in folder mode
-			if fi, err := os.Stat(imgFile); err == nil && fi.Size() > 0 {
+			if _, exists := findExistingPageFile(finalFilePath, i+1); exists {
 				curr := int(downloadedCount.Add(1))
 				_ = m.store.UpdateDownloadTaskProgress(task.ID, curr, totalPages, "")
 				m.emitProgress()
 				continue
 			}
+
+			ext := DetectExtensionFromURL(pageURLs[i])
+			if ext == "" {
+				ext = ".webp"
+			}
+			imgFile := filepath.Join(finalFilePath, FormatPageFilename(i+1, ext))
 
 			f, fErr := os.Create(imgFile)
 			if fErr != nil {
@@ -502,7 +507,18 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 			}
 		}
 	} else {
-		if err := copymanga.StreamSaveCBZ(finalFilePath, xmlMetadata, totalPages, fetchImage); err != nil {
+		pageNamer := func(pageIndex int) string {
+			var u string
+			if pageIndex >= 0 && pageIndex < len(pageURLs) {
+				u = pageURLs[pageIndex]
+			}
+			ext := DetectExtensionFromURL(u)
+			if ext == "" {
+				ext = ".webp"
+			}
+			return FormatPageFilename(pageIndex+1, ext)
+		}
+		if err := copymanga.StreamSaveCBZ(finalFilePath, xmlMetadata, totalPages, fetchImage, pageNamer); err != nil {
 			return err
 		}
 	}
@@ -515,6 +531,17 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 	}
 
 	return nil
+}
+
+func findExistingPageFile(chapterDir string, pageNum int) (string, bool) {
+	prefix := fmt.Sprintf("%03d", pageNum)
+	for _, ext := range []string{".webp", ".jpg", ".png", ".jpeg", ".gif", ".avif"} {
+		cand := filepath.Join(chapterDir, prefix+ext)
+		if fi, err := os.Stat(cand); err == nil && fi.Size() > 0 {
+			return cand, true
+		}
+	}
+	return "", false
 }
 
 type countingWriter struct {

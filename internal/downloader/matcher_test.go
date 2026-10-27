@@ -156,3 +156,75 @@ func TestMatchChapterTitle_Adversarial(t *testing.T) {
 		t.Errorf("expected false when local targets are empty")
 	}
 }
+
+func TestDetectExtensionFromURL_Adversarial(t *testing.T) {
+	// Adversarial boundaries: empty, whitespace, malformed URLs
+	if ext := DetectExtensionFromURL(""); ext != "" {
+		t.Errorf("expected empty for empty string, got %q", ext)
+	}
+	if ext := DetectExtensionFromURL("   \n\t  "); ext != "" {
+		t.Errorf("expected empty for whitespace, got %q", ext)
+	}
+	if ext := DetectExtensionFromURL("https://example.com/path/"); ext != "" {
+		t.Errorf("expected empty for trailing slash, got %q", ext)
+	}
+	if ext := DetectExtensionFromURL("https://example.com/no-ext"); ext != "" {
+		t.Errorf("expected empty for no extension, got %q", ext)
+	}
+	if ext := DetectExtensionFromURL("https://example.com/file.pdf"); ext != "" {
+		t.Errorf("expected empty for non-image extension, got %q", ext)
+	}
+
+	// Query string and fragment masking
+	if ext := DetectExtensionFromURL("https://example.com/001.c1500x.webp?fake=.jpg#fake=.png"); ext != ".webp" {
+		t.Errorf("expected .webp, got %q", ext)
+	}
+	if ext := DetectExtensionFromURL("https://example.com/img_01.JPEG?v=2"); ext != ".jpg" {
+		t.Errorf("expected .jpg for normalized .JPEG, got %q", ext)
+	}
+	if ext := DetectExtensionFromURL("https://example.com/photo.PNG"); ext != ".png" {
+		t.Errorf("expected .png for .PNG, got %q", ext)
+	}
+}
+
+func TestSniffImageExtension_Adversarial(t *testing.T) {
+	// Adversarial slices: nil, 0-byte, 1-byte, 2-byte truncated (must not panic)
+	if ext := SniffImageExtension(nil); ext != "" {
+		t.Errorf("expected empty for nil, got %q", ext)
+	}
+	if ext := SniffImageExtension([]byte{}); ext != "" {
+		t.Errorf("expected empty for empty slice, got %q", ext)
+	}
+	if ext := SniffImageExtension([]byte{0xFF}); ext != "" {
+		t.Errorf("expected empty for 1-byte slice, got %q", ext)
+	}
+	if ext := SniffImageExtension([]byte{0xFF, 0xD8}); ext != "" {
+		t.Errorf("expected empty for incomplete JPEG header, got %q", ext)
+	}
+	if ext := SniffImageExtension([]byte("RIFF1234")); ext != "" {
+		t.Errorf("expected empty for incomplete WebP header, got %q", ext)
+	}
+
+	// Valid headers
+	if ext := SniffImageExtension([]byte{0xFF, 0xD8, 0xFF, 0xE0}); ext != ".jpg" {
+		t.Errorf("expected .jpg, got %q", ext)
+	}
+	if ext := SniffImageExtension([]byte("\x89PNG\r\n\x1a\n\x00\x00")); ext != ".png" {
+		t.Errorf("expected .png, got %q", ext)
+	}
+	if ext := SniffImageExtension([]byte("RIFF\x00\x00\x00\x00WEBPVP8 ")); ext != ".webp" {
+		t.Errorf("expected .webp, got %q", ext)
+	}
+}
+
+func TestFormatPageFilename_Adversarial(t *testing.T) {
+	if got := FormatPageFilename(1, ".jpg"); got != "001.jpg" {
+		t.Errorf("expected 001.jpg, got %q", got)
+	}
+	if got := FormatPageFilename(25, "png"); got != "025.png" {
+		t.Errorf("expected 025.png for dotless extension, got %q", got)
+	}
+	if got := FormatPageFilename(3, ""); got != "003.webp" {
+		t.Errorf("expected 003.webp fallback for empty extension, got %q", got)
+	}
+}

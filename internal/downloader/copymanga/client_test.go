@@ -104,6 +104,41 @@ func TestStreamSaveCBZWithComicInfo(t *testing.T) {
 	}
 }
 
+func TestStreamSaveCBZWithCustomPageNamer(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "cbz-namer-test-*")
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cbzPath := filepath.Join(tmpDir, "custom_ext.cbz")
+	pageNamer := func(idx int) string {
+		exts := []string{".jpg", ".png"}
+		return fmt.Sprintf("%03d%s", idx+1, exts[idx%len(exts)])
+	}
+
+	err = StreamSaveCBZ(cbzPath, nil, 2, func(ctx context.Context, pageIndex int, writer io.Writer) error {
+		_, wErr := writer.Write([]byte("img"))
+		return wErr
+	}, pageNamer)
+	if err != nil {
+		t.Fatalf("StreamSaveCBZ failed: %v", err)
+	}
+
+	zr, err := zip.OpenReader(cbzPath)
+	if err != nil {
+		t.Fatalf("open cbz: %v", err)
+	}
+	defer zr.Close()
+
+	if len(zr.File) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(zr.File))
+	}
+	if zr.File[0].Name != "001.jpg" || zr.File[1].Name != "002.png" {
+		t.Fatalf("unexpected entry names: %s, %s", zr.File[0].Name, zr.File[1].Name)
+	}
+}
+
 func TestGetChapterImageURLsHighResReplacement(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/v3/comic/one-piece/chapter2/ch1-uuid") {

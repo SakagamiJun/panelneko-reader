@@ -1,8 +1,11 @@
 package downloader
 
 import (
+	"bytes"
 	"fmt"
 	"math"
+	"net/url"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -63,6 +66,87 @@ func FormatChapterFilename(chNum float64, safeTitle string, ext string) string {
 		ext = "." + ext
 	}
 	return fmt.Sprintf("%s - %s%s", numStr, safeTitle, ext)
+}
+
+var recognizedImageExts = map[string]string{
+	".jpg":  ".jpg",
+	".jpeg": ".jpg",
+	".png":  ".png",
+	".webp": ".webp",
+	".gif":  ".gif",
+	".avif": ".avif",
+}
+
+// DetectExtensionFromURL extracts a recognized normalized image extension from an image URL.
+// Returns ".jpg", ".png", ".webp", ".gif", ".avif", or "" if unrecognized.
+func DetectExtensionFromURL(rawURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return ""
+	}
+	u, err := url.Parse(rawURL)
+	var ext string
+	if err == nil {
+		ext = strings.ToLower(path.Ext(u.Path))
+	} else {
+		cleanURL := strings.SplitN(rawURL, "?", 2)[0]
+		cleanURL = strings.SplitN(cleanURL, "#", 2)[0]
+		ext = strings.ToLower(path.Ext(cleanURL))
+	}
+	if normExt, ok := recognizedImageExts[ext]; ok {
+		return normExt
+	}
+	return ""
+}
+
+// SniffImageExtension detects the image format from the magic bytes of an image payload.
+// Returns ".jpg", ".png", ".webp", ".gif", ".avif", or "" if unrecognized.
+func SniffImageExtension(b []byte) string {
+	if len(b) >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF {
+		return ".jpg"
+	}
+	if len(b) >= 8 && bytes.Equal(b[:8], []byte("\x89PNG\r\n\x1a\n")) {
+		return ".png"
+	}
+	if len(b) >= 12 && bytes.Equal(b[:4], []byte("RIFF")) && bytes.Equal(b[8:12], []byte("WEBP")) {
+		return ".webp"
+	}
+	if len(b) >= 6 && (bytes.Equal(b[:6], []byte("GIF87a")) || bytes.Equal(b[:6], []byte("GIF89a"))) {
+		return ".gif"
+	}
+	if len(b) >= 12 && bytes.Equal(b[4:8], []byte("ftyp")) && (bytes.Equal(b[8:12], []byte("avif")) || bytes.Equal(b[8:12], []byte("avis"))) {
+		return ".avif"
+	}
+	return ""
+}
+
+// DetectImageExtension determines the appropriate file extension for an image,
+// prioritizing the URL path extension, falling back to magic bytes sniffing, or returning a fallback.
+func DetectImageExtension(rawURL string, header []byte, fallback string) string {
+	if ext := DetectExtensionFromURL(rawURL); ext != "" {
+		return ext
+	}
+	if ext := SniffImageExtension(header); ext != "" {
+		return ext
+	}
+	if fallback != "" {
+		if !strings.HasPrefix(fallback, ".") {
+			return "." + fallback
+		}
+		return fallback
+	}
+	return ".webp"
+}
+
+// FormatPageFilename generates a 3-digit zero-padded filename with the given extension.
+// Example: (1, ".jpg") -> "001.jpg"
+func FormatPageFilename(pageIndex int, ext string) string {
+	if ext == "" {
+		ext = ".webp"
+	} else if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	return fmt.Sprintf("%03d%s", pageIndex, ext)
 }
 
 // NormalizeChapterTitleForMatch cleans suffixes, extensions, dashes, brackets, and leading zeroes
