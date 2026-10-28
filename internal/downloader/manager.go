@@ -48,7 +48,11 @@ func SanitizeFilename(name string) string {
 }
 
 type runningTask struct {
-	cancel context.CancelFunc
+	taskID     string
+	cancel     context.CancelFunc
+	downloaded atomic.Int32
+	totalPages atomic.Int32
+	terminal   atomic.Bool
 }
 
 type Manager struct {
@@ -126,18 +130,45 @@ func (m *Manager) speedMonitorLoop() {
 			secBytes := m.totalBytesSec.Swap(0)
 			m.bytesPerSec.Store(secBytes)
 
+			type taskSnap struct {
+				id         string
+				downloaded int
+				totalPages int
+			}
+			var snapshots []taskSnap
+
 			m.mu.RLock()
 			activeCount := len(m.running)
+			if activeCount > 0 {
+				snapshots = make([]taskSnap, 0, activeCount)
+				for _, rt := range m.running {
+					if !rt.terminal.Load() {
+						snapshots = append(snapshots, taskSnap{
+							id:         rt.taskID,
+							downloaded: int(rt.downloaded.Load()),
+							totalPages: int(rt.totalPages.Load()),
+						})
+					}
+				}
+			}
 			m.mu.RUnlock()
 
-			if activeCount > 0 && secBytes > 0 {
-				mb := float64(secBytes) / (1024.0 * 1024.0)
-				str := fmt.Sprintf("%.2f MB/s", mb)
-				m.speedFormatted.Store(&str)
-				m.emitProgress()
-			} else if activeCount > 0 {
-				str := "0.00 MB/s"
-				m.speedFormatted.Store(&str)
+			if activeCount > 0 {
+				var speedStr string
+				if secBytes > 0 {
+					mb := float64(secBytes) / (1024.0 * 1024.0)
+					speedStr = fmt.Sprintf("%.2f MB/s", mb)
+				} else {
+					speedStr = "0.00 MB/s"
+				}
+				m.speedFormatted.Store(&speedStr)
+
+				for _, s := range snapshots {
+					if s.totalPages > 0 {
+						_ = m.store.UpdateDownloadTaskProgress(s.id, s.downloaded, s.totalPages, speedStr)
+					}
+				}
+				m.emit(contracts.EventDownloadTasksUpdated, nil)
 				m.emitProgress()
 			} else {
 				empty := ""
@@ -145,6 +176,26 @@ func (m *Manager) speedMonitorLoop() {
 			}
 		}
 	}
+}
+
+func (m *Manager) flushTaskFinalState(taskID string, downloaded int, totalPages int, status contracts.DownloadTaskStatus, errorMsg string) {
+	m.mu.RLock()
+	if rt, ok := m.running[taskID]; ok {
+		rt.terminal.Store(true)
+	}
+	m.mu.RUnlock()
+
+	if status == contracts.DownloadStatusCompleted {
+		if totalPages > 0 {
+			downloaded = totalPages
+		}
+	}
+	if totalPages > 0 {
+		_ = m.store.UpdateDownloadTaskProgress(taskID, downloaded, totalPages, "")
+	}
+	_ = m.store.UpdateDownloadTaskStatus(taskID, status, errorMsg)
+	m.emit(contracts.EventDownloadTasksUpdated, nil)
+	m.emitProgress()
 }
 
 func (m *Manager) SetEmitter(fn func(eventName string, payload any)) {
@@ -256,7 +307,13 @@ func (m *Manager) startWorker(task contracts.DownloadTask) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	m.running[task.ID] = &runningTask{cancel: cancel}
+	rt := &runningTask{
+		taskID: task.ID,
+		cancel: cancel,
+	}
+	rt.downloaded.Store(int32(task.DownloadedPages))
+	rt.totalPages.Store(int32(task.TotalPages))
+	m.running[task.ID] = rt
 	m.mu.Unlock()
 	m.notifyActiveTasks()
 
@@ -276,10 +333,12 @@ func (m *Manager) startWorker(task contracts.DownloadTask) {
 	case m.chapterSem <- struct{}{}:
 		defer func() { <-m.chapterSem }()
 	case <-ctx.Done():
+		m.flushTaskFinalState(task.ID, int(rt.downloaded.Load()), int(rt.totalPages.Load()), contracts.DownloadStatusPaused, "")
 		return
 	}
 
 	if ctx.Err() != nil {
+		m.flushTaskFinalState(task.ID, int(rt.downloaded.Load()), int(rt.totalPages.Load()), contracts.DownloadStatusPaused, "")
 		return
 	}
 
@@ -287,20 +346,20 @@ func (m *Manager) startWorker(task contracts.DownloadTask) {
 	m.emit(contracts.EventDownloadTasksUpdated, nil)
 	m.emitProgress()
 
-	err := m.executeDownload(ctx, task)
+	err := m.executeDownload(ctx, rt, task)
 	if err != nil {
 		if ctx.Err() != nil {
-			_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusPaused, "")
+			m.flushTaskFinalState(task.ID, int(rt.downloaded.Load()), int(rt.totalPages.Load()), contracts.DownloadStatusPaused, "")
 		} else {
 			latest, found, _ := m.store.GetDownloadTask(task.ID)
 			if found && latest.Status == contracts.DownloadStatusWaitingSource {
 				// Keep waiting_source status
 			} else {
-				_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusFailed, err.Error())
+				m.flushTaskFinalState(task.ID, int(rt.downloaded.Load()), int(rt.totalPages.Load()), contracts.DownloadStatusFailed, err.Error())
 			}
 		}
 	} else {
-		_ = m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusCompleted, "")
+		m.flushTaskFinalState(task.ID, int(rt.downloaded.Load()), int(rt.totalPages.Load()), contracts.DownloadStatusCompleted, "")
 		interval := m.settings.Get().Downloader.ChapterIntervalSec
 		if interval > 0 && ctx.Err() == nil {
 			select {
@@ -352,7 +411,7 @@ func (m *Manager) resolveTargetDirectory(task contracts.DownloadTask) (string, e
 	return targetSource.Path, nil
 }
 
-func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTask) error {
+func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task contracts.DownloadTask) error {
 	st := m.settings.Get()
 	downloadBaseDir, err := m.resolveTargetDirectory(task)
 	if err != nil {
@@ -421,7 +480,8 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 		return fmt.Errorf("no pages found for chapter")
 	}
 
-	_ = m.store.UpdateDownloadTaskProgress(task.ID, 0, totalPages, "")
+	rt.totalPages.Store(int32(totalPages))
+	_ = m.store.UpdateDownloadTaskProgress(task.ID, int(rt.downloaded.Load()), totalPages, "")
 	m.emitProgress()
 
 	// Build ComicInfo.xml metadata
@@ -449,10 +509,6 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 		Notes:           notesStr,
 	})
 
-	downloadedCount := atomic.Int32{}
-	startTime := time.Now()
-	var totalBytes atomic.Uint64
-
 	fetchImage := func(pCtx context.Context, pageIndex int, writer io.Writer) error {
 		select {
 		case m.imgSem <- struct{}{}:
@@ -463,7 +519,7 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 
 		rawURL := pageURLs[pageIndex]
 		var dlErr error
-		countWriter := &countingWriter{w: writer, written: &totalBytes, manager: m}
+		countWriter := &countingWriter{w: writer, manager: m}
 
 		if task.Source == copymanga.SiteName {
 			stripedURL := m.copyManga.GetStripedCDNURL(rawURL, pageIndex)
@@ -477,20 +533,7 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 			return dlErr
 		}
 
-		curr := int(downloadedCount.Add(1))
-		var speedStr string
-		if p := m.speedFormatted.Load(); p != nil && *p != "" {
-			speedStr = *p
-		} else {
-			elapsed := time.Since(startTime).Seconds()
-			if elapsed > 0 {
-				speedMB := (float64(totalBytes.Load()) / 1024.0 / 1024.0) / elapsed
-				speedStr = fmt.Sprintf("%.2f MB/s", speedMB)
-			}
-		}
-
-		_ = m.store.UpdateDownloadTaskProgress(task.ID, curr, totalPages, speedStr)
-		m.emitProgress()
+		rt.downloaded.Add(1)
 		return nil
 	}
 
@@ -507,9 +550,7 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 			}
 			// Resume already downloaded valid pages in folder mode
 			if _, exists := findExistingPageFile(finalFilePath, i+1); exists {
-				curr := int(downloadedCount.Add(1))
-				_ = m.store.UpdateDownloadTaskProgress(task.ID, curr, totalPages, "")
-				m.emitProgress()
+				rt.downloaded.Add(1)
 				continue
 			}
 
@@ -647,8 +688,14 @@ func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error 
 func (m *Manager) PauseTask(taskID string) error {
 	m.mu.Lock()
 	wasRunning := false
-	if rt, ok := m.running[taskID]; ok {
-		rt.cancel()
+	var rt *runningTask
+	if r, ok := m.running[taskID]; ok {
+		if r.terminal.Load() {
+			m.mu.Unlock()
+			return nil
+		}
+		rt = r
+		r.cancel()
 		delete(m.running, taskID)
 		wasRunning = true
 	}
@@ -656,11 +703,13 @@ func (m *Manager) PauseTask(taskID string) error {
 
 	if wasRunning {
 		m.notifyActiveTasks()
+		m.flushTaskFinalState(taskID, int(rt.downloaded.Load()), int(rt.totalPages.Load()), contracts.DownloadStatusPaused, "")
+	} else {
+		_ = m.store.UpdateDownloadTaskStatus(taskID, contracts.DownloadStatusPaused, "")
+		m.emit(contracts.EventDownloadTasksUpdated, nil)
+		m.emitProgress()
 	}
 
-	_ = m.store.UpdateDownloadTaskStatus(taskID, contracts.DownloadStatusPaused, "")
-	m.emit(contracts.EventDownloadTasksUpdated, nil)
-	m.emitProgress()
 	return nil
 }
 
@@ -737,6 +786,18 @@ func (m *Manager) GetProgress() contracts.DownloadProgress {
 		return contracts.DownloadProgress{}
 	}
 
+	m.mu.RLock()
+	runningSnaps := make(map[string]struct{ dl, tot int }, len(m.running))
+	for id, rt := range m.running {
+		if !rt.terminal.Load() {
+			runningSnaps[id] = struct{ dl, tot int }{
+				dl:  int(rt.downloaded.Load()),
+				tot: int(rt.totalPages.Load()),
+			}
+		}
+	}
+	m.mu.RUnlock()
+
 	activeCount := 0
 	downloadedPages := 0
 	totalPages := 0
@@ -744,8 +805,18 @@ func (m *Manager) GetProgress() contracts.DownloadProgress {
 	for _, t := range tasks {
 		if t.Status == contracts.DownloadStatusDownloading || t.Status == contracts.DownloadStatusPending {
 			activeCount++
-			downloadedPages += t.DownloadedPages
-			totalPages += t.TotalPages
+			dl := t.DownloadedPages
+			tot := t.TotalPages
+			if snap, ok := runningSnaps[t.ID]; ok {
+				if snap.dl > dl {
+					dl = snap.dl
+				}
+				if snap.tot > tot {
+					tot = snap.tot
+				}
+			}
+			downloadedPages += dl
+			totalPages += tot
 		}
 	}
 
