@@ -1097,9 +1097,9 @@ func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 	}
 
 	c.accountLock.Lock()
-	defer c.accountLock.Unlock()
 
 	if c.store == nil {
+		c.accountLock.Unlock()
 		c.mu.RLock()
 		tok := c.token
 		c.mu.RUnlock()
@@ -1108,18 +1108,21 @@ func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 
 	accounts, err := c.store.GetCopyMangaAccounts()
 	if err != nil {
+		c.accountLock.Unlock()
 		return "", "", err
 	}
 
-	// 2. Look for an available pool account whose 60s cooldown has passed
+	// 1. 查找可用账号（冷却时间已过）
 	for _, a := range accounts {
 		if now-a.LimitedAt > 60 {
+			c.accountLock.Unlock() // 查到可用账号，立刻放锁返回
 			return a.Token, a.Username, nil
 		}
 	}
 
-	// 3. If no available account, and pool hasn't reached the 3-account cap:
+	// 2. 账号不足 3 个，先放锁，再调网络注册
 	if len(accounts) < 3 {
+		c.accountLock.Unlock() // 绝不占着锁做网络请求
 		acc, err := c.registerAndSaveNewAccount(ctx)
 		if err != nil {
 			return "", "", err
@@ -1127,23 +1130,15 @@ func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 		return acc.Token, acc.Username, nil
 	}
 
-	// 4. Pool has reached the hard cap of 3 accounts. Do NOT register any new accounts!
-	// Find the account that unfreezes earliest (including personal account if closer)
-	earliestIdx := 0
-	for i := 1; i < len(accounts); i++ {
-		if accounts[i].LimitedAt < accounts[earliestIdx].LimitedAt {
-			earliestIdx = i
+	// 3. 全在冷却中，计算最短等待时间，先放锁，再等待
+	var earliestLimitedAt int64 = 0
+	for _, a := range accounts {
+		if earliestLimitedAt == 0 || a.LimitedAt < earliestLimitedAt {
+			earliestLimitedAt = a.LimitedAt
 		}
 	}
-	earliest := accounts[earliestIdx]
-	earliestLimitedAt := earliest.LimitedAt
-	tokenToReturn := earliest.Token
-	usernameToReturn := earliest.Username
-
 	if userToken != "" && userLimitedAt > 0 && userLimitedAt < earliestLimitedAt {
 		earliestLimitedAt = userLimitedAt
-		tokenToReturn = userToken
-		usernameToReturn = userUsername
 	}
 
 	waitTime := time.Duration(60-(now-earliestLimitedAt)+1) * time.Second
@@ -1152,14 +1147,14 @@ func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 	} else if waitTime > 60*time.Second {
 		waitTime = 60 * time.Second
 	}
+	c.accountLock.Unlock() // 绝不占着锁睡觉
 
 	select {
+	case <-time.After(waitTime):
+		return c.acquireToken(ctx) // 等完冷却后重新获取
 	case <-ctx.Done():
 		return "", "", ctx.Err()
-	case <-time.After(waitTime):
 	}
-
-	return tokenToReturn, usernameToReturn, nil
 }
 
 func (c *Client) markAccountLimited(username string) {
