@@ -98,6 +98,7 @@ type Client struct {
 	retryBackoffs       []time.Duration
 	store               AccountStore
 	accountLock         sync.Mutex
+	paceMu              sync.Mutex
 	lastReqTime         time.Time
 	mu                  sync.RWMutex
 }
@@ -249,22 +250,27 @@ type copyAPIResponse struct {
 	Results json.RawMessage `json:"results"`
 }
 
-func (c *Client) paceRequest(domain string) {
-	if strings.HasPrefix(domain, "127.0.0.1") || strings.HasPrefix(domain, "localhost") {
-		return
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *Client) paceRequest(ctx context.Context) error {
+	c.paceMu.Lock()
+	defer c.paceMu.Unlock()
+
 	elapsed := time.Since(c.lastReqTime)
 	if elapsed < 1500*time.Millisecond {
-		time.Sleep(1500*time.Millisecond - elapsed)
+		select {
+		case <-time.After(1500*time.Millisecond - elapsed):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	c.lastReqTime = time.Now()
+	return nil
 }
 
 func (c *Client) getJSON(ctx context.Context, endpoint string, query url.Values, target any) error {
+	if err := c.paceRequest(ctx); err != nil {
+		return err
+	}
 	domain := c.getDomain()
-	c.paceRequest(domain)
 
 	scheme := "https"
 	if strings.HasPrefix(domain, "127.0.0.1") || strings.HasPrefix(domain, "localhost") {
