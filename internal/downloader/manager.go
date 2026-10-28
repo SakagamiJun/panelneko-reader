@@ -621,6 +621,10 @@ func (c *countingWriter) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
+var directImageClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
 var directImageBackoffs = []time.Duration{15 * time.Second, 30 * time.Second}
 
 func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error {
@@ -643,7 +647,7 @@ func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error 
 		req.Header.Set("User-Agent", "Mozilla/5.0 PanelNeko/1.0")
 		req.Header.Set("Referer", "https://klz9.com/")
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := directImageClient.Do(req)
 		if err != nil {
 			lastErr = err
 			continue
