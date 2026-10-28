@@ -328,21 +328,24 @@ func (a *App) CheckForUpdates() (contracts.UpdateCheckResult, error) {
 }
 
 type App struct {
-	bootErr           error
-	store             *store.SQLiteStore
-	settings          *settings.Service
-	copyManga         *copymanga.Client
-	klz9              *klz9.Client
-	downloads         *downloader.Manager
-	scanMu            sync.Mutex
-	scanOnce          sync.Once
-	updater           *updater.Updater
-	updaterProvider   updater.Provider
-	isHomebrewFn      func() bool
-	isDevMode         bool
-	devModeLock       sync.RWMutex
-	updateCheckMu     sync.Mutex
-	updateCheckStatus contracts.FollowedUpdateCheckProgress
+	bootErr            error
+	store              *store.SQLiteStore
+	settings           *settings.Service
+	copyManga          *copymanga.Client
+	klz9               *klz9.Client
+	downloads          *downloader.Manager
+	scanMu             sync.Mutex
+	scanOnce           sync.Once
+	downloadScanMu     sync.Mutex
+	downloadScanStop   chan struct{}
+	downloadScanActive bool
+	updater            *updater.Updater
+	updaterProvider    updater.Provider
+	isHomebrewFn       func() bool
+	isDevMode          bool
+	devModeLock        sync.RWMutex
+	updateCheckMu      sync.Mutex
+	updateCheckStatus  contracts.FollowedUpdateCheckProgress
 }
 
 func NewApp() *App {
@@ -362,6 +365,16 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 }
 
 func (a *App) ServiceShutdown() error {
+	a.downloadScanMu.Lock()
+	if a.downloadScanActive {
+		a.downloadScanActive = false
+		if a.downloadScanStop != nil {
+			close(a.downloadScanStop)
+			a.downloadScanStop = nil
+		}
+	}
+	a.downloadScanMu.Unlock()
+
 	if a.downloads != nil {
 		a.downloads.Close()
 	}
@@ -414,11 +427,7 @@ func (a *App) bootstrap() error {
 	klzClient := klz9.NewClient(storeValue, st.Downloader.RawMangaBaseURL, 20)
 	downloadMgr := downloader.NewManager(storeValue, settingsService, copyClient, klzClient)
 	downloadMgr.SetEmitter(a.emit)
-	downloadMgr.SetOnDownloadFinished(func(outputPath string) {
-		go func() {
-			_, _ = a.performSourcesScan()
-		}()
-	})
+	downloadMgr.SetOnActiveTasksChanged(a.onDownloadActiveCountChanged)
 
 	a.copyManga = copyClient
 	a.klz9 = klzClient
@@ -520,6 +529,59 @@ func (a *App) performSourcesScan() ([]contracts.LibraryManga, error) {
 	a.scanMu.Lock()
 	defer a.scanMu.Unlock()
 
+	return a.performSourcesScanLocked()
+}
+
+func (a *App) onDownloadActiveCountChanged(activeCount int) {
+	a.downloadScanMu.Lock()
+	defer a.downloadScanMu.Unlock()
+
+	if activeCount > 0 {
+		if !a.downloadScanActive {
+			a.downloadScanActive = true
+			stopCh := make(chan struct{})
+			a.downloadScanStop = stopCh
+			go a.runDownloadScanLoop(stopCh)
+		}
+	} else {
+		if a.downloadScanActive {
+			a.downloadScanActive = false
+			if a.downloadScanStop != nil {
+				close(a.downloadScanStop)
+				a.downloadScanStop = nil
+			}
+			go a.triggerScanWithTryLock(true)
+		}
+	}
+}
+
+func (a *App) runDownloadScanLoop(stopCh <-chan struct{}) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stopCh:
+			return
+		case <-ticker.C:
+			a.triggerScanWithTryLock(false)
+		}
+	}
+}
+
+func (a *App) triggerScanWithTryLock(isFinalSweep bool) {
+	if !a.scanMu.TryLock() {
+		if !isFinalSweep {
+			return
+		}
+		a.scanMu.Lock()
+	}
+	defer a.scanMu.Unlock()
+
+	_, _ = a.performSourcesScanLocked()
+}
+
+func (a *App) performSourcesScanLocked() ([]contracts.LibraryManga, error) {
 	sources := a.getActiveSources()
 
 	prevItemsBySource := make(map[string]map[string]contracts.LibraryManga)

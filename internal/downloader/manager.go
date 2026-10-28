@@ -52,20 +52,21 @@ type runningTask struct {
 }
 
 type Manager struct {
-	store              *store.SQLiteStore
-	settings           *settings.Service
-	copyManga          *copymanga.Client
-	klz9               *klz9.Client
-	chapterSem         chan struct{}
-	imgSem             chan struct{}
-	running            map[string]*runningTask
-	mu                 sync.RWMutex
-	emitter            func(eventName string, payload any)
-	onDownloadFinished func(outputPath string)
-	totalBytesSec      atomic.Uint64
-	speedFormatted     atomic.Pointer[string]
-	bytesPerSec        atomic.Uint64
-	stopTicker         chan struct{}
+	store                *store.SQLiteStore
+	settings             *settings.Service
+	copyManga            *copymanga.Client
+	klz9                 *klz9.Client
+	chapterSem           chan struct{}
+	imgSem               chan struct{}
+	running              map[string]*runningTask
+	mu                   sync.RWMutex
+	notifyMu             sync.Mutex
+	emitter              func(eventName string, payload any)
+	onActiveTasksChanged func(activeCount int)
+	totalBytesSec        atomic.Uint64
+	speedFormatted       atomic.Pointer[string]
+	bytesPerSec          atomic.Uint64
+	stopTicker           chan struct{}
 }
 
 func NewManager(
@@ -102,6 +103,10 @@ func NewManager(
 }
 
 func (m *Manager) Close() {
+	m.mu.Lock()
+	m.onActiveTasksChanged = nil
+	m.mu.Unlock()
+
 	select {
 	case <-m.stopTicker:
 	default:
@@ -148,10 +153,24 @@ func (m *Manager) SetEmitter(fn func(eventName string, payload any)) {
 	m.emitter = fn
 }
 
-func (m *Manager) SetOnDownloadFinished(fn func(outputPath string)) {
+func (m *Manager) SetOnActiveTasksChanged(fn func(activeCount int)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.onDownloadFinished = fn
+	m.onActiveTasksChanged = fn
+}
+
+func (m *Manager) notifyActiveTasks() {
+	m.notifyMu.Lock()
+	defer m.notifyMu.Unlock()
+
+	m.mu.RLock()
+	fn := m.onActiveTasksChanged
+	count := len(m.running)
+	m.mu.RUnlock()
+
+	if fn != nil {
+		fn(count)
+	}
 }
 
 func (m *Manager) emit(event string, payload any) {
@@ -239,13 +258,18 @@ func (m *Manager) startWorker(task contracts.DownloadTask) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.running[task.ID] = &runningTask{cancel: cancel}
 	m.mu.Unlock()
+	m.notifyActiveTasks()
 
 	defer func() {
 		m.mu.Lock()
+		_, wasRunning := m.running[task.ID]
 		delete(m.running, task.ID)
 		m.mu.Unlock()
 		m.emit(contracts.EventDownloadTasksUpdated, nil)
 		m.emitProgress()
+		if wasRunning {
+			m.notifyActiveTasks()
+		}
 	}()
 
 	select {
@@ -523,13 +547,6 @@ func (m *Manager) executeDownload(ctx context.Context, task contracts.DownloadTa
 		}
 	}
 
-	m.mu.RLock()
-	hook := m.onDownloadFinished
-	m.mu.RUnlock()
-	if hook != nil {
-		hook(finalFilePath)
-	}
-
 	return nil
 }
 
@@ -629,11 +646,17 @@ func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error 
 
 func (m *Manager) PauseTask(taskID string) error {
 	m.mu.Lock()
+	wasRunning := false
 	if rt, ok := m.running[taskID]; ok {
 		rt.cancel()
 		delete(m.running, taskID)
+		wasRunning = true
 	}
 	m.mu.Unlock()
+
+	if wasRunning {
+		m.notifyActiveTasks()
+	}
 
 	_ = m.store.UpdateDownloadTaskStatus(taskID, contracts.DownloadStatusPaused, "")
 	m.emit(contracts.EventDownloadTasksUpdated, nil)
