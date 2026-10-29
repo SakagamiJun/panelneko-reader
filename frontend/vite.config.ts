@@ -10,6 +10,10 @@ export default defineConfig({
       "@bindings": fileURLToPath(new URL("./bindings", import.meta.url)),
     },
   },
+  build: {
+    target: ["es2022", "safari15"],
+    cssMinify: true,
+  },
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
