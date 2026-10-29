@@ -278,6 +278,7 @@ export function ScrollReader({
                   <img
                     alt={`${page.chapterTitle} #${page.pageIndex + 1}`}
                     className="block w-full select-none bg-transparent object-contain cursor-pointer"
+                    decoding="async"
                     draggable={false}
                     loading={Math.abs(index - currentIndex) <= 1 ? "eager" : "lazy"}
                     onClick={onToggleHUD}

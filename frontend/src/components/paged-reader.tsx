@@ -545,6 +545,7 @@ export function PagedReader({
               key={page.id}
               alt={`${page.chapterTitle} #${page.pageIndex + 1}`}
               className="select-none object-contain"
+              decoding="async"
               draggable={false}
               loading="eager"
               onLoad={(event) => {
