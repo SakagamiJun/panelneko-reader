@@ -98,6 +98,7 @@ type Client struct {
 	retryBackoffs       []time.Duration
 	store               AccountStore
 	accountLock         sync.Mutex
+	registerMu          sync.Mutex
 	paceMu              sync.Mutex
 	lastReqTime         time.Time
 	mu                  sync.RWMutex
@@ -1120,14 +1121,40 @@ func (c *Client) acquireToken(ctx context.Context) (string, string, error) {
 		}
 	}
 
-	// 2. 账号不足 3 个，先放锁，再调网络注册
+	// 2. 账号不足 3 个，先放锁，获取注册互斥锁防并发冲破
 	if len(accounts) < 3 {
-		c.accountLock.Unlock() // 绝不占着锁做网络请求
-		acc, err := c.registerAndSaveNewAccount(ctx)
+		c.accountLock.Unlock()
+
+		c.registerMu.Lock()
+
+		// 双重检查：等待排队期间可能已被其他协程补齐
+		c.accountLock.Lock()
+		accounts, err = c.store.GetCopyMangaAccounts()
+		c.accountLock.Unlock()
 		if err != nil {
+			c.registerMu.Unlock()
 			return "", "", err
 		}
-		return acc.Token, acc.Username, nil
+
+		now = time.Now().Unix()
+		for _, a := range accounts {
+			if a.LimitedAt == 0 || now-a.LimitedAt > 60 {
+				c.registerMu.Unlock()
+				return a.Token, a.Username, nil
+			}
+		}
+
+		if len(accounts) < 3 {
+			acc, err := c.registerAndSaveNewAccount(ctx)
+			c.registerMu.Unlock()
+			if err != nil {
+				return "", "", err
+			}
+			return acc.Token, acc.Username, nil
+		}
+
+		c.registerMu.Unlock()
+		return c.acquireToken(ctx)
 	}
 
 	// 3. 全在冷却中，计算最短等待时间，先放锁，再等待

@@ -529,6 +529,53 @@ func TestCopyMangaAccountPoolMaxCapThree(t *testing.T) {
 	}
 }
 
+func TestCopyMangaConcurrentRegistrationPoolCap(t *testing.T) {
+	mockStore := &mockAccountStore{
+		accounts: []contracts.CopyMangaAccount{},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v3/register" {
+			_ = json.NewEncoder(w).Encode(copyAPIResponse{Code: 200, Message: "ok"})
+			return
+		}
+		if r.URL.Path == "/api/v3/login" {
+			_ = json.NewEncoder(w).Encode(copyAPIResponse{
+				Code:    200,
+				Results: json.RawMessage(`{"token":"registered_token"}`),
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	client := NewClient(host, "", 5)
+	client.SetStore(mockStore)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tok, _, err := client.acquireToken(context.Background())
+			if err != nil || tok == "" {
+				t.Errorf("acquireToken failed: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	accounts, _ := mockStore.GetCopyMangaAccounts()
+	if len(accounts) > 3 {
+		t.Fatalf("expected at most 3 accounts in pool, got %d", len(accounts))
+	}
+	if len(accounts) == 0 {
+		t.Fatalf("expected at least 1 account registered, got 0")
+	}
+}
+
 func TestCopyMangaPersonalAccountRelayToPoolOn210(t *testing.T) {
 	mockStore := &mockAccountStore{
 		accounts: []contracts.CopyMangaAccount{
