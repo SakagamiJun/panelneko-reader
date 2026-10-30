@@ -44,6 +44,7 @@ interface PagedReaderProps {
   onToggleHUD?: () => void;
   clickCenterZoom?: boolean;
   doubleClickZoom?: boolean;
+  cacheRadius?: number;
 }
 
 export function PagedReader({
@@ -65,6 +66,7 @@ export function PagedReader({
   onToggleHUD,
   clickCenterZoom = false,
   doubleClickZoom = false,
+  cacheRadius = 3,
 }: PagedReaderProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const spreadStageRef = useRef<HTMLDivElement | null>(null);
@@ -132,27 +134,32 @@ export function PagedReader({
     for (const page of currentSpread.pages) {
       requestMetric(page);
     }
-    // Also request for adjacent spreads
-    const nextSpread = spreads[currentSpreadIndex + 1];
-    if (nextSpread) {
-      for (const page of nextSpread.pages) requestMetric(page);
+    // Also request metrics for adjacent spreads based on cacheRadius
+    for (let i = 1; i <= cacheRadius; i++) {
+      const nextSpread = spreads[currentSpreadIndex + i];
+      if (nextSpread) {
+        for (const page of nextSpread.pages) requestMetric(page);
+      }
+      const prevSpread = spreads[currentSpreadIndex - i];
+      if (prevSpread) {
+        for (const page of prevSpread.pages) requestMetric(page);
+      }
     }
-    const prevSpread = spreads[currentSpreadIndex - 1];
-    if (prevSpread) {
-      for (const page of prevSpread.pages) requestMetric(page);
-    }
-  }, [currentSpread, currentSpreadIndex, requestMetric, spreads]);
+  }, [cacheRadius, currentSpread, currentSpreadIndex, requestMetric, spreads]);
 
   // Offscreen prefetch & predecode for smooth flipping and dimension discovery
   useEffect(() => {
     let isAborted = false;
     const createdImages: HTMLImageElement[] = [];
 
-    const prefetchIndices = [
-      currentSpreadIndex + 1,
-      currentSpreadIndex + 2,
-      currentSpreadIndex - 1,
-    ];
+    const prefetchIndices: number[] = [];
+    for (let i = 1; i <= cacheRadius; i++) {
+      prefetchIndices.push(currentSpreadIndex + i);
+    }
+    const behindRadius = Math.max(1, Math.min(2, Math.floor(cacheRadius / 2)));
+    for (let i = 1; i <= behindRadius; i++) {
+      prefetchIndices.push(currentSpreadIndex - i);
+    }
 
     for (const idx of prefetchIndices) {
       const s = spreads[idx];
@@ -186,7 +193,7 @@ export function PagedReader({
         img.src = "";
       }
     };
-  }, [currentSpreadIndex, onMetricMeasured, spreads]);
+  }, [cacheRadius, currentSpreadIndex, onMetricMeasured, spreads]);
 
   // Reset zoom and pan on spread change
   useEffect(() => {

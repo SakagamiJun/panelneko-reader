@@ -488,6 +488,7 @@ export function ReaderController({
         />
       ) : (
         <PagedReader
+          cacheRadius={cacheRadius}
           coverSolo={coverSolo}
           currentIndex={currentIndex}
           direction={direction}
