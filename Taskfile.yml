@@ -37,6 +37,12 @@ tasks:
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
+  profile:pgo:
+    summary: Runs end-to-end reader pipeline benchmark for 30s to generate high-fidelity default.pgo
+    cmds:
+      - go test -bench=BenchmarkReaderPipeline -benchtime={{.BENCHTIME | default "30s"}} -cpuprofile=default.pgo -run=^$ .
+      - rm -f panelneko-reader.test default.pgo.test
+
   install:msix:tools:
     summary: Installs tools required for Windows MSIX packaging
     cmds:
