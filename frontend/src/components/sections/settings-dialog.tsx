@@ -122,7 +122,6 @@ export function SettingsDialog({
       downloadDir: "",
       downloadFormat: "cbz",
       maxConcurrentDownloads: 3,
-      maxImageConcurrency: 10,
     };
     updateFields({
       downloader: {

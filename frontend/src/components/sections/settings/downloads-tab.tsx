@@ -483,25 +483,6 @@ export function DownloadsTab({
           }
         />
         <SettingRow
-          title={t("settings.maxImageConcurrency")}
-          description={t("settings.maxImageConcurrencyHint")}
-          control={
-            <Input
-              type="number"
-              min={1}
-              max={30}
-              value={form.downloader?.maxImageConcurrency ?? 10}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10);
-                if (!isNaN(val) && val >= 1 && val <= 30) {
-                  updateDownloader({ maxImageConcurrency: val });
-                }
-              }}
-              className="w-20 text-xs h-7 font-mono text-center"
-            />
-          }
-        />
-        <SettingRow
           title={t("settings.chapterIntervalSec")}
           description={t("settings.chapterIntervalSecHint")}
           control={

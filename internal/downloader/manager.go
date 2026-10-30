@@ -61,7 +61,6 @@ type Manager struct {
 	copyManga            *copymanga.Client
 	klz9                 *klz9.Client
 	chapterSem           chan struct{}
-	imgSem               chan struct{}
 	running              map[string]*runningTask
 	mu                   sync.RWMutex
 	notifyMu             sync.Mutex
@@ -84,10 +83,6 @@ func NewManager(
 	if maxChapter <= 0 {
 		maxChapter = 3
 	}
-	maxImg := st.Downloader.MaxImageConcurrency
-	if maxImg <= 0 {
-		maxImg = 10
-	}
 
 	mgr := &Manager{
 		store:      storeValue,
@@ -95,7 +90,6 @@ func NewManager(
 		copyManga:  copyClient,
 		klz9:       klz9Client,
 		chapterSem: make(chan struct{}, maxChapter),
-		imgSem:     make(chan struct{}, maxImg),
 		running:    make(map[string]*runningTask),
 		stopTicker: make(chan struct{}),
 	}
@@ -510,11 +504,8 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 	})
 
 	fetchImage := func(pCtx context.Context, pageIndex int, writer io.Writer) error {
-		select {
-		case m.imgSem <- struct{}{}:
-			defer func() { <-m.imgSem }()
-		case <-pCtx.Done():
-			return pCtx.Err()
+		if err := pCtx.Err(); err != nil {
+			return err
 		}
 
 		rawURL := pageURLs[pageIndex]

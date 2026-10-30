@@ -180,8 +180,6 @@ export const ja = {
     formatFolder: "画像フォルダ",
     maxConcurrentDownloads: "最大同時章ダウンロード数",
     maxConcurrentDownloadsHint: "同時にダウンロードする章の数 (1 - 10、初期値 3)。",
-    maxImageConcurrency: "章内画像同時取得数",
-    maxImageConcurrencyHint: "章内で同時に取得する画像の並行数 (1 - 30、初期値 10)。",
     chapterIntervalSec: "章間ダウンロード間隔 (秒)",
     chapterIntervalSecHint: "各章の完了後に待機するクールダウン時間 (0 - 60秒、初期値 0)。レート制限やIPブロックの防止に役立ちます。",
     addSource: "ディレクトリを追加",

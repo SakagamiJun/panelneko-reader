@@ -41,7 +41,6 @@ const defaultDownloaderSettings: DownloaderSettings = {
   downloadDir: "",
   downloadFormat: "cbz",
   maxConcurrentDownloads: 3,
-  maxImageConcurrency: 5,
   chapterIntervalSec: 2,
   autoCheckComicUpdates: false,
   autoFollowPolicy: "latest_only",
