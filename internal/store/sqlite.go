@@ -61,7 +61,9 @@ func (s *SQLiteStore) init() error {
 		`PRAGMA journal_mode = WAL;`,
 		`PRAGMA busy_timeout = 5000;`,
 		`PRAGMA synchronous = NORMAL;`,
-		`PRAGMA cache_size = -2000;`,
+		`PRAGMA cache_size = -16000;`,
+		`PRAGMA mmap_size = 268435456;`,
+		`PRAGMA temp_store = MEMORY;`,
 	}
 	for _, pragma := range pragmas {
 		if _, err := s.db.Exec(pragma); err != nil {
