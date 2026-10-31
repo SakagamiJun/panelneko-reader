@@ -433,93 +433,107 @@ export default function App() {
     prevOfflineSourcesCountRef.current = offlineSourcesCount;
   }, [offlineSourcesCount]);
 
-  const selectedLibrary = library.find((item) => item.id === selectedLibraryID) ?? null;
-  const parentCollection = selectedLibrary?.parentPath
-    ? library.find(
+  const selectedLibrary = useMemo(() => {
+    return library.find((item) => item.id === selectedLibraryID) ?? null;
+  }, [library, selectedLibraryID]);
+
+  const parentCollection = useMemo(() => {
+    if (!selectedLibrary?.parentPath) return null;
+    return (
+      library.find(
         (item) =>
           item.isCollection &&
           item.relativePath === selectedLibrary.parentPath &&
           (item.sourceID || "default") === (selectedLibrary.sourceID || "default")
-      )
-    : null;
-  const currentCollection = selectedCollectionPath
-    ? library.find((item) => {
+      ) ?? null
+    );
+  }, [library, selectedLibrary]);
+
+  const currentCollection = useMemo(() => {
+    if (!selectedCollectionPath) return null;
+    return (
+      library.find((item) => {
         if (!item.isCollection || item.relativePath !== selectedCollectionPath) return false;
         const targetSource = selectedCollectionSourceID || "default";
         return (item.sourceID || "default") === targetSource;
-      })
-    : null;
+      }) ?? null
+    );
+  }, [library, selectedCollectionPath, selectedCollectionSourceID]);
 
-  const displayedItems = library
-    .filter((item) => {
-      if (selectedSourceID !== "all") {
-        if ((item.sourceID || "default") !== selectedSourceID) {
-          return false;
+  const displayedItems = useMemo(() => {
+    const availableChildrenCountMap = new Map<string, number>();
+    if (!showOffline) {
+      for (const c of library) {
+        if (c.parentPath && c.isAvailable !== false) {
+          const key = `${c.sourceID || "default"}::${c.parentPath}`;
+          availableChildrenCountMap.set(key, (availableChildrenCountMap.get(key) || 0) + 1);
         }
       }
-      if (selectedCollectionPath) {
-        if (item.parentPath !== selectedCollectionPath) {
-          return false;
-        }
-        const targetSource = selectedCollectionSourceID || "default";
-        if ((item.sourceID || "default") !== targetSource) {
-          return false;
-        }
-        if (!showOffline && item.isAvailable === false) {
-          return false;
-        }
-        return true;
-      }
-      if (item.parentPath) {
-        return false;
-      }
+    }
 
-      if (!showOffline) {
-        if (item.isCollection) {
-          const hasAvailableChild = library.some(
-            (c) =>
-              c.parentPath === item.relativePath &&
-              c.isAvailable !== false &&
-              (c.sourceID || "default") === (item.sourceID || "default")
-          );
-          if (!hasAvailableChild) {
+    return library
+      .filter((item) => {
+        if (selectedSourceID !== "all") {
+          if ((item.sourceID || "default") !== selectedSourceID) {
             return false;
           }
-        } else if (item.isAvailable === false) {
+        }
+        if (selectedCollectionPath) {
+          if (item.parentPath !== selectedCollectionPath) {
+            return false;
+          }
+          const targetSource = selectedCollectionSourceID || "default";
+          if ((item.sourceID || "default") !== targetSource) {
+            return false;
+          }
+          if (!showOffline && item.isAvailable === false) {
+            return false;
+          }
+          return true;
+        }
+        if (item.parentPath) {
           return false;
         }
-      }
 
-      return true;
-    })
-    .map((item) => {
-      if (!item.isCollection || showOffline) return item;
-      const availableChildrenCount = library.filter(
-        (c) =>
-          c.parentPath === item.relativePath &&
-          c.isAvailable !== false &&
-          (c.sourceID || "default") === (item.sourceID || "default")
-      ).length;
-      return { ...item, mangaCount: availableChildrenCount };
-    })
-    .sort((a, b) => {
-      if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
-        return a.isPinned ? -1 : 1;
-      }
-      if (a.isPinned && b.isPinned && a.pinnedAt !== b.pinnedAt) {
-        return (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? "");
-      }
-      return 0;
-    });
+        if (!showOffline) {
+          if (item.isCollection) {
+            const key = `${item.sourceID || "default"}::${item.relativePath}`;
+            const count = availableChildrenCountMap.get(key) || 0;
+            if (count === 0) {
+              return false;
+            }
+          } else if (item.isAvailable === false) {
+            return false;
+          }
+        }
 
-  const filteredItems = displayedItems.filter((item) => {
-    if (!searchQuery.trim()) return true;
+        return true;
+      })
+      .map((item) => {
+        if (!item.isCollection || showOffline) return item;
+        const key = `${item.sourceID || "default"}::${item.relativePath}`;
+        const count = availableChildrenCountMap.get(key) || 0;
+        return { ...item, mangaCount: count };
+      })
+      .sort((a, b) => {
+        if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+          return a.isPinned ? -1 : 1;
+        }
+        if (a.isPinned && b.isPinned && a.pinnedAt !== b.pinnedAt) {
+          return (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? "");
+        }
+        return 0;
+      });
+  }, [library, selectedSourceID, selectedCollectionPath, selectedCollectionSourceID, showOffline]);
+
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return displayedItems;
     const q = searchQuery.toLowerCase().trim();
-    return (
+    return displayedItems.filter((item) =>
       item.title.toLowerCase().includes(q) ||
       item.relativePath.toLowerCase().includes(q)
     );
-  });
+  }, [displayedItems, searchQuery]);
 
   const onlineSearchEnabled = Boolean(
     settings?.downloader?.enableCopyManga || settings?.downloader?.enableRawManga
