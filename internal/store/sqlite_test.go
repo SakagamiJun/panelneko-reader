@@ -431,3 +431,77 @@ func TestMangaOnlineLinksWithTargetGroup(t *testing.T) {
 		t.Fatalf("expected TargetGroup '话', got %q", got2.TargetGroup)
 	}
 }
+
+func TestDifferentialUpsertPreservesAndPrunes(t *testing.T) {
+	tempDir := t.TempDir()
+	sqliteStore, err := Open(tempDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	// Initial batch: items 1, 2, 3
+	mangas := []contracts.LibraryManga{
+		{ID: "m1", SourceID: "src-1", Title: "Original 1", RelativePath: "p1", ChapterCount: 1, PageCount: 10, IsAvailable: true},
+		{ID: "m2", SourceID: "src-1", Title: "Original 2", RelativePath: "p2", ChapterCount: 2, PageCount: 20, IsAvailable: true},
+		{ID: "m3", SourceID: "src-1", Title: "Original 3", RelativePath: "p3", ChapterCount: 3, PageCount: 30, IsAvailable: true},
+	}
+	modTimes := map[string]int64{"m1": 100, "m2": 200, "m3": 300}
+
+	if err := sqliteStore.SaveLibraryMangaForSource("src-1", mangas, modTimes); err != nil {
+		t.Fatalf("initial save failed: %v", err)
+	}
+
+	// Second batch:
+	// m1 is updated (title, chapterCount, modTime)
+	// m2 is kept unchanged
+	// m3 is removed
+	// m4 is newly added
+	mangasNext := []contracts.LibraryManga{
+		{ID: "m1", SourceID: "src-1", Title: "Updated 1", RelativePath: "p1", ChapterCount: 5, PageCount: 10, IsAvailable: true},
+		{ID: "m2", SourceID: "src-1", Title: "Original 2", RelativePath: "p2", ChapterCount: 2, PageCount: 20, IsAvailable: true},
+		{ID: "m4", SourceID: "src-1", Title: "New 4", RelativePath: "p4", ChapterCount: 1, PageCount: 5, IsAvailable: true},
+	}
+	modTimesNext := map[string]int64{"m1": 150, "m2": 200, "m4": 400}
+
+	if err := sqliteStore.SaveLibraryMangaForSource("src-1", mangasNext, modTimesNext); err != nil {
+		t.Fatalf("upsert save failed: %v", err)
+	}
+
+	records, err := sqliteStore.ListLibraryMangaBySource("src-1")
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+
+	if len(records) != 3 {
+		t.Fatalf("expected 3 records, got %d", len(records))
+	}
+
+	recMap := make(map[string]LibraryMangaRecord)
+	for _, r := range records {
+		recMap[r.ID] = r
+	}
+
+	// Verify m1 updated
+	r1, ok1 := recMap["m1"]
+	if !ok1 || r1.Title != "Updated 1" || r1.ChapterCount != 5 || r1.ModTime != 150 {
+		t.Errorf("m1 unexpected state: %+v", r1)
+	}
+
+	// Verify m2 unchanged
+	r2, ok2 := recMap["m2"]
+	if !ok2 || r2.Title != "Original 2" || r2.ModTime != 200 {
+		t.Errorf("m2 unexpected state: %+v", r2)
+	}
+
+	// Verify m3 pruned
+	if _, ok3 := recMap["m3"]; ok3 {
+		t.Errorf("m3 should have been deleted")
+	}
+
+	// Verify m4 created
+	r4, ok4 := recMap["m4"]
+	if !ok4 || r4.Title != "New 4" || r4.ModTime != 400 {
+		t.Errorf("m4 unexpected state: %+v", r4)
+	}
+}

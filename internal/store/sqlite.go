@@ -265,21 +265,34 @@ func (s *SQLiteStore) SaveLibraryMangaForSource(sourceID string, mangas []contra
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(`DELETE FROM library_manga WHERE source_id = ?`, sourceID)
-	if err != nil {
-		return err
-	}
-
 	stmt, err := tx.Prepare(`
-		INSERT INTO library_manga (id, source_id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time, is_available)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO library_manga (
+			id, source_id, title, source_url, relative_path, parent_path, is_collection,
+			manga_count, cover_image_url, chapter_count, page_count, last_updated, mod_time, is_available
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			source_id = excluded.source_id,
+			title = excluded.title,
+			source_url = excluded.source_url,
+			relative_path = excluded.relative_path,
+			parent_path = excluded.parent_path,
+			is_collection = excluded.is_collection,
+			manga_count = excluded.manga_count,
+			cover_image_url = excluded.cover_image_url,
+			chapter_count = excluded.chapter_count,
+			page_count = excluded.page_count,
+			last_updated = excluded.last_updated,
+			mod_time = excluded.mod_time,
+			is_available = excluded.is_available
 	`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
+	currentIDs := make(map[string]bool, len(mangas))
 	for _, m := range mangas {
+		currentIDs[m.ID] = true
 		modTime := modTimes[m.ID]
 		isColl := 0
 		if m.IsCollection {
@@ -295,6 +308,40 @@ func (s *SQLiteStore) SaveLibraryMangaForSource(sourceID string, mangas []contra
 		}
 		if _, err := stmt.Exec(m.ID, itemSourceID, m.Title, m.SourceURL, m.RelativePath, m.ParentPath, isColl, m.MangaCount, m.CoverImageURL, m.ChapterCount, m.PageCount, m.LastUpdated, modTime, isAvail); err != nil {
 			return err
+		}
+	}
+
+	rows, err := tx.Query(`SELECT id FROM library_manga WHERE source_id = ?`, sourceID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var toDelete []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		if !currentIDs[id] {
+			toDelete = append(toDelete, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if len(toDelete) > 0 {
+		delStmt, err := tx.Prepare(`DELETE FROM library_manga WHERE id = ?`)
+		if err != nil {
+			return err
+		}
+		defer delStmt.Close()
+
+		for _, id := range toDelete {
+			if _, err := delStmt.Exec(id); err != nil {
+				return err
+			}
 		}
 	}
 
