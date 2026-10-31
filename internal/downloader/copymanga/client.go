@@ -256,9 +256,9 @@ func (c *Client) paceRequest(ctx context.Context) error {
 	defer c.paceMu.Unlock()
 
 	elapsed := time.Since(c.lastReqTime)
-	if elapsed < 1500*time.Millisecond {
+	if elapsed < 1000*time.Millisecond {
 		select {
-		case <-time.After(1500*time.Millisecond - elapsed):
+		case <-time.After(1000*time.Millisecond - elapsed):
 		case <-ctx.Done():
 			return ctx.Err()
 		}
