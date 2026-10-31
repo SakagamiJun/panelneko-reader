@@ -284,6 +284,7 @@ export const ja = {
     searchPlaceholder: "タイトルやフォルダー名を検索...",
     noMatches: "該当する漫画が見つかりませんでした",
     noMatchesForQuery: "「{{query}}」に一致する漫画が見つかりませんでした",
+    searchOnlineForQuery: "オンラインで「{{query}}」を検索",
     clearSearch: "検索をクリア",
     configureLibrary: "ライブラリフォルダーを設定",
     offlineBadge: "オフライン",

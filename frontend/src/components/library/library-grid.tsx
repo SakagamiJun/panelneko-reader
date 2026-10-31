@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
-import { BookImage, Loader2, Search } from "lucide-react";
+import { BookImage, Globe, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MangaCard } from "@/components/library/manga-card";
 import type { LibraryManga, LibrarySource, MangaOnlineLink } from "@/lib/contracts";
@@ -22,6 +22,8 @@ export interface LibraryGridProps {
   sources?: LibrarySource[];
   onlineLinksMap?: Map<string, MangaOnlineLink>;
   onToggleAutoFollow?: (mangaID: string) => void;
+  onOpenOnlineSearch?: (query: string) => void;
+  onlineSearchEnabled?: boolean;
 }
 
 export function LibraryGrid({
@@ -40,6 +42,8 @@ export function LibraryGrid({
   sources,
   onlineLinksMap,
   onToggleAutoFollow,
+  onOpenOnlineSearch,
+  onlineSearchEnabled,
 }: LibraryGridProps) {
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const [columns, setColumns] = useState(1);
@@ -103,9 +107,23 @@ export function LibraryGrid({
         <p className="text-xs text-muted-foreground mb-4">
           {t("library.noMatchesForQuery", { query: searchQuery })}
         </p>
-        <Button onClick={onClearSearch} size="xs" variant="outline">
-          {t("library.clearSearch")}
-        </Button>
+
+        <div className="flex items-center gap-2">
+          {onlineSearchEnabled && onOpenOnlineSearch && (
+            <Button
+              onClick={() => onOpenOnlineSearch(searchQuery)}
+              size="xs"
+              variant="primary"
+              className="gap-1.5 cursor-pointer"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              <span>{t("library.searchOnlineForQuery", { query: searchQuery })}</span>
+            </Button>
+          )}
+          <Button onClick={onClearSearch} size="xs" variant="outline" className="cursor-pointer">
+            {t("library.clearSearch")}
+          </Button>
+        </div>
       </div>
     );
   }

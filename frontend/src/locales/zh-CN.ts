@@ -284,6 +284,7 @@ export const zhCN = {
     searchPlaceholder: "搜索漫画标题或目录...",
     noMatches: "没有找到匹配的漫画",
     noMatchesForQuery: "未找到包含 \"{{query}}\" 的漫画",
+    searchOnlineForQuery: "在线搜索「{{query}}」",
     clearSearch: "清空搜索",
     configureLibrary: "配置漫画库目录",
     offlineBadge: "离线",

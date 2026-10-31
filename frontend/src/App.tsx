@@ -521,6 +521,24 @@ export default function App() {
     );
   });
 
+  const onlineSearchEnabled = Boolean(
+    settings?.downloader?.enableCopyManga || settings?.downloader?.enableRawManga
+  );
+
+  const handleOpenOnlineSearchForQuery = useCallback(
+    (query: string) => {
+      const defaultSource = settings?.downloader?.enableCopyManga
+        ? "copymanga"
+        : settings?.downloader?.enableRawManga
+        ? "klz9"
+        : "copymanga";
+      setOnlineSearchSource(defaultSource);
+      setOnlineSearchQuery(query);
+      setOnlineSearchOpen(true);
+    },
+    [settings?.downloader?.enableCopyManga, settings?.downloader?.enableRawManga]
+  );
+
   const settingsBeforeOpenRef = useRef<{
     thumbnailQuality?: string;
     enableThumbnailCache?: boolean;
@@ -788,6 +806,8 @@ export default function App() {
                 sources={settings?.librarySources}
                 onlineLinksMap={onlineLinksMap}
                 onToggleAutoFollow={handleToggleAutoFollow}
+                onOpenOnlineSearch={handleOpenOnlineSearchForQuery}
+                onlineSearchEnabled={onlineSearchEnabled}
               />
             </div>
           </div>
@@ -858,6 +878,7 @@ export default function App() {
         initialQuery={onlineSearchQuery}
         settings={settings}
         onDownloadStarted={() => {
+          setSearchQuery("");
           void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
           void appAdapter.getDownloadProgress().then(setDownloadProgress).catch(() => {});
           void onlineLinksQuery.refetch();

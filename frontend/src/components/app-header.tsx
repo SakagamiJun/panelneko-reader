@@ -703,7 +703,7 @@ export function AppHeader({
                       </div>
                       {typeof item.chapterCount === "number" && item.chapterCount > 0 && (
                         <span className="text-[10px] font-mono text-muted-foreground/60 ml-2 shrink-0">
-                          {item.chapterCount} {t("downloader.pages")}
+                          {t("library.chapterUnit", { count: item.chapterCount })}
                         </span>
                       )}
                     </button>

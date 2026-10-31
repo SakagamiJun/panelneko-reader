@@ -284,6 +284,7 @@ export const en = {
     searchPlaceholder: "Search manga title or path...",
     noMatches: "No matching manga found",
     noMatchesForQuery: "No manga found matching \"{{query}}\"",
+    searchOnlineForQuery: "Search \"{{query}}\" Online",
     clearSearch: "Clear Search",
     configureLibrary: "Configure Library Directory",
     offlineBadge: "Offline",
