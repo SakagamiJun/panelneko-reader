@@ -1317,3 +1317,58 @@ func TestCreateDownloadTasksAutoLink(t *testing.T) {
 		t.Errorf("expected updated baseline chapter number 6.0, got %v", linkUpdated.BaselineChapterNumber)
 	}
 }
+
+func TestAddDroppedSources(t *testing.T) {
+	tempRoot := t.TempDir()
+	app, cleanup := newAssetTestApp(t, tempRoot)
+	defer cleanup()
+
+	dir1 := filepath.Join(tempRoot, "MangaFolder1")
+	dir2 := filepath.Join(tempRoot, "MangaFolder2")
+	_ = os.MkdirAll(dir1, 0o755)
+	_ = os.MkdirAll(dir2, 0o755)
+
+	filePath := filepath.Join(tempRoot, "sample.cbz")
+	_ = os.WriteFile(filePath, []byte("fake-cbz"), 0o644)
+	nonExistent := filepath.Join(tempRoot, "does_not_exist")
+
+	// 1. Drop mixed inputs: 2 valid folders, 1 archive file, 1 non-existent path
+	res, err := app.AddDroppedSources([]string{dir1, filePath, nonExistent, dir2})
+	if err != nil {
+		t.Fatalf("AddDroppedSources failed: %v", err)
+	}
+
+	if res.AddedCount != 2 {
+		t.Errorf("expected 2 added sources, got %d", res.AddedCount)
+	}
+	if res.IgnoredFiles != 1 {
+		t.Errorf("expected 1 ignored file, got %d", res.IgnoredFiles)
+	}
+	if res.ExistingCount != 0 {
+		t.Errorf("expected 0 existing count, got %d", res.ExistingCount)
+	}
+
+	// 2. Drop again with dir1 (already exists)
+	res2, err := app.AddDroppedSources([]string{dir1, filePath})
+	if err != nil {
+		t.Fatalf("AddDroppedSources second call failed: %v", err)
+	}
+	if res2.AddedCount != 0 {
+		t.Errorf("expected 0 added sources on duplicate, got %d", res2.AddedCount)
+	}
+	if res2.ExistingCount != 1 {
+		t.Errorf("expected 1 existing count, got %d", res2.ExistingCount)
+	}
+	if res2.IgnoredFiles != 1 {
+		t.Errorf("expected 1 ignored file, got %d", res2.IgnoredFiles)
+	}
+
+	// 3. Drop empty array
+	res3, err := app.AddDroppedSources([]string{})
+	if err != nil {
+		t.Fatalf("AddDroppedSources empty failed: %v", err)
+	}
+	if res3.AddedCount != 0 || res3.IgnoredFiles != 0 || res3.ExistingCount != 0 {
+		t.Errorf("expected zero counts for empty paths, got %+v", res3)
+	}
+}

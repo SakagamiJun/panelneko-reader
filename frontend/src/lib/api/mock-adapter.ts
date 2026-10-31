@@ -22,6 +22,7 @@ import {
   type DownloaderSettings,
   type MangaLinkPreviewInput,
   type MangaLinkPreviewItem,
+  type DroppedSourcesResult,
 } from "@/lib/contracts";
 import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 
@@ -476,6 +477,40 @@ export class MockAdapter implements AppAdapter {
     const updated = await this.updateSettings({ ...current, librarySources: sources });
     this.emit(EVENTS.LIBRARY_UPDATED, {});
     return updated;
+  }
+
+  async addDroppedSources(paths: string[]): Promise<DroppedSourcesResult> {
+    const result: DroppedSourcesResult = {
+      addedCount: 0,
+      ignoredFiles: 0,
+      existingCount: 0,
+      addedPaths: [],
+    };
+
+    for (const p of paths) {
+      const isArchive = /\.(cbz|cbr|zip|rar)$/i.test(p);
+      if (isArchive) {
+        result.ignoredFiles++;
+        continue;
+      }
+      try {
+        await this.addLibrarySource({
+          id: "",
+          name: p.split(/[/\\]/).pop() || p,
+          path: p,
+          type: "local",
+          enabled: true,
+        });
+        result.addedCount++;
+        result.addedPaths.push(p);
+      } catch (err: any) {
+        if (err?.message?.includes("already exists")) {
+          result.existingCount++;
+        }
+      }
+    }
+
+    return result;
   }
 
   async removeLibrarySource(sourceID: string): Promise<AppSettings> {

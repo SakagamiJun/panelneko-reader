@@ -22,7 +22,6 @@ func init() {
 	application.RegisterEvent[contracts.ThemeResolvedPayload](contracts.EventThemeResolved)
 	application.RegisterEvent[contracts.LocaleResolvedPayload](contracts.EventLocaleResolved)
 	application.RegisterEvent[[]string](contracts.EventFilesDropped)
-	application.RegisterEvent[[]string](contracts.EventFilesOpened)
 	application.RegisterEvent[contracts.DownloadProgress](contracts.EventDownloadProgress)
 	application.RegisterEvent[application.Void](contracts.EventDownloadTasksUpdated)
 	application.RegisterEvent[contracts.FollowedUpdateCheckProgress](contracts.EventFollowedUpdateCheckProgress)
@@ -41,12 +40,8 @@ func main() {
 				if win, ok := application.Get().Window.GetByName("main"); ok {
 					win.Focus()
 				}
-				if len(data.Args) > 1 {
-					application.Get().Event.Emit(contracts.EventFilesOpened, data.Args[1:])
-				}
 			},
 		},
-		FileAssociations: []string{".cbz", ".cbr", ".zip", ".rar"},
 		Services: []application.Service{
 			application.NewService(appService),
 		},
@@ -78,16 +73,6 @@ func main() {
 			Providers:      []updater.Provider{ghProvider},
 		})
 	}
-
-	app.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(event *application.ApplicationEvent) {
-		opened := event.Context().OpenedFiles()
-		if len(opened) == 0 && event.Context().Filename() != "" {
-			opened = []string{event.Context().Filename()}
-		}
-		if len(opened) > 0 {
-			application.Get().Event.Emit(contracts.EventFilesOpened, opened)
-		}
-	})
 
 	app.Menu.SetApplicationMenu(application.DefaultApplicationMenu())
 

@@ -21,6 +21,7 @@ import type {
   FollowedUpdateCheckProgress,
   MangaLinkPreviewInput,
   MangaLinkPreviewItem,
+  DroppedSourcesResult,
 } from "@/lib/contracts";
 
 export interface SelectDirectoryOptions {
@@ -47,6 +48,7 @@ export interface AppAdapter {
   getThumbnailCacheSize(): Promise<number>;
   clearThumbnailCache(): Promise<void>;
   addLibrarySource(source: LibrarySource): Promise<AppSettings>;
+  addDroppedSources(paths: string[]): Promise<DroppedSourcesResult>;
   removeLibrarySource(sourceID: string): Promise<AppSettings>;
   updateLibrarySource(source: LibrarySource): Promise<AppSettings>;
   relocateLibrarySource(sourceID: string, newPath: string): Promise<AppSettings>;

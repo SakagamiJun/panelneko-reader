@@ -853,6 +853,81 @@ func (a *App) AddLibrarySource(source contracts.LibrarySource) (contracts.AppSet
 	return updated, nil
 }
 
+func (a *App) AddDroppedSources(paths []string) (contracts.DroppedSourcesResult, error) {
+	if err := a.ensureReady(); err != nil {
+		return contracts.DroppedSourcesResult{}, err
+	}
+
+	result := contracts.DroppedSourcesResult{
+		AddedPaths: make([]string, 0),
+	}
+	if len(paths) == 0 {
+		return result, nil
+	}
+
+	current := a.settings.Get()
+	existingPathMap := make(map[string]bool)
+	for _, s := range current.LibrarySources {
+		existingPathMap[filepath.Clean(s.Path)] = true
+	}
+
+	var addedSources []contracts.LibrarySource
+	for _, p := range paths {
+		cleanPath := filepath.Clean(strings.TrimSpace(p))
+		if cleanPath == "" || cleanPath == "." {
+			continue
+		}
+
+		info, err := os.Stat(cleanPath)
+		if err != nil {
+			continue
+		}
+
+		if !info.IsDir() {
+			result.IgnoredFiles++
+			continue
+		}
+
+		if existingPathMap[cleanPath] {
+			result.ExistingCount++
+			continue
+		}
+
+		existingPathMap[cleanPath] = true
+		sourceID := fmt.Sprintf("src-%d-%d", time.Now().UnixNano(), len(addedSources)+1)
+		name := filepath.Base(cleanPath)
+		if name == "" || name == "." || name == "/" {
+			name = cleanPath
+		}
+
+		newSource := contracts.LibrarySource{
+			ID:      sourceID,
+			Name:    name,
+			Type:    contracts.SourceTypeLocal,
+			Path:    cleanPath,
+			Enabled: true,
+			Status:  contracts.SourceStatusOnline,
+		}
+		addedSources = append(addedSources, newSource)
+		result.AddedPaths = append(result.AddedPaths, cleanPath)
+		result.AddedCount++
+	}
+
+	if len(addedSources) > 0 {
+		current.LibrarySources = append(current.LibrarySources, addedSources...)
+		updated, err := a.settings.Update(current)
+		if err != nil {
+			return result, err
+		}
+		a.emit(contracts.EventSettingsUpdated, updated)
+		go func() {
+			_, _ = a.performSourcesScan()
+		}()
+	}
+
+	return result, nil
+}
+
 func (a *App) RemoveLibrarySource(sourceID string) (contracts.AppSettings, error) {
 	if err := a.ensureReady(); err != nil {
 		return contracts.AppSettings{}, err

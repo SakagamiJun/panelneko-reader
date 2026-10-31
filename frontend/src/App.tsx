@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Folder, Loader2, RefreshCw } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { LibraryGrid } from "@/components/library/library-grid";
 import { SettingsDialog, type SettingsTab } from "@/components/sections/settings-dialog";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UpdateToast } from "@/components/ui/update-toast";
 import { OfflineToast } from "@/components/ui/offline-toast";
+import { FloatingCard } from "@/components/ui/floating-card";
 import { appAdapter } from "@/lib/api";
 import {
   type AppSettings,
@@ -48,6 +49,7 @@ export default function App() {
   const [collectionToToggle, setCollectionToToggle] = useState<LibraryManga | null>(null);
   const [updateNotification, setUpdateNotification] = useState<UpdateCheckResult | null>(null);
   const [showOfflineToast, setShowOfflineToast] = useState(false);
+  const [dropToastMessage, setDropToastMessage] = useState<string | null>(null);
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress>({
     activeTasks: 0,
@@ -86,56 +88,37 @@ export default function App() {
     queryFn: () => appAdapter.getReaderManifest(selectedLibraryID!),
   });
 
-  const handleIncomingPaths = useCallback(
+  const handleDroppedPaths = useCallback(
     async (payload: unknown) => {
       const paths = Array.isArray(payload) ? (payload as string[]) : [];
       if (paths.length === 0) return;
-      let targetMangaIdToOpen: string | null = null;
-      for (const p of paths) {
-        try {
-          const name = p.split(/[/\\]/).pop() || p;
-          const isArchive = /\.(cbz|cbr|zip|rar)$/i.test(p);
-          const sourceID = `src-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-          await appAdapter.addLibrarySource({
-            id: sourceID,
-            name,
-            path: p,
-            type: "local",
-            enabled: true,
-          });
-          if (isArchive && !targetMangaIdToOpen) {
-            const rawId = `${sourceID}::${name}`;
-            const bytes = new TextEncoder().encode(rawId);
-            let binary = "";
-            for (let i = 0; i < bytes.length; i++) {
-              binary += String.fromCharCode(bytes[i]);
-            }
-            targetMangaIdToOpen = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-          }
-        } catch {
-          const isArchive = /\.(cbz|cbr|zip|rar)$/i.test(p);
-          if (isArchive && !targetMangaIdToOpen && settingsQuery.data?.librarySources) {
-            const existing = settingsQuery.data.librarySources.find((s) => s.path === p);
-            if (existing) {
-              const name = p.split(/[/\\]/).pop() || p;
-              const rawId = `${existing.id}::${name}`;
-              const bytes = new TextEncoder().encode(rawId);
-              let binary = "";
-              for (let i = 0; i < bytes.length; i++) {
-                binary += String.fromCharCode(bytes[i]);
-              }
-              targetMangaIdToOpen = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-            }
-          }
+      try {
+        const res = await appAdapter.addDroppedSources(paths);
+        if (res.ignoredFiles > 0 && res.addedCount === 0) {
+          setDropToastMessage(t("library.dropFileNotSupported"));
+        } else if (res.ignoredFiles > 0 && res.addedCount > 0) {
+          setDropToastMessage(
+            t("library.dropMixedNotice", {
+              added: res.addedCount,
+              ignored: res.ignoredFiles,
+            })
+          );
+        } else if (res.addedCount > 0) {
+          setDropToastMessage(
+            t("library.dropSourceAdded", {
+              count: res.addedCount,
+            })
+          );
         }
-      }
-      await queryClient.invalidateQueries({ queryKey: ["settings"] });
-      await queryClient.invalidateQueries({ queryKey: ["library"] });
-      if (targetMangaIdToOpen) {
-        setSelectedLibraryID(targetMangaIdToOpen);
+        if (res.addedCount > 0) {
+          await queryClient.invalidateQueries({ queryKey: ["settings"] });
+          await queryClient.invalidateQueries({ queryKey: ["library"] });
+        }
+      } catch (err) {
+        console.error("Failed to add dropped sources:", err);
       }
     },
-    [queryClient, settingsQuery.data?.librarySources]
+    [queryClient, t]
   );
 
   useEffect(() => {
@@ -148,8 +131,7 @@ export default function App() {
       void queryClient.invalidateQueries({ queryKey: ["mangaOnlineLinks"] });
     });
 
-    const offFilesDropped = appAdapter.subscribe(EVENTS.FILES_DROPPED, handleIncomingPaths);
-    const offFilesOpened = appAdapter.subscribe(EVENTS.FILES_OPENED, handleIncomingPaths);
+    const offFilesDropped = appAdapter.subscribe(EVENTS.FILES_DROPPED, handleDroppedPaths);
 
     // Initial sync and event subscriptions for downloads
     void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
@@ -180,12 +162,11 @@ export default function App() {
       offSettings();
       offLibrary();
       offFilesDropped();
-      offFilesOpened();
       offProgress();
       offTasks();
       offUpdateCheck();
     };
-  }, [queryClient]);
+  }, [handleDroppedPaths, queryClient]);
 
   useEffect(() => {
     const settings = settingsQuery.data;
@@ -618,7 +599,7 @@ export default function App() {
           })
           .then((selected) => {
             if (selected) {
-              void handleIncomingPaths([selected]);
+              void handleDroppedPaths([selected]);
             }
           });
         return;
@@ -914,6 +895,7 @@ export default function App() {
 
       {/* Unified Bottom-Right Notification Dock */}
       {(updateNotification ||
+        dropToastMessage ||
         (showOfflineToast && offlineSourcesCount > 0 && !selectedCollectionPath && !selectedLibraryID)) && (
         <div className="fixed bottom-5 right-5 z-50 flex flex-col-reverse gap-2.5 pointer-events-none items-end max-w-[calc(100vw-2.5rem)]">
           {/* Update Toast */}
@@ -926,6 +908,25 @@ export default function App() {
                 setUpdateNotification(null);
               }}
             />
+          )}
+
+          {/* Drop Source / File Notification Toast */}
+          {dropToastMessage && (
+            <FloatingCard
+              icon={
+                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                  <Folder className="h-3.5 w-3.5" />
+                </div>
+              }
+              title={t("library.dropToastTitle")}
+              onClose={() => setDropToastMessage(null)}
+              durationMs={5000}
+              className="w-88 max-w-[calc(100vw-2.5rem)] pointer-events-auto"
+            >
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {dropToastMessage}
+              </p>
+            </FloatingCard>
           )}
 
           {/* Offline Sources Warning Toast */}

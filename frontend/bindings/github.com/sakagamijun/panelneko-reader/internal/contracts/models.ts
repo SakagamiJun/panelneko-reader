@@ -80,6 +80,13 @@ export interface DevInfo {
     "accountCount": number;
 }
 
+export interface DroppedSourcesResult {
+    "addedCount": number;
+    "ignoredFiles": number;
+    "existingCount": number;
+    "addedPaths": string[];
+}
+
 export interface DownloadProgress {
     "activeTasks": number;
     "totalTasks": number;

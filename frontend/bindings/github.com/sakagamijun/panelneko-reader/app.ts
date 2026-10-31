@@ -17,6 +17,10 @@ export function AddLibrarySource(source: contracts$0.LibrarySource): $Cancellabl
     return $Call.ByID(3053176450, source);
 }
 
+export function AddDroppedSources(paths: string[]): $CancellablePromise<contracts$0.DroppedSourcesResult> {
+    return $Call.ByName("main.App.AddDroppedSources", paths);
+}
+
 export function CancelDownloadTask(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(4183277566, taskID);
 }

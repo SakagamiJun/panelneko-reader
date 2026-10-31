@@ -445,3 +445,10 @@ type ComicInfoNotes struct {
 	MangaID   string `json:"mangaId,omitempty"`
 	ChapterID string `json:"chapterId,omitempty"`
 }
+
+type DroppedSourcesResult struct {
+	AddedCount    int      `json:"addedCount"`
+	IgnoredFiles  int      `json:"ignoredFiles"`
+	ExistingCount int      `json:"existingCount"`
+	AddedPaths    []string `json:"addedPaths"`
+}

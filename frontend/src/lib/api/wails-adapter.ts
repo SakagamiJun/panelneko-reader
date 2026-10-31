@@ -21,6 +21,7 @@ import type {
   FollowedUpdateCheckProgress,
   MangaLinkPreviewInput,
   MangaLinkPreviewItem,
+  DroppedSourcesResult,
 } from "@/lib/contracts";
 import type { AppAdapter, SelectDirectoryOptions } from "@/lib/api/adapter";
 import { isWailsEnvironment } from "@/lib/runtime";
@@ -115,6 +116,10 @@ export class WailsAdapter implements AppAdapter {
 
   async addLibrarySource(source: LibrarySource): Promise<AppSettings> {
     return (await App.AddLibrarySource(source as any)) as AppSettings;
+  }
+
+  async addDroppedSources(paths: string[]): Promise<DroppedSourcesResult> {
+    return (await App.AddDroppedSources(paths)) as DroppedSourcesResult;
   }
 
   async removeLibrarySource(sourceID: string): Promise<AppSettings> {

@@ -258,13 +258,19 @@ export interface FollowedUpdateCheckProgress {
   queued: number;
 }
 
+export interface DroppedSourcesResult {
+  addedCount: number;
+  ignoredFiles: number;
+  existingCount: number;
+  addedPaths: string[];
+}
+
 export const EVENTS = {
   SETTINGS_UPDATED: BindingsEvents.SettingsUpdated,
   THEME_RESOLVED: BindingsEvents.ThemeResolved,
   LOCALE_RESOLVED: BindingsEvents.LocaleResolved,
   LIBRARY_UPDATED: BindingsEvents.LibraryUpdated,
   FILES_DROPPED: BindingsEvents.FilesDropped,
-  FILES_OPENED: BindingsEvents.FilesOpened,
   DOWNLOAD_PROGRESS: BindingsEvents.DownloadProgress,
   DOWNLOAD_TASKS_UPDATED: BindingsEvents.DownloadTasksUpdated,
   FOLLOWED_UPDATE_CHECK_PROGRESS:

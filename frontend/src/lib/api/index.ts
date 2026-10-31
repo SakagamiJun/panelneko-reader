@@ -65,6 +65,9 @@ export const appAdapter: AppAdapter = {
   addLibrarySource(source) {
     return currentAdapter().addLibrarySource(source);
   },
+  addDroppedSources(paths) {
+    return currentAdapter().addDroppedSources(paths);
+  },
   removeLibrarySource(sourceID) {
     return currentAdapter().removeLibrarySource(sourceID);
   },
