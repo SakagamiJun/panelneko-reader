@@ -38,6 +38,9 @@ type runningTask struct {
 }
 
 type Manager struct {
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	wg                   sync.WaitGroup
 	store                *store.SQLiteStore
 	settings             *settings.Service
 	providers            map[string]contracts.MangaProvider
@@ -64,7 +67,10 @@ func NewManager(
 		maxChapter = 3
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	mgr := &Manager{
+		ctx:        ctx,
+		cancel:     cancel,
 		store:      storeValue,
 		settings:   settingsService,
 		providers:  make(map[string]contracts.MangaProvider),
@@ -103,6 +109,12 @@ func (m *Manager) GetProvider(id string) (contracts.MangaProvider, bool) {
 func (m *Manager) Close() {
 	m.mu.Lock()
 	m.onActiveTasksChanged = nil
+	if m.cancel != nil {
+		m.cancel()
+	}
+	for _, rt := range m.running {
+		rt.cancel()
+	}
 	m.mu.Unlock()
 
 	select {
@@ -110,6 +122,8 @@ func (m *Manager) Close() {
 	default:
 		close(m.stopTicker)
 	}
+
+	m.wg.Wait()
 }
 
 func (m *Manager) speedMonitorLoop() {
@@ -286,7 +300,7 @@ func (m *Manager) CreateTasks(inputs []contracts.CreateDownloadTaskInput) ([]con
 			return nil, err
 		}
 		created = append(created, task)
-		go m.startWorker(task)
+		m.dispatchWorker(task)
 	}
 
 	m.emit(contracts.EventDownloadTasksUpdated, nil)
@@ -294,13 +308,17 @@ func (m *Manager) CreateTasks(inputs []contracts.CreateDownloadTaskInput) ([]con
 	return created, nil
 }
 
-func (m *Manager) startWorker(task contracts.DownloadTask) {
+func (m *Manager) dispatchWorker(task contracts.DownloadTask) {
 	m.mu.Lock()
+	if m.ctx != nil && m.ctx.Err() != nil {
+		m.mu.Unlock()
+		return
+	}
 	if _, isRunning := m.running[task.ID]; isRunning {
 		m.mu.Unlock()
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(m.ctx)
 	rt := &runningTask{
 		taskID: task.ID,
 		cancel: cancel,
@@ -308,9 +326,15 @@ func (m *Manager) startWorker(task contracts.DownloadTask) {
 	rt.downloaded.Store(int32(task.DownloadedPages))
 	rt.totalPages.Store(int32(task.TotalPages))
 	m.running[task.ID] = rt
+	m.wg.Add(1)
 	m.mu.Unlock()
 	m.notifyActiveTasks()
 
+	go m.startWorker(ctx, rt, task)
+}
+
+func (m *Manager) startWorker(ctx context.Context, rt *runningTask, task contracts.DownloadTask) {
+	defer m.wg.Done()
 	defer func() {
 		m.mu.Lock()
 		_, wasRunning := m.running[task.ID]
@@ -551,7 +575,7 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 			}
 			return FormatPageFilename(pageIndex+1, ext)
 		}
-		if err := StreamSaveCBZ(finalFilePath, xmlMetadata, totalPages, fetchImage, pageNamer); err != nil {
+		if err := StreamSaveCBZ(ctx, finalFilePath, xmlMetadata, totalPages, fetchImage, pageNamer); err != nil {
 			return err
 		}
 	}
@@ -624,7 +648,7 @@ func (m *Manager) ResumeTask(taskID string) error {
 	}
 
 	_ = m.store.UpdateDownloadTaskStatus(taskID, contracts.DownloadStatusPending, "")
-	go m.startWorker(t)
+	m.dispatchWorker(t)
 	m.emit(contracts.EventDownloadTasksUpdated, nil)
 	m.emitProgress()
 	return nil
@@ -658,7 +682,7 @@ func (m *Manager) ResumeWaitingTasks(sourceID string) {
 				if err == nil && dir != "" {
 					_ = m.store.UpdateDownloadTaskStatus(t.ID, contracts.DownloadStatusPending, "")
 					t.Status = contracts.DownloadStatusPending
-					go m.startWorker(t)
+					m.dispatchWorker(t)
 					resumedAny = true
 				}
 			}
@@ -678,7 +702,7 @@ func (m *Manager) RetryTask(taskID string) error {
 
 	_ = m.store.UpdateDownloadTaskStatus(taskID, contracts.DownloadStatusPending, "")
 	t.Status = contracts.DownloadStatusPending
-	go m.startWorker(t)
+	m.dispatchWorker(t)
 	m.emit(contracts.EventDownloadTasksUpdated, nil)
 	m.emitProgress()
 	return nil

@@ -31,7 +31,7 @@ func TestStreamSaveCBZWithComicInfo(t *testing.T) {
 	}
 
 	cbzPath := filepath.Join(tmpDir, "one_piece_001.cbz")
-	err = StreamSaveCBZ(cbzPath, xmlData, 3, func(ctx context.Context, pageIndex int, writer io.Writer) error {
+	err = StreamSaveCBZ(context.Background(), cbzPath, xmlData, 3, func(ctx context.Context, pageIndex int, writer io.Writer) error {
 		content := fmt.Sprintf("fake_image_bytes_%d", pageIndex+1)
 		_, wErr := writer.Write([]byte(content))
 		return wErr
@@ -80,7 +80,7 @@ func TestStreamSaveCBZWithCustomPageNamer(t *testing.T) {
 		return fmt.Sprintf("%03d%s", idx+1, exts[idx%len(exts)])
 	}
 
-	err = StreamSaveCBZ(cbzPath, nil, 2, func(ctx context.Context, pageIndex int, writer io.Writer) error {
+	err = StreamSaveCBZ(context.Background(), cbzPath, nil, 2, func(ctx context.Context, pageIndex int, writer io.Writer) error {
 		_, wErr := writer.Write([]byte("img"))
 		return wErr
 	}, pageNamer)
@@ -99,5 +99,29 @@ func TestStreamSaveCBZWithCustomPageNamer(t *testing.T) {
 	}
 	if zr.File[0].Name != "001.jpg" || zr.File[1].Name != "002.png" {
 		t.Fatalf("unexpected entry names: %s, %s", zr.File[0].Name, zr.File[1].Name)
+	}
+}
+
+func TestStreamSaveCBZContextCancellation(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "cbz_cancel_test")
+	if err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel before or during execution
+
+	cbzPath := filepath.Join(tmpDir, "canceled.cbz")
+	err = StreamSaveCBZ(ctx, cbzPath, nil, 3, func(pCtx context.Context, pageIndex int, writer io.Writer) error {
+		return pCtx.Err()
+	})
+	if err == nil {
+		t.Fatal("expected cancellation error, got nil")
+	}
+
+	// Verify temporary file was deleted
+	if _, statErr := os.Stat(cbzPath + ".tmp"); !os.IsNotExist(statErr) {
+		t.Errorf("expected tmp file to be cleaned up on cancellation")
 	}
 }

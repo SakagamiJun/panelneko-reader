@@ -12,12 +12,16 @@ import (
 
 // StreamSaveCBZ saves a list of image byte-producers directly into a .cbz archive atomically.
 func StreamSaveCBZ(
+	ctx context.Context,
 	finalFilePath string,
 	xmlMetadata []byte,
 	totalPages int,
 	fetchImage func(ctx context.Context, pageIndex int, writer io.Writer) error,
 	getPageFilename ...func(pageIndex int) string,
 ) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	dir := filepath.Dir(finalFilePath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
@@ -49,6 +53,10 @@ func StreamSaveCBZ(
 
 	// Write images sequentially into zip
 	for i := 0; i < totalPages; i++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		entryName := fmt.Sprintf("%03d.webp", i+1)
 		if len(getPageFilename) > 0 && getPageFilename[0] != nil {
 			if customName := getPageFilename[0](i); customName != "" {
@@ -60,8 +68,8 @@ func StreamSaveCBZ(
 			return fmt.Errorf("create zip entry %s: %w", entryName, err)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err = fetchImage(ctx, i, entryWriter)
+		pageCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		err = fetchImage(pageCtx, i, entryWriter)
 		cancel()
 		if err != nil {
 			return fmt.Errorf("fetch page %d: %w", i+1, err)
