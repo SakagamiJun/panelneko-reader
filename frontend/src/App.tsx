@@ -16,10 +16,7 @@ import { FloatingCard } from "@/components/ui/floating-card";
 import { appAdapter } from "@/lib/api";
 import {
   type AppSettings,
-  type DownloadProgress,
-  type DownloadTask,
   EVENTS,
-  type FollowedUpdateCheckProgress,
   type LibraryManga,
   type LibrarySource,
   type MangaOnlineLink,
@@ -50,16 +47,6 @@ export default function App() {
   const [updateNotification, setUpdateNotification] = useState<UpdateCheckResult | null>(null);
   const [showOfflineToast, setShowOfflineToast] = useState(false);
   const [dropToastMessage, setDropToastMessage] = useState<string | null>(null);
-  const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
-  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress>({
-    activeTasks: 0,
-    totalTasks: 0,
-    downloadedPages: 0,
-    totalPages: 0,
-    speedFormatted: "0 B/s",
-    bytesPerSec: 0,
-  });
-  const [followedUpdateProgress, setFollowedUpdateProgress] = useState<FollowedUpdateCheckProgress | null>(null);
   const [onlineSearchOpen, setOnlineSearchOpen] = useState(false);
   const [onlineSearchSource, setOnlineSearchSource] = useState<"copymanga" | "klz9">("copymanga");
   const [onlineSearchQuery, setOnlineSearchQuery] = useState("");
@@ -133,38 +120,10 @@ export default function App() {
 
     const offFilesDropped = appAdapter.subscribe(EVENTS.FILES_DROPPED, handleDroppedPaths);
 
-    // Initial sync and event subscriptions for downloads
-    void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
-    void appAdapter.getDownloadProgress().then(setDownloadProgress).catch(() => {});
-    void appAdapter.getFollowedUpdateCheckStatus().then(setFollowedUpdateProgress).catch(() => {});
-
-    const offProgress = appAdapter.subscribe(EVENTS.DOWNLOAD_PROGRESS, (payload) => {
-      if (payload && typeof payload === "object") {
-        setDownloadProgress(payload as DownloadProgress);
-      }
-    });
-
-    const offTasks = appAdapter.subscribe(EVENTS.DOWNLOAD_TASKS_UPDATED, (payload) => {
-      if (Array.isArray(payload)) {
-        setDownloadTasks(payload as DownloadTask[]);
-      } else {
-        void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
-      }
-    });
-
-    const offUpdateCheck = appAdapter.subscribe(EVENTS.FOLLOWED_UPDATE_CHECK_PROGRESS, (payload) => {
-      if (payload && typeof payload === "object") {
-        setFollowedUpdateProgress(payload as FollowedUpdateCheckProgress);
-      }
-    });
-
     return () => {
       offSettings();
       offLibrary();
       offFilesDropped();
-      offProgress();
-      offTasks();
-      offUpdateCheck();
     };
   }, [handleDroppedPaths, queryClient]);
 
@@ -705,32 +664,6 @@ export default function App() {
             setOnlineSearchOpen(true);
           }}
           onOpenSettingsTab={(tab) => openSettingsWithTab(tab)}
-          downloadTasks={downloadTasks}
-          downloadProgress={downloadProgress}
-          followedUpdateProgress={followedUpdateProgress}
-          onPauseTask={(id) => void appAdapter.pauseDownloadTask(id)}
-          onResumeTask={(id) => {
-            const task = downloadTasks.find((t) => t.id === id);
-            if (task && (task.status === "failed" || task.status === "waiting_source")) {
-              void appAdapter.retryDownloadTask(id);
-            } else {
-              void appAdapter.resumeDownloadTask(id);
-            }
-          }}
-          onCancelTask={(id) => void appAdapter.cancelDownloadTask(id)}
-          onClearCompleted={() => {
-            void appAdapter.clearCompletedDownloadTasks().then(() => {
-              void appAdapter.getDownloadTasks().then(setDownloadTasks);
-            });
-          }}
-          onCheckAllUpdates={async () => {
-            const queuedCount = await appAdapter.checkAllFollowedUpdates();
-            const tasks = await appAdapter.getDownloadTasks();
-            setDownloadTasks(tasks);
-            const prog = await appAdapter.getDownloadProgress();
-            setDownloadProgress(prog);
-            return queuedCount;
-          }}
         />
       )}
 
@@ -874,8 +807,6 @@ export default function App() {
         settings={settings}
         onDownloadStarted={() => {
           setSearchQuery("");
-          void appAdapter.getDownloadTasks().then(setDownloadTasks).catch(() => {});
-          void appAdapter.getDownloadProgress().then(setDownloadProgress).catch(() => {});
           void onlineLinksQuery.refetch();
           void queryClient.invalidateQueries({ queryKey: ["mangaOnlineLinks"] });
         }}

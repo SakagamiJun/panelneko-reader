@@ -22,7 +22,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Kbd } from "@/components/ui/kbd";
 import { DownloadPopover } from "@/components/download-popover";
-import type { AppSettings, DownloadProgress, DownloadTask, FollowedUpdateCheckProgress, LibraryManga } from "@/lib/contracts";
+import { appAdapter } from "@/lib/api";
+import {
+  type AppSettings,
+  type DownloadProgress,
+  type DownloadTask,
+  EVENTS,
+  type FollowedUpdateCheckProgress,
+  type LibraryManga,
+} from "@/lib/contracts";
 import { isMacPlatform } from "@/lib/system";
 import { useHasTrafficLights } from "@/hooks/use-traffic-lights";
 import { cn } from "@/lib/utils";
@@ -89,9 +97,9 @@ export function AppHeader({
   onSelectLocalManga,
   onOpenOnlineSearch,
   onOpenSettingsTab,
-  downloadTasks = [],
-  downloadProgress,
-  followedUpdateProgress,
+  downloadTasks: propDownloadTasks,
+  downloadProgress: propDownloadProgress,
+  followedUpdateProgress: propFollowedUpdateProgress,
   onPauseTask,
   onResumeTask,
   onCancelTask,
@@ -111,6 +119,90 @@ export function AppHeader({
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
   const isMac = isMacPlatform();
   const hasTrafficLights = useHasTrafficLights();
+
+  const [internalDownloadProgress, setInternalDownloadProgress] = useState<DownloadProgress>({
+    activeTasks: 0,
+    totalTasks: 0,
+    downloadedPages: 0,
+    totalPages: 0,
+    speedFormatted: "0 B/s",
+    bytesPerSec: 0,
+  });
+  const [internalDownloadTasks, setInternalDownloadTasks] = useState<DownloadTask[]>([]);
+  const [internalFollowedUpdateProgress, setInternalFollowedUpdateProgress] =
+    useState<FollowedUpdateCheckProgress | null>(null);
+
+  useEffect(() => {
+    if (propDownloadProgress === undefined) {
+      void appAdapter.getDownloadProgress().then(setInternalDownloadProgress).catch(() => {});
+      const offProgress = appAdapter.subscribe(EVENTS.DOWNLOAD_PROGRESS, (payload) => {
+        if (payload && typeof payload === "object") {
+          setInternalDownloadProgress(payload as DownloadProgress);
+        }
+      });
+      return offProgress;
+    }
+  }, [propDownloadProgress]);
+
+  useEffect(() => {
+    if (propDownloadTasks === undefined) {
+      void appAdapter.getDownloadTasks().then(setInternalDownloadTasks).catch(() => {});
+      const offTasks = appAdapter.subscribe(EVENTS.DOWNLOAD_TASKS_UPDATED, (payload) => {
+        if (Array.isArray(payload)) {
+          setInternalDownloadTasks(payload as DownloadTask[]);
+        } else {
+          void appAdapter.getDownloadTasks().then(setInternalDownloadTasks).catch(() => {});
+        }
+      });
+      return offTasks;
+    }
+  }, [propDownloadTasks]);
+
+  useEffect(() => {
+    if (propFollowedUpdateProgress === undefined) {
+      void appAdapter.getFollowedUpdateCheckStatus().then(setInternalFollowedUpdateProgress).catch(() => {});
+      const offUpdateCheck = appAdapter.subscribe(EVENTS.FOLLOWED_UPDATE_CHECK_PROGRESS, (payload) => {
+        if (payload && typeof payload === "object") {
+          setInternalFollowedUpdateProgress(payload as FollowedUpdateCheckProgress);
+        }
+      });
+      return offUpdateCheck;
+    }
+  }, [propFollowedUpdateProgress]);
+
+  const downloadProgress = propDownloadProgress ?? internalDownloadProgress;
+  const downloadTasks = propDownloadTasks ?? internalDownloadTasks;
+  const followedUpdateProgress = propFollowedUpdateProgress ?? internalFollowedUpdateProgress;
+
+  const handlePauseTask = onPauseTask ?? ((id: string) => void appAdapter.pauseDownloadTask(id));
+  const handleResumeTask =
+    onResumeTask ??
+    ((id: string) => {
+      const task = downloadTasks.find((t) => t.id === id);
+      if (task && (task.status === "failed" || task.status === "waiting_source")) {
+        void appAdapter.retryDownloadTask(id);
+      } else {
+        void appAdapter.resumeDownloadTask(id);
+      }
+    });
+  const handleCancelTask = onCancelTask ?? ((id: string) => void appAdapter.cancelDownloadTask(id));
+  const handleClearCompleted =
+    onClearCompleted ??
+    (() => {
+      void appAdapter.clearCompletedDownloadTasks().then(() => {
+        void appAdapter.getDownloadTasks().then(setInternalDownloadTasks);
+      });
+    });
+  const handleCheckAllUpdates =
+    onCheckAllUpdates ??
+    (async () => {
+      const queuedCount = await appAdapter.checkAllFollowedUpdates();
+      const tasks = await appAdapter.getDownloadTasks();
+      setInternalDownloadTasks(tasks);
+      const prog = await appAdapter.getDownloadProgress();
+      setInternalDownloadProgress(prog);
+      return queuedCount;
+    });
 
   const isAllSources = !selectedSourceId || selectedSourceId === "all";
   const activeSource = settings?.librarySources?.find((s) => s.id === selectedSourceId);
@@ -889,11 +981,11 @@ export function AppHeader({
                 }
               }
               checkProgress={followedUpdateProgress}
-              onPauseTask={onPauseTask}
-              onResumeTask={onResumeTask}
-              onCancelTask={onCancelTask}
-              onClearCompleted={onClearCompleted}
-              onCheckAllUpdates={onCheckAllUpdates}
+              onPauseTask={handlePauseTask}
+              onResumeTask={handleResumeTask}
+              onCancelTask={handleCancelTask}
+              onClearCompleted={handleClearCompleted}
+              onCheckAllUpdates={handleCheckAllUpdates}
               onOpenSettings={() => {
                 setIsDownloadMenuOpen(false);
                 onOpenSettingsTab?.("downloads");
