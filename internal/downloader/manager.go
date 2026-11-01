@@ -1,12 +1,10 @@
 package downloader
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,27 +14,11 @@ import (
 	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
-	"github.com/sakagamijun/panelneko-reader/internal/downloader/copymanga"
-	"github.com/sakagamijun/panelneko-reader/internal/downloader/klz9"
 	"github.com/sakagamijun/panelneko-reader/internal/settings"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
 )
 
 var sanitizeFilenameRe = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
-
-var bufferPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 64*1024)
-		return &b
-	},
-}
-
-var pageBufferPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 0, 256*1024)
-		return bytes.NewBuffer(b)
-	},
-}
 
 func SanitizeFilename(name string) string {
 	clean := sanitizeFilenameRe.ReplaceAllString(name, "_")
@@ -58,8 +40,7 @@ type runningTask struct {
 type Manager struct {
 	store                *store.SQLiteStore
 	settings             *settings.Service
-	copyManga            *copymanga.Client
-	klz9                 *klz9.Client
+	providers            map[string]contracts.MangaProvider
 	chapterSem           chan struct{}
 	running              map[string]*runningTask
 	mu                   sync.RWMutex
@@ -75,8 +56,7 @@ type Manager struct {
 func NewManager(
 	storeValue *store.SQLiteStore,
 	settingsService *settings.Service,
-	copyClient *copymanga.Client,
-	klz9Client *klz9.Client,
+	providers ...contracts.MangaProvider,
 ) *Manager {
 	st := settingsService.Get()
 	maxChapter := st.Downloader.MaxConcurrentDownloads
@@ -87,17 +67,37 @@ func NewManager(
 	mgr := &Manager{
 		store:      storeValue,
 		settings:   settingsService,
-		copyManga:  copyClient,
-		klz9:       klz9Client,
+		providers:  make(map[string]contracts.MangaProvider),
 		chapterSem: make(chan struct{}, maxChapter),
 		running:    make(map[string]*runningTask),
 		stopTicker: make(chan struct{}),
+	}
+	for _, p := range providers {
+		if p != nil {
+			mgr.providers[p.ID()] = p
+		}
 	}
 	emptyStr := ""
 	mgr.speedFormatted.Store(&emptyStr)
 	go mgr.speedMonitorLoop()
 
 	return mgr
+}
+
+func (m *Manager) RegisterProvider(p contracts.MangaProvider) {
+	if p == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.providers[p.ID()] = p
+}
+
+func (m *Manager) GetProvider(id string) (contracts.MangaProvider, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	p, ok := m.providers[id]
+	return p, ok
 }
 
 func (m *Manager) Close() {
@@ -437,10 +437,13 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 		finalFilePath = filepath.Join(chapterDir, FormatChapterFilename(task.ChapterNumber, safeChapter, ".cbz"))
 	}
 
-	var pageURLs []string
+	provider, ok := m.GetProvider(task.Source)
+	if !ok {
+		return fmt.Errorf("unknown downloader source: %s", task.Source)
+	}
 
-	if task.Source == klz9.SiteName && task.ChapterID == "" && task.MangaID != "" {
-		if chs, chErr := m.klz9.GetMangaChapters(ctx, task.MangaID); chErr == nil {
+	if task.ChapterID == "" && task.MangaID != "" {
+		if chs, chErr := provider.GetMangaChapters(ctx, task.MangaID); chErr == nil {
 			for _, ch := range chs {
 				if ch.Number == task.ChapterNumber || (task.ChapterTitle != "" && ch.Title == task.ChapterTitle) {
 					task.ChapterID = ch.ID
@@ -451,20 +454,7 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 		}
 	}
 
-	if task.Source == copymanga.SiteName {
-		if m.copyManga == nil {
-			return fmt.Errorf("copymanga client not initialized")
-		}
-		pageURLs, err = m.copyManga.GetChapterImageURLs(ctx, task.MangaID, task.ChapterID)
-	} else if task.Source == klz9.SiteName {
-		if m.klz9 == nil {
-			return fmt.Errorf("klz9 client not initialized")
-		}
-		pageURLs, err = m.klz9.GetChapterPages(ctx, task.ChapterID)
-	} else {
-		return fmt.Errorf("unknown downloader source: %s", task.Source)
-	}
-
+	pageURLs, err := provider.GetChapterPages(ctx, task.MangaID, task.ChapterID)
 	if err != nil {
 		return fmt.Errorf("fetch chapter pages: %w", err)
 	}
@@ -486,14 +476,9 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 	})
 	notesStr := string(notesBytes)
 
-	var webURL string
-	if task.Source == copymanga.SiteName {
-		webURL = fmt.Sprintf("https://copymanga.tv/comic/%s", task.MangaID)
-	} else if task.Source == klz9.SiteName {
-		webURL = fmt.Sprintf("https://klz9.com/%s", task.MangaID)
-	}
+	webURL := provider.ComicWebURL(task.MangaID)
 
-	xmlMetadata, _ := m.copyManga.BuildComicInfoXML(copymanga.ComicInfoOptions{
+	xmlMetadata, _ := BuildComicInfoXML(ComicInfoOptions{
 		Series:          task.MangaTitle,
 		Title:           task.ChapterTitle,
 		Number:          task.ChapterNumber,
@@ -509,17 +494,9 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 		}
 
 		rawURL := pageURLs[pageIndex]
-		var dlErr error
 		countWriter := &countingWriter{w: writer, manager: m}
 
-		if task.Source == copymanga.SiteName {
-			stripedURL := m.copyManga.GetStripedCDNURL(rawURL, pageIndex)
-			dlErr = m.copyManga.DownloadImageStream(pCtx, stripedURL, countWriter)
-		} else {
-			// KLZ9 direct image download
-			dlErr = downloadDirectImage(pCtx, rawURL, countWriter)
-		}
-
+		dlErr := provider.DownloadImage(pCtx, rawURL, pageIndex, countWriter)
 		if dlErr != nil {
 			return dlErr
 		}
@@ -574,7 +551,7 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 			}
 			return FormatPageFilename(pageIndex+1, ext)
 		}
-		if err := copymanga.StreamSaveCBZ(finalFilePath, xmlMetadata, totalPages, fetchImage, pageNamer); err != nil {
+		if err := StreamSaveCBZ(finalFilePath, xmlMetadata, totalPages, fetchImage, pageNamer); err != nil {
 			return err
 		}
 	}
@@ -610,74 +587,6 @@ func (c *countingWriter) Write(p []byte) (n int, err error) {
 		}
 	}
 	return n, err
-}
-
-var directImageClient = &http.Client{
-	Timeout: 30 * time.Second,
-}
-
-var directImageBackoffs = []time.Duration{15 * time.Second, 30 * time.Second}
-
-func downloadDirectImage(ctx context.Context, imgURL string, w io.Writer) error {
-	maxAttempts := len(directImageBackoffs) + 1
-	var lastErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		if attempt > 0 {
-			backoff := directImageBackoffs[attempt-1]
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(backoff):
-			}
-		}
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("User-Agent", "Mozilla/5.0 PanelNeko/1.0")
-		req.Header.Set("Referer", "https://klz9.com/")
-
-		resp, err := directImageClient.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		if resp.StatusCode == http.StatusNotFound {
-			_ = resp.Body.Close()
-			return fmt.Errorf("direct image not found (404): %s", imgURL)
-		}
-
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			_ = resp.Body.Close()
-			lastErr = fmt.Errorf("direct image status %d", resp.StatusCode)
-			continue
-		}
-
-		pageBuf := pageBufferPool.Get().(*bytes.Buffer)
-		pageBuf.Reset()
-
-		buf := bufferPool.Get().(*[]byte)
-		_, err = io.CopyBuffer(pageBuf, resp.Body, *buf)
-		bufferPool.Put(buf)
-		_ = resp.Body.Close()
-
-		if err != nil {
-			pageBufferPool.Put(pageBuf)
-			lastErr = err
-			continue
-		}
-
-		_, err = pageBuf.WriteTo(w)
-		pageBufferPool.Put(pageBuf)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-	return fmt.Errorf("direct image failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func (m *Manager) PauseTask(taskID string) error {

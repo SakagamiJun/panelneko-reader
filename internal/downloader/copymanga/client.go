@@ -1,19 +1,15 @@
 package copymanga
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -795,129 +791,23 @@ func (c *Client) DownloadImageStream(ctx context.Context, targetURL string, writ
 	return fmt.Errorf("download image failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
-type ComicInfoXML struct {
-	XMLName         xml.Name `xml:"ComicInfo"`
-	Title           string   `xml:"Title,omitempty"`
-	Series          string   `xml:"Series,omitempty"`
-	Number          string   `xml:"Number,omitempty"`
-	Writer          string   `xml:"Writer,omitempty"`
-	Summary         string   `xml:"Summary,omitempty"`
-	Pages           int      `xml:"PageCount,omitempty"`
-	ScanInformation string   `xml:"ScanInformation,omitempty"`
-	Web             string   `xml:"Web,omitempty"`
-	Notes           string   `xml:"Notes,omitempty"`
+var _ contracts.MangaProvider = (*Client)(nil)
+
+func (c *Client) ID() string {
+	return SiteName
 }
 
-type ComicInfoOptions struct {
-	Series          string
-	Title           string
-	Writer          string
-	Summary         string
-	Number          float64
-	PageCount       int
-	ScanInformation string
-	Web             string
-	Notes           string
+func (c *Client) ComicWebURL(mangaID string) string {
+	return fmt.Sprintf("https://copymanga.tv/comic/%s", mangaID)
 }
 
-func (c *Client) BuildComicInfoXML(opts ComicInfoOptions) ([]byte, error) {
-	numStr := fmt.Sprintf("%.1f", opts.Number)
-	numStr = strings.TrimSuffix(numStr, ".0")
-
-	info := ComicInfoXML{
-		Title:           opts.Title,
-		Series:          opts.Series,
-		Number:          numStr,
-		Writer:          opts.Writer,
-		Summary:         opts.Summary,
-		Pages:           opts.PageCount,
-		ScanInformation: opts.ScanInformation,
-		Web:             opts.Web,
-		Notes:           opts.Notes,
-	}
-	var buf bytes.Buffer
-	buf.WriteString(xml.Header)
-	enc := xml.NewEncoder(&buf)
-	enc.Indent("", "  ")
-	if err := enc.Encode(info); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+func (c *Client) GetChapterPages(ctx context.Context, mangaID string, chapterID string) ([]string, error) {
+	return c.GetChapterImageURLs(ctx, mangaID, chapterID)
 }
 
-// StreamSaveCBZ saves a list of image byte-producers directly into a .cbz archive atomically
-func StreamSaveCBZ(
-	finalFilePath string,
-	xmlMetadata []byte,
-	totalPages int,
-	fetchImage func(ctx context.Context, pageIndex int, writer io.Writer) error,
-	getPageFilename ...func(pageIndex int) string,
-) error {
-	dir := filepath.Dir(finalFilePath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create output dir: %w", err)
-	}
-
-	tmpPath := finalFilePath + ".tmp"
-	tmpFile, err := os.Create(tmpPath)
-	if err != nil {
-		return fmt.Errorf("create tmp cbz: %w", err)
-	}
-
-	success := false
-	defer func() {
-		_ = tmpFile.Close()
-		if !success {
-			_ = os.Remove(tmpPath)
-		}
-	}()
-
-	zipWriter := zip.NewWriter(tmpFile)
-
-	// Write ComicInfo.xml if available
-	if len(xmlMetadata) > 0 {
-		metaEntry, err := zipWriter.Create("ComicInfo.xml")
-		if err == nil {
-			_, _ = metaEntry.Write(xmlMetadata)
-		}
-	}
-
-	// Write images sequentially into zip
-	for i := 0; i < totalPages; i++ {
-		entryName := fmt.Sprintf("%03d.webp", i+1)
-		if len(getPageFilename) > 0 && getPageFilename[0] != nil {
-			if customName := getPageFilename[0](i); customName != "" {
-				entryName = customName
-			}
-		}
-		entryWriter, err := zipWriter.Create(entryName)
-		if err != nil {
-			return fmt.Errorf("create zip entry %s: %w", entryName, err)
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err = fetchImage(ctx, i, entryWriter)
-		cancel()
-		if err != nil {
-			return fmt.Errorf("fetch page %d: %w", i+1, err)
-		}
-	}
-
-	if err := zipWriter.Close(); err != nil {
-		return fmt.Errorf("close zip writer: %w", err)
-	}
-
-	if err := tmpFile.Sync(); err != nil {
-		return fmt.Errorf("sync tmp file: %w", err)
-	}
-	_ = tmpFile.Close()
-
-	if err := os.Rename(tmpPath, finalFilePath); err != nil {
-		return fmt.Errorf("rename tmp to cbz: %w", err)
-	}
-
-	success = true
-	return nil
+func (c *Client) DownloadImage(ctx context.Context, rawURL string, pageIndex int, writer io.Writer) error {
+	stripedURL := c.GetStripedCDNURL(rawURL, pageIndex)
+	return c.DownloadImageStream(ctx, stripedURL, writer)
 }
 
 func (c *Client) loginWithAccount(ctx context.Context, username, password string) (string, error) {

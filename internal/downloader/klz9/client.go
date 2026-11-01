@@ -1,6 +1,7 @@
 package klz9
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -44,6 +45,8 @@ type Client struct {
 	mu         sync.RWMutex
 	cached     *contracts.SiteProfile
 }
+
+var _ contracts.MangaProvider = (*Client)(nil)
 
 func NewClient(store *store.SQLiteStore, baseURL string, timeoutSeconds int) *Client {
 	if baseURL == "" {
@@ -478,7 +481,108 @@ func (c *Client) GetMangaChapters(ctx context.Context, slug string) ([]contracts
 	return chapters, nil
 }
 
-func (c *Client) GetChapterPages(ctx context.Context, chapterID string) ([]string, error) {
+var directImageClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
+var directImageBackoffs = []time.Duration{15 * time.Second, 30 * time.Second}
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 64*1024)
+		return &b
+	},
+}
+
+var pageBufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 256*1024)
+		return bytes.NewBuffer(b)
+	},
+}
+
+func (c *Client) ID() string {
+	return SiteName
+}
+
+func (c *Client) ComicWebURL(mangaID string) string {
+	return fmt.Sprintf("https://klz9.com/%s", mangaID)
+}
+
+func (c *Client) GetMangaGroups(ctx context.Context, mangaID string) ([]string, error) {
+	return nil, nil
+}
+
+func (c *Client) DownloadImage(ctx context.Context, imgURL string, _ int, w io.Writer) error {
+	maxAttempts := len(directImageBackoffs) + 1
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			backoff := directImageBackoffs[attempt-1]
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 PanelNeko/1.0")
+		referer := c.baseURL
+		if referer == "" {
+			referer = "https://klz9.com/"
+		}
+		if !strings.HasSuffix(referer, "/") {
+			referer += "/"
+		}
+		req.Header.Set("Referer", referer)
+
+		resp, err := directImageClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			_ = resp.Body.Close()
+			return fmt.Errorf("direct image not found (404): %s", imgURL)
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_ = resp.Body.Close()
+			lastErr = fmt.Errorf("direct image status %d", resp.StatusCode)
+			continue
+		}
+
+		pageBuf := pageBufferPool.Get().(*bytes.Buffer)
+		pageBuf.Reset()
+
+		buf := bufferPool.Get().(*[]byte)
+		_, err = io.CopyBuffer(pageBuf, resp.Body, *buf)
+		bufferPool.Put(buf)
+		_ = resp.Body.Close()
+
+		if err != nil {
+			pageBufferPool.Put(pageBuf)
+			lastErr = err
+			continue
+		}
+
+		_, err = pageBuf.WriteTo(w)
+		pageBufferPool.Put(pageBuf)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+	return fmt.Errorf("direct image failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+func (c *Client) GetChapterPages(ctx context.Context, mangaID string, chapterID string) ([]string, error) {
 	chapterID = strings.TrimSpace(chapterID)
 	if chapterID == "" {
 		return nil, fmt.Errorf("empty chapter id")
