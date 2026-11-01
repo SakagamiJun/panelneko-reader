@@ -1000,7 +1000,6 @@ func TestCheckMangaUpdatesGroupAware(t *testing.T) {
 	serverHost := strings.TrimPrefix(server.URL, "http://")
 	app.copyManga = copymanga.NewClient(serverHost, "", 5)
 	app.klz9 = klz9.NewClient(app.store, "https://klz9.com", 5)
-	app.klz9 = klz9.NewClient(app.store, "https://klz9.com", 5)
 	app.downloads = downloader.NewManager(app.store, app.settings, app.copyManga, app.klz9)
 	defer app.downloads.Close()
 
@@ -1041,6 +1040,17 @@ func TestCheckMangaUpdatesGroupAware(t *testing.T) {
 	}
 	if len(realGroups) != 2 || realGroups[0] != "话" || realGroups[1] != "卷" {
 		t.Fatalf("expected realGroups ['话', '卷'], got %+v", realGroups)
+	}
+
+	// Adversarial test: unknown provider returns clean errors / empty slices
+	if _, err := app.SearchOnlineManga("unknown_provider", "keyword", 1, 10); err == nil {
+		t.Fatalf("expected error searching online manga with unknown provider")
+	}
+	if _, err := app.GetOnlineMangaChapters("unknown_provider", "comic"); err == nil {
+		t.Fatalf("expected error getting online manga chapters with unknown provider")
+	}
+	if unknownGroups, err := app.GetOnlineMangaGroups("unknown_provider", "comic"); err != nil || len(unknownGroups) != 0 {
+		t.Fatalf("expected empty slice and nil error for unknown provider groups, got %v, err=%v", unknownGroups, err)
 	}
 
 	// Now test CheckAllFollowedUpdates: ch-2 is already queued, so no new tasks should be created

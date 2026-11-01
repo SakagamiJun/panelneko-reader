@@ -1237,20 +1237,14 @@ func (a *App) SearchOnlineManga(source string, query string, page int, limit int
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	switch source {
-	case copymanga.SiteName:
-		if a.copyManga == nil {
-			return contracts.OnlineSearchResult{}, fmt.Errorf("copymanga client not initialized")
-		}
-		return a.copyManga.SearchManga(ctx, query, page, limit)
-	case klz9.SiteName:
-		if a.klz9 == nil {
-			return contracts.OnlineSearchResult{}, fmt.Errorf("klz9 client not initialized")
-		}
-		return a.klz9.SearchManga(ctx, query, page, limit)
-	default:
+	if a.downloads == nil {
+		return contracts.OnlineSearchResult{}, fmt.Errorf("downloader not initialized")
+	}
+	provider, ok := a.downloads.GetProvider(source)
+	if !ok {
 		return contracts.OnlineSearchResult{}, fmt.Errorf("unknown source: %s", source)
 	}
+	return provider.SearchManga(ctx, query, page, limit)
 }
 
 func (a *App) GetOnlineMangaChapters(source string, mangaID string) ([]contracts.OnlineMangaChapter, error) {
@@ -1260,20 +1254,14 @@ func (a *App) GetOnlineMangaChapters(source string, mangaID string) ([]contracts
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	switch source {
-	case copymanga.SiteName:
-		if a.copyManga == nil {
-			return nil, fmt.Errorf("copymanga client not initialized")
-		}
-		return a.copyManga.GetMangaChapters(ctx, mangaID)
-	case klz9.SiteName:
-		if a.klz9 == nil {
-			return nil, fmt.Errorf("klz9 client not initialized")
-		}
-		return a.klz9.GetMangaChapters(ctx, mangaID)
-	default:
+	if a.downloads == nil {
+		return nil, fmt.Errorf("downloader not initialized")
+	}
+	provider, ok := a.downloads.GetProvider(source)
+	if !ok {
 		return nil, fmt.Errorf("unknown source: %s", source)
 	}
+	return provider.GetMangaChapters(ctx, mangaID)
 }
 
 func (a *App) GetOnlineMangaGroups(source string, mangaID string) ([]string, error) {
@@ -1283,15 +1271,14 @@ func (a *App) GetOnlineMangaGroups(source string, mangaID string) ([]string, err
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	switch source {
-	case copymanga.SiteName:
-		if a.copyManga == nil {
-			return nil, fmt.Errorf("copymanga client not initialized")
-		}
-		return a.copyManga.GetMangaGroups(ctx, mangaID)
-	default:
+	if a.downloads == nil {
 		return []string{}, nil
 	}
+	provider, ok := a.downloads.GetProvider(source)
+	if !ok {
+		return []string{}, nil
+	}
+	return provider.GetMangaGroups(ctx, mangaID)
 }
 
 func (a *App) CreateDownloadTasks(inputs []contracts.CreateDownloadTaskInput) ([]contracts.DownloadTask, error) {
