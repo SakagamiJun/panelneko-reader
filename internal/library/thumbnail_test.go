@@ -89,7 +89,7 @@ func TestServeThumbnailDirectory(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, reqPath, nil)
 	rec := httptest.NewRecorder()
 
-	err := ServeThumbnail(libraryRoot, cacheDir, reqPath, rec, req, true)
+	err := ServeMultiSourceThumbnailWithQuality(map[string]string{"default": libraryRoot}, libraryRoot, cacheDir, reqPath, rec, req, contracts.ThumbnailQualityMedium)
 	if err != nil {
 		t.Fatalf("ServeThumbnail failed: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestServeThumbnailDirectory(t *testing.T) {
 	req304 := httptest.NewRequest(http.MethodGet, reqPath, nil)
 	req304.Header.Set("If-None-Match", etag)
 	rec304 := httptest.NewRecorder()
-	err = ServeThumbnail(libraryRoot, cacheDir, reqPath, rec304, req304, true)
+	err = ServeMultiSourceThumbnailWithQuality(map[string]string{"default": libraryRoot}, libraryRoot, cacheDir, reqPath, rec304, req304, contracts.ThumbnailQualityMedium)
 	if err != nil {
 		t.Fatalf("ServeThumbnail 304 test failed: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestServeThumbnailArchive(t *testing.T) {
 
 	createTestZipArchive(t, libraryRoot, "comic.cbz", "cover.jpg", 1000, 1500)
 
-	assetURL, err := ArchiveAssetURL(libraryRoot, filepath.Join(libraryRoot, "comic.cbz"), "cover.jpg")
+	assetURL, err := ArchiveAssetURLForSource(libraryRoot, "default", filepath.Join(libraryRoot, "comic.cbz"), "cover.jpg")
 	if err != nil {
 		t.Fatalf("ArchiveAssetURL: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestServeThumbnailArchive(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, reqPath, nil)
 	rec := httptest.NewRecorder()
 
-	err = ServeThumbnail(libraryRoot, cacheDir, reqPath, rec, req, true)
+	err = ServeMultiSourceThumbnailWithQuality(map[string]string{"default": libraryRoot}, libraryRoot, cacheDir, reqPath, rec, req, contracts.ThumbnailQualityMedium)
 	if err != nil {
 		t.Fatalf("ServeThumbnail archive failed: %v", err)
 	}
@@ -192,8 +192,8 @@ func TestServeThumbnailDisabledFallback(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, reqPath, nil)
 	rec := httptest.NewRecorder()
 
-	// enabled = false
-	err := ServeThumbnail(libraryRoot, cacheDir, reqPath, rec, req, false)
+	// enabled = false (quality = off)
+	err := ServeMultiSourceThumbnailWithQuality(map[string]string{"default": libraryRoot}, libraryRoot, cacheDir, reqPath, rec, req, contracts.ThumbnailQualityOff)
 	if err != nil {
 		t.Fatalf("ServeThumbnail fallback failed: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestServeThumbnailConcurrentSingleFlight(t *testing.T) {
 			defer wg.Done()
 			req := httptest.NewRequest(http.MethodGet, reqPath, nil)
 			rec := httptest.NewRecorder()
-			errs[idx] = ServeThumbnail(libraryRoot, cacheDir, reqPath, rec, req, true)
+			errs[idx] = ServeMultiSourceThumbnailWithQuality(map[string]string{"default": libraryRoot}, libraryRoot, cacheDir, reqPath, rec, req, contracts.ThumbnailQualityMedium)
 			if rec.Code != http.StatusOK && rec.Code != http.StatusNotModified {
 				errs[idx] = fmt.Errorf("unexpected status code: %d", rec.Code)
 			}

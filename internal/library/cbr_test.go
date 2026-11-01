@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 )
 
 // minimalRARArchiveBase64 contains a valid RAR4 archive containing a single file:
@@ -51,9 +53,9 @@ func TestCBRArchiveFormatSupport(t *testing.T) {
 		"001.jpg": "zip-image-bytes",
 	})
 
-	mangas, _, err := ScanLibraryManga(root, nil, nil)
+	mangas, _, err := ScanSource(contracts.LibrarySource{ID: "default", Path: root, Enabled: true}, nil, nil)
 	if err != nil {
-		t.Fatalf("ScanLibraryManga failed: %v", err)
+		t.Fatalf("ScanSource failed: %v", err)
 	}
 	if len(mangas) != 1 {
 		t.Fatalf("expected 1 manga, got %d", len(mangas))
@@ -62,7 +64,7 @@ func TestCBRArchiveFormatSupport(t *testing.T) {
 		t.Fatalf("expected 2 chapters in CBR comic, got %d", mangas[0].ChapterCount)
 	}
 
-	manifest, err := GetReaderManifest(root, mangas[0].ID)
+	manifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, mangas[0].ID)
 	if err != nil {
 		t.Fatalf("LoadReaderManifest failed: %v", err)
 	}

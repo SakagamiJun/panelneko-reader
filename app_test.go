@@ -40,7 +40,7 @@ func TestAssetHandlerStreamsArchiveAssets(t *testing.T) {
 	app, cleanup := newAssetTestApp(t, libraryRoot)
 	defer cleanup()
 
-	requestURL, err := library.ArchiveAssetURL(libraryRoot, archivePath, "001.png")
+	requestURL, err := library.ArchiveAssetURLForSource(libraryRoot, "default", archivePath, "001.png")
 	if err != nil {
 		t.Fatalf("build archive asset url: %v", err)
 	}

@@ -15,7 +15,7 @@ import (
 func TestResolveLibraryAssetPathRejectsTraversal(t *testing.T) {
 	root := t.TempDir()
 
-	if _, err := ResolveLibraryAssetPath(root, "/library-files/../secret.jpg"); err == nil {
+	if _, err := ResolveMultiSourceAssetPath(map[string]string{"default": root}, root, "/library-files/../secret.jpg"); err == nil {
 		t.Fatal("expected traversal path to be rejected")
 	}
 }
@@ -67,7 +67,7 @@ func TestListLibraryMangaAndReaderManifestSupportsDirectoryAndArchiveChapters(t 
 </ComicInfo>`,
 	})
 
-	library, _, err := ScanLibraryManga(root, nil, nil)
+	library, _, err := ScanSource(contracts.LibrarySource{ID: "default", Path: root, Enabled: true}, nil, nil)
 	if err != nil {
 		t.Fatalf("ListLibraryManga returned error: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestListLibraryMangaAndReaderManifestSupportsDirectoryAndArchiveChapters(t 
 		t.Fatalf("expected stripped cover image url to have asset prefix, got %q", item.CoverImageURL)
 	}
 
-	manifest, err := GetReaderManifest(root, item.ID)
+	manifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, item.ID)
 	if err != nil {
 		t.Fatalf("GetReaderManifest returned error: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestGetReaderManifestArchiveFallbackUsesNaturalOrder(t *testing.T) {
 		"3.jpg":  "three",
 	})
 
-	manifest, err := GetReaderManifest(root, encodeMangaID("Natural Manga"))
+	manifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, encodeMangaID("Natural Manga"))
 	if err != nil {
 		t.Fatalf("GetReaderManifest returned error: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestGetReaderManifestSortsChaptersByInferredNumericTokens(t *testing.T) {
 		writeFile(t, filepath.Join(mangaDir, chapterName, "001.jpg"), chapterName)
 	}
 
-	manifest, err := GetReaderManifest(root, encodeMangaID("Long Manga"))
+	manifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, encodeMangaID("Long Manga"))
 	if err != nil {
 		t.Fatalf("GetReaderManifest returned error: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestGetReaderManifestArchiveIgnoresUnsupportedAndMetadataEntries(t *testing
 		"002.png":            "two",
 	})
 
-	manifest, err := GetReaderManifest(root, encodeMangaID("Filtered Manga"))
+	manifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, encodeMangaID("Filtered Manga"))
 	if err != nil {
 		t.Fatalf("GetReaderManifest returned error: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestOpenArchiveAssetValidatesRequests(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			reader, _, _, err := OpenArchiveAsset(root, test.requestURL)
+			reader, _, _, err := OpenMultiSourceArchiveAsset(map[string]string{"default": root}, root, test.requestURL)
 			if reader != nil {
 				reader.Close()
 			}
@@ -302,7 +302,7 @@ func TestListLibraryMangaNestedChapterDirectories(t *testing.T) {
 	writeFile(t, filepath.Join(chapterDir, "001.jpg"), "one")
 	writeFile(t, filepath.Join(chapterDir, "002.jpg"), "two")
 
-	library, _, err := ScanLibraryManga(root, nil, nil)
+	library, _, err := ScanSource(contracts.LibrarySource{ID: "default", Path: root, Enabled: true}, nil, nil)
 	if err != nil {
 		t.Fatalf("ListLibraryManga returned error: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestListLibraryMangaNestedChapterDirectories(t *testing.T) {
 		t.Fatalf("unexpected chapter count: %d", item.ChapterCount)
 	}
 
-	manifest, err := GetReaderManifest(root, item.ID)
+	manifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, item.ID)
 	if err != nil {
 		t.Fatalf("GetReaderManifest returned error: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestListLibraryMangaNestedChaptersHaveUniqueIDs(t *testing.T) {
 	writeFile(t, filepath.Join(chapter1Dir, "001.jpg"), "page1")
 	writeFile(t, filepath.Join(chapter2Dir, "001.jpg"), "page2")
 
-	library, _, err := ScanLibraryManga(root, nil, nil)
+	library, _, err := ScanSource(contracts.LibrarySource{ID: "default", Path: root, Enabled: true}, nil, nil)
 	if err != nil {
 		t.Fatalf("ListLibraryManga returned error: %v", err)
 	}
@@ -368,7 +368,7 @@ func TestListLibraryMangaNestedChaptersHaveUniqueIDs(t *testing.T) {
 		t.Fatalf("unexpected library size: %d", len(library))
 	}
 
-	manifest, err := GetReaderManifest(root, library[0].ID)
+	manifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, library[0].ID)
 	if err != nil {
 		t.Fatalf("GetReaderManifest returned error: %v", err)
 	}
@@ -419,12 +419,12 @@ func TestListLibraryMangaNestedChaptersUniqueIDsWithSidecarsWithoutChapterID(t *
 </ComicInfo>`)
 	}
 
-	library, _, err := ScanLibraryManga(root, nil, nil)
+	library, _, err := ScanSource(contracts.LibrarySource{ID: "default", Path: root, Enabled: true}, nil, nil)
 	if err != nil {
 		t.Fatalf("ListLibraryManga returned error: %v", err)
 	}
 
-	manifest, err := GetReaderManifest(root, library[0].ID)
+	manifest, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, library[0].ID)
 	if err != nil {
 		t.Fatalf("GetReaderManifest returned error: %v", err)
 	}
@@ -478,7 +478,7 @@ func TestScanLibraryMangaWithCollectionMarker(t *testing.T) {
 	writeFile(t, filepath.Join(manga3Dir, "002.jpg"), "m3p2")
 	writeFile(t, filepath.Join(manga3Dir, "003.jpg"), "m3p3")
 
-	items, _, err := ScanLibraryManga(root, nil, nil)
+	items, _, err := ScanSource(contracts.LibrarySource{ID: "default", Path: root, Enabled: true}, nil, nil)
 	if err != nil {
 		t.Fatalf("ScanLibraryManga error: %v", err)
 	}
@@ -524,7 +524,7 @@ func TestScanLibraryMangaWithCollectionMarker(t *testing.T) {
 	}
 
 	// Verify GetReaderManifest for Manga One
-	manifest1, err := GetReaderManifest(root, m1.ID)
+	manifest1, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, m1.ID)
 	if err != nil {
 		t.Fatalf("GetReaderManifest(m1) error: %v", err)
 	}
@@ -533,7 +533,7 @@ func TestScanLibraryMangaWithCollectionMarker(t *testing.T) {
 	}
 
 	// Verify GetReaderManifest for Manga Two (archive)
-	manifest2, err := GetReaderManifest(root, m2.ID)
+	manifest2, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, m2.ID)
 	if err != nil {
 		t.Fatalf("GetReaderManifest(m2) error: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestScanLibraryMangaWithCollectionMarker(t *testing.T) {
 	}
 
 	// Verify GetReaderManifest for Manga Three (one-shot)
-	manifest3, err := GetReaderManifest(root, m3.ID)
+	manifest3, err := GetReaderManifestWithSources([]contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}, m3.ID)
 	if err != nil {
 		t.Fatalf("GetReaderManifest(m3) error: %v", err)
 	}
@@ -871,6 +871,7 @@ func sameResolvedPath(left string, right string) bool {
 
 func TestResolveDirectoryPath(t *testing.T) {
 	root := t.TempDir()
+	sources := []contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}
 	mangaDir := filepath.Join(root, "Standalone Manga")
 	if err := os.MkdirAll(mangaDir, 0o755); err != nil {
 		t.Fatalf("mkdir manga: %v", err)
@@ -886,7 +887,7 @@ func TestResolveDirectoryPath(t *testing.T) {
 
 	// 1. Standalone manga directory
 	mangaID := encodeMangaID("Standalone Manga")
-	resolved, err := ResolveDirectoryPath(root, mangaID)
+	resolved, err := ResolveDirectoryPathWithSources(sources, mangaID)
 	if err != nil {
 		t.Fatalf("resolve standalone manga: %v", err)
 	}
@@ -896,7 +897,7 @@ func TestResolveDirectoryPath(t *testing.T) {
 
 	// 2. Collection directory
 	collID := encodeMangaID("Collection Folder")
-	resolved, err = ResolveDirectoryPath(root, collID)
+	resolved, err = ResolveDirectoryPathWithSources(sources, collID)
 	if err != nil {
 		t.Fatalf("resolve collection: %v", err)
 	}
@@ -906,7 +907,7 @@ func TestResolveDirectoryPath(t *testing.T) {
 
 	// 3. Child manga directory inside collection
 	childID := encodeMangaID("Collection Folder/Child Manga")
-	resolved, err = ResolveDirectoryPath(root, childID)
+	resolved, err = ResolveDirectoryPathWithSources(sources, childID)
 	if err != nil {
 		t.Fatalf("resolve child manga: %v", err)
 	}
@@ -916,7 +917,7 @@ func TestResolveDirectoryPath(t *testing.T) {
 
 	// 4. Archive file inside collection -> resolves to parent directory
 	archiveID := encodeMangaID("Collection Folder/Archive.cbz")
-	resolved, err = ResolveDirectoryPath(root, archiveID)
+	resolved, err = ResolveDirectoryPathWithSources(sources, archiveID)
 	if err != nil {
 		t.Fatalf("resolve archive child: %v", err)
 	}
@@ -926,13 +927,14 @@ func TestResolveDirectoryPath(t *testing.T) {
 
 	// 5. Invalid path traversal should error
 	badID := encodeMangaID("../outside")
-	if _, err := ResolveDirectoryPath(root, badID); err == nil {
+	if _, err := ResolveDirectoryPathWithSources(sources, badID); err == nil {
 		t.Fatal("expected traversal path to fail")
 	}
 }
 
 func TestToggleCollectionMarker(t *testing.T) {
 	root := t.TempDir()
+	sources := []contracts.LibrarySource{{ID: "default", Path: root, Enabled: true}}
 
 	// 1. Regular directory manga
 	mangaDir := filepath.Join(root, "Series A")
@@ -946,7 +948,7 @@ func TestToggleCollectionMarker(t *testing.T) {
 	}
 
 	// Toggle to collection
-	isColl, err := ToggleCollectionMarker(root, mangaID)
+	isColl, err := ToggleCollectionMarkerWithSources(sources, mangaID)
 	if err != nil {
 		t.Fatalf("toggle to collection failed: %v", err)
 	}
@@ -958,7 +960,7 @@ func TestToggleCollectionMarker(t *testing.T) {
 	}
 
 	// Toggle back to regular
-	isColl, err = ToggleCollectionMarker(root, mangaID)
+	isColl, err = ToggleCollectionMarkerWithSources(sources, mangaID)
 	if err != nil {
 		t.Fatalf("toggle back to regular failed: %v", err)
 	}
@@ -974,7 +976,7 @@ func TestToggleCollectionMarker(t *testing.T) {
 	if !hasCollectionMarker(mangaDir) {
 		t.Fatal("expected collection.txt to be recognized as marker")
 	}
-	isColl, err = ToggleCollectionMarker(root, mangaID)
+	isColl, err = ToggleCollectionMarkerWithSources(sources, mangaID)
 	if err != nil {
 		t.Fatalf("toggle with legacy marker failed: %v", err)
 	}
@@ -989,13 +991,13 @@ func TestToggleCollectionMarker(t *testing.T) {
 	archivePath := filepath.Join(root, "Archive.cbz")
 	writeZipArchive(t, archivePath, map[string]string{"001.jpg": "img"})
 	archiveID := encodeMangaID("Archive.cbz")
-	if _, err := ToggleCollectionMarker(root, archiveID); err == nil {
+	if _, err := ToggleCollectionMarkerWithSources(sources, archiveID); err == nil {
 		t.Fatal("expected archive file to fail toggle")
 	}
 
 	// Nested item cannot be toggled to collection
 	nestedID := encodeMangaID("Series A/Nested")
-	if _, err := ToggleCollectionMarker(root, nestedID); err == nil {
+	if _, err := ToggleCollectionMarkerWithSources(sources, nestedID); err == nil {
 		t.Fatal("expected nested path to fail toggle")
 	}
 }
