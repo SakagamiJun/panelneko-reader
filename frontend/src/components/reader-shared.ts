@@ -94,13 +94,16 @@ export function buildReaderSpreads(
     const metric = options.metrics[page.id];
     const isWide = metric ? metric.width > metric.height * 1.15 : false;
 
-    if (!canDouble || (options.coverSolo && i === 0) || isWide) {
+    const isChapterCover =
+      options.coverSolo && (i === 0 || page.chapterID !== pages[i - 1]?.chapterID);
+
+    if (!canDouble || isChapterCover || isWide) {
       const spreadIdx = spreads.length;
       spreads.push({
         spreadIndex: spreadIdx,
         startIndex: i,
         pages: [page],
-        isCover: options.coverSolo && i === 0,
+        isCover: isChapterCover,
         isWide,
       });
       pageToSpreadIndex[i] = spreadIdx;

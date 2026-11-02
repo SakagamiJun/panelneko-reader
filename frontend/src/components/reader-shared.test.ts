@@ -68,6 +68,42 @@ describe("buildReaderSpreads - pure algorithm & adversarial boundaries", () => {
     expect(pageToSpreadIndex).toEqual([0, 1, 1, 2, 2]);
   });
 
+  it("isolates the first page of each chapter as cover when coverSolo is enabled", () => {
+    const pages = [
+      createMockPage(0, "c1"),
+      createMockPage(1, "c1"),
+      createMockPage(2, "c1"),
+      createMockPage(3, "c2"),
+      createMockPage(4, "c2"),
+      createMockPage(5, "c2"),
+    ];
+    const { spreads, pageToSpreadIndex } = buildReaderSpreads(pages, {
+      spreadMode: "double",
+      coverSolo: true,
+      allowDouble: true,
+      metrics: {},
+    });
+
+    // Chapter 1:
+    // Spread 0: [0] (cover of c1)
+    // Spread 1: [1, 2] (paired)
+    // Chapter 2:
+    // Spread 2: [3] (cover of c2)
+    // Spread 3: [4, 5] (paired)
+    expect(spreads).toHaveLength(4);
+    expect(spreads[0].isCover).toBe(true);
+    expect(spreads[0].pages.map((p) => p.globalIndex)).toEqual([0]);
+    expect(spreads[1].isCover).toBe(false);
+    expect(spreads[1].pages.map((p) => p.globalIndex)).toEqual([1, 2]);
+
+    expect(spreads[2].isCover).toBe(true);
+    expect(spreads[2].pages.map((p) => p.globalIndex)).toEqual([3]);
+    expect(spreads[3].isCover).toBe(false);
+    expect(spreads[3].pages.map((p) => p.globalIndex)).toEqual([4, 5]);
+
+    expect(pageToSpreadIndex).toEqual([0, 1, 1, 2, 3, 3]);
+  });
+
   it("strictly isolates chapter boundaries preventing cross-chapter pairing on odd page counts", () => {
     const pages = [
       createMockPage(0, "c1"),
