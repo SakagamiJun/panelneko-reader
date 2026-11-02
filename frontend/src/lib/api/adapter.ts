@@ -57,7 +57,7 @@ export interface AppAdapter {
 
   // Online Downloader & Search
   searchOnlineManga(source: string, query: string, page?: number, limit?: number): Promise<OnlineSearchResult>;
-  getOnlineMangaChapters(source: string, mangaID: string): Promise<OnlineMangaChapter[]>;
+  getOnlineMangaChapters(source: string, mangaID: string, mangaTitle?: string): Promise<OnlineMangaChapter[]>;
   getOnlineMangaGroups(source: string, mangaID: string): Promise<string[]>;
   createDownloadTasks(inputs: CreateDownloadTaskInput[]): Promise<DownloadTask[]>;
   pauseDownloadTask(taskID: string): Promise<void>;

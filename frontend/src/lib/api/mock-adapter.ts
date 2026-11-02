@@ -592,7 +592,7 @@ export class MockAdapter implements AppAdapter {
     };
   }
 
-  async getOnlineMangaChapters(source: string, mangaID: string): Promise<OnlineMangaChapter[]> {
+  async getOnlineMangaChapters(source: string, mangaID: string, _mangaTitle = ""): Promise<OnlineMangaChapter[]> {
     return Array.from({ length: 6 }, (_, i) => ({
       id: `${mangaID}-ch-${i + 1}`,
       mangaID,

@@ -91,6 +91,8 @@ export interface OnlineMangaChapter {
   group?: string;
   groupPathWord?: string;
   releaseDate?: string;
+  isDownloaded?: boolean;
+  matchedLocalTitle?: string;
 }
 
 export interface OnlineSearchResult {
@@ -113,6 +115,7 @@ export interface DownloadTask {
   chapterNumber: number;
   chapterGroup?: string;
   targetSourceID?: string;
+  forceOverwrite?: boolean;
   status: DownloadTaskStatus;
   totalPages: number;
   downloadedPages: number;
@@ -141,6 +144,7 @@ export interface CreateDownloadTaskInput {
   chapterNumber: number;
   chapterGroup?: string;
   targetSourceID?: string;
+  forceOverwrite?: boolean;
 }
 
 export interface MangaOnlineLink {

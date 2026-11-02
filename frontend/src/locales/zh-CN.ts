@@ -423,6 +423,11 @@ export const zhCN = {
     startDownloadSuccess: "已成功添加 {{count}} 个章节下载任务",
     dialogTitle: "在线漫画搜索与下载",
     allGroups: "全部",
+    selectUndownloaded: "全选未下载",
+    chapterDownloaded: "已下载",
+    overwriteExisting: "允许覆盖本地已有章节",
+    matchedLocalManga: "已匹配本地: {{title}}",
+    selectedCountWithOverwrite: "已选 {{selected}} / {{total}} 话 (含 {{overwriteCount}} 话已存在)",
   },
   batchLink: {
     dialogTitle: "本地漫画在线关联与追更管理",

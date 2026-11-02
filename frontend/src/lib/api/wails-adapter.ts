@@ -150,10 +150,10 @@ export class WailsAdapter implements AppAdapter {
     return { items: [], totalItems: 0, page, totalPages: 1 };
   }
 
-  async getOnlineMangaChapters(source: string, mangaID: string): Promise<OnlineMangaChapter[]> {
+  async getOnlineMangaChapters(source: string, mangaID: string, mangaTitle = ""): Promise<OnlineMangaChapter[]> {
     const fn = (App as any).GetOnlineMangaChapters;
     if (typeof fn === "function") {
-      return ((await fn(source, mangaID)) ?? []) as OnlineMangaChapter[];
+      return ((await fn(source, mangaID, mangaTitle)) ?? []) as OnlineMangaChapter[];
     }
     return [];
   }

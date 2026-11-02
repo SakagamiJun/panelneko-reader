@@ -423,6 +423,11 @@ export const ja = {
     startDownloadSuccess: "{{count}} 話のダウンロードタスクを追加しました",
     dialogTitle: "オンライン漫画の検索とダウンロード",
     allGroups: "すべて",
+    selectUndownloaded: "未ダウンロードのみ選択",
+    chapterDownloaded: "ダウンロード済",
+    overwriteExisting: "ローカル既存章の上書きを許可",
+    matchedLocalManga: "ローカル一致: {{title}}",
+    selectedCountWithOverwrite: "選択中 {{selected}} / {{total}} 話（既存 {{overwriteCount}} 話を含む）",
   },
   batchLink: {
     dialogTitle: "ローカル漫画オンライン紐付け・追跡管理",

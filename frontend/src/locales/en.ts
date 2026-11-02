@@ -423,6 +423,11 @@ export const en = {
     startDownloadSuccess: "Added {{count}} chapters to download queue",
     dialogTitle: "Online Manga Search & Download",
     allGroups: "All",
+    selectUndownloaded: "Select Un-downloaded",
+    chapterDownloaded: "Downloaded",
+    overwriteExisting: "Allow overwriting local chapters",
+    matchedLocalManga: "Matched local: {{title}}",
+    selectedCountWithOverwrite: "Selected {{selected}} / {{total}} chapters ({{overwriteCount}} exist locally)",
   },
   batchLink: {
     dialogTitle: "Local Manga Online Linking & Follow Manager",

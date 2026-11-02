@@ -56,7 +56,18 @@ export function OnlineSearchDialog({
   const [activeGroup, setActiveGroup] = useState<string>("all");
   const [chaptersError, setChaptersError] = useState<string | null>(null);
   const [selectedChapterIds, setSelectedChapterIds] = useState<Set<string>>(new Set());
+  const [allowOverwrite, setAllowOverwrite] = useState(false);
   const [isSubmittingDownload, setIsSubmittingDownload] = useState(false);
+
+  const matchedLocalTitle = useMemo(
+    () => chapters.find((c) => c.matchedLocalTitle)?.matchedLocalTitle,
+    [chapters]
+  );
+  const hasDownloadedChapters = useMemo(() => chapters.some((c) => c.isDownloaded), [chapters]);
+  const selectedDownloadedCount = useMemo(
+    () => chapters.filter((c) => selectedChapterIds.has(c.id) && c.isDownloaded).length,
+    [chapters, selectedChapterIds]
+  );
 
   const availableGroups = useMemo(() => {
     const set = new Set<string>();
@@ -90,6 +101,7 @@ export function OnlineSearchDialog({
       setChapters([]);
       setActiveGroup("all");
       setSelectedChapterIds(new Set());
+      setAllowOverwrite(false);
       setSearchError(null);
       setChaptersError(null);
 
@@ -141,12 +153,14 @@ export function OnlineSearchDialog({
     setChaptersError(null);
     setActiveGroup("all");
     setSelectedChapterIds(new Set());
+    setAllowOverwrite(false);
 
     try {
-      const fetchedChapters = await appAdapter.getOnlineMangaChapters(manga.source, manga.id);
+      const fetchedChapters = await appAdapter.getOnlineMangaChapters(manga.source, manga.id, manga.title);
       setChapters(fetchedChapters);
-      // Default to selecting all chapters
-      setSelectedChapterIds(new Set(fetchedChapters.map((c) => c.id)));
+      // Default to selecting only un-downloaded chapters
+      const unDownloaded = fetchedChapters.filter((c) => !c.isDownloaded);
+      setSelectedChapterIds(new Set(unDownloaded.map((c) => c.id)));
     } catch (err: unknown) {
       setChaptersError(err instanceof Error ? err.message : String(err));
       setChapters([]);
@@ -172,6 +186,18 @@ export function OnlineSearchDialog({
       const next = new Set(prev);
       for (const ch of displayedChapters) {
         next.add(ch.id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectUndownloaded = () => {
+    setSelectedChapterIds((prev) => {
+      const next = new Set(prev);
+      for (const ch of displayedChapters) {
+        if (!ch.isDownloaded) {
+          next.add(ch.id);
+        }
       }
       return next;
     });
@@ -217,6 +243,7 @@ export function OnlineSearchDialog({
       chapterNumber: ch.number,
       chapterGroup: ch.group,
       targetSourceID: settings?.downloader?.targetSourceId,
+      forceOverwrite: allowOverwrite,
     }));
 
     setIsSubmittingDownload(true);
@@ -473,6 +500,14 @@ export function OnlineSearchDialog({
                         <Badge tone="default" className="text-[9px] font-mono">
                           {selectedManga.source}
                         </Badge>
+                        {matchedLocalTitle && (
+                          <span
+                            className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 max-w-[200px] truncate"
+                            title={matchedLocalTitle}
+                          >
+                            {t("downloader.matchedLocalManga", { title: matchedLocalTitle })}
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-muted-foreground truncate">
                         {selectedManga.author || selectedManga.id}
@@ -482,13 +517,36 @@ export function OnlineSearchDialog({
 
                   {/* Chapter Select Toolbar */}
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {hasDownloadedChapters && (
+                      <label className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer select-none border-r border-border/50 pr-2 mr-0.5">
+                        <input
+                          type="checkbox"
+                          checked={allowOverwrite}
+                          onChange={(e) => setAllowOverwrite(e.target.checked)}
+                          className="h-3 w-3 rounded border-border/80 accent-primary cursor-pointer"
+                        />
+                        <span>{t("downloader.overwriteExisting")}</span>
+                      </label>
+                    )}
+                    {hasDownloadedChapters && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={handleSelectUndownloaded}
+                        disabled={loadingChapters || chapters.length === 0}
+                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <span>{t("downloader.selectUndownloaded")}</span>
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant="ghost"
                       size="xs"
                       onClick={handleSelectAll}
                       disabled={loadingChapters || chapters.length === 0}
-                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
                     >
                       <CheckSquare className="h-3 w-3 mr-1" />
                       <span>{t("downloader.selectAll")}</span>
@@ -499,7 +557,7 @@ export function OnlineSearchDialog({
                       size="xs"
                       onClick={handleInvertSelection}
                       disabled={loadingChapters || chapters.length === 0}
-                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
                     >
                       <span>{t("downloader.invertSelection")}</span>
                     </Button>
@@ -509,7 +567,7 @@ export function OnlineSearchDialog({
                       size="xs"
                       onClick={handleDeselectAll}
                       disabled={loadingChapters || chapters.length === 0}
-                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
                     >
                       <Square className="h-3 w-3 mr-1" />
                       <span>{t("downloader.deselectAll")}</span>
@@ -591,12 +649,25 @@ export function OnlineSearchDialog({
                                 "flex items-center justify-between p-2 rounded-lg text-left text-xs border transition-colors cursor-pointer select-none group",
                                 isChecked
                                   ? "bg-primary/10 border-primary/40 text-foreground"
+                                  : ch.isDownloaded
+                                  ? "bg-muted/20 hover:bg-muted/40 border-border/40 text-muted-foreground/80"
                                   : "bg-card hover:bg-muted/50 border-border/60 text-muted-foreground"
                               )}
                             >
-                              <span className="truncate flex-1 font-medium text-[11px]" title={ch.title}>
+                              <span
+                                className={cn(
+                                  "truncate flex-1 font-medium text-[11px]",
+                                  ch.isDownloaded && !isChecked && "text-muted-foreground/80"
+                                )}
+                                title={ch.title}
+                              >
                                 {ch.title}
                               </span>
+                              {ch.isDownloaded && (
+                                <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-muted/70 text-muted-foreground/90 border border-border/40 shrink-0 mr-1.5 leading-none">
+                                  {t("downloader.chapterDownloaded")}
+                                </span>
+                              )}
                               <div
                                 className={cn(
                                   "h-3.5 w-3.5 rounded border flex items-center justify-center ml-1.5 shrink-0 transition-colors",
@@ -618,10 +689,16 @@ export function OnlineSearchDialog({
                 {/* Bottom Action Footer */}
                 <div className="flex items-center justify-between px-5 py-3 border-t border-border/50 bg-muted/20">
                   <div className="text-xs text-muted-foreground font-medium">
-                    {t("downloader.selectedCount", {
-                      selected: selectedChapterIds.size,
-                      total: chapters.length,
-                    })}
+                    {selectedDownloadedCount > 0
+                      ? t("downloader.selectedCountWithOverwrite", {
+                          selected: selectedChapterIds.size,
+                          total: chapters.length,
+                          overwriteCount: selectedDownloadedCount,
+                        })
+                      : t("downloader.selectedCount", {
+                          selected: selectedChapterIds.size,
+                          total: chapters.length,
+                        })}
                   </div>
 
                   <div className="flex items-center gap-2">
