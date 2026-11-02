@@ -426,6 +426,7 @@ export const zhCN = {
     selectUndownloaded: "全选未下载",
     chapterDownloaded: "已下载",
     overwriteExisting: "允许覆盖本地已有章节",
+    matchedLocalBadge: "已匹配",
     matchedLocalManga: "已匹配本地: {{title}}",
     selectedCountWithOverwrite: "已选 {{selected}} / {{total}} 话 (含 {{overwriteCount}} 话已存在)",
   },

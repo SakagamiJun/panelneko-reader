@@ -4,13 +4,12 @@ import {
   AlertCircle,
   BookOpen,
   Check,
-  CheckSquare,
   Download,
   Globe,
+  Link2,
   Loader2,
   RefreshCw,
   Search,
-  Square,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -382,7 +381,7 @@ export function OnlineSearchDialog({
         {/* Main Content Area (Split Pane) */}
         <div className="flex flex-1 min-h-0 overflow-hidden divide-x divide-border/60">
           {/* Left Panel: Search Results List */}
-          <div className="w-[380px] shrink-0 flex flex-col bg-muted/10 overflow-hidden">
+          <div className="w-[350px] shrink-0 flex flex-col bg-muted/10 overflow-hidden">
             <div className="px-3.5 py-2 border-b border-border/40 text-[11px] font-medium text-muted-foreground flex items-center justify-between">
               <span>{t("downloader.onlineGroup")}</span>
               <span className="font-mono text-[10px]">{searchResults.length}</span>
@@ -490,22 +489,23 @@ export function OnlineSearchDialog({
             ) : (
               <>
                 {/* Selected Manga Header */}
-                <div className="px-5 py-3 border-b border-border/50 bg-muted/20 flex items-center justify-between">
+                <div className="px-5 py-3 border-b border-border/50 bg-muted/20 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-xs font-bold text-foreground truncate max-w-sm">
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="text-xs font-bold text-foreground truncate min-w-0" title={selectedManga.title}>
                           {selectedManga.title}
                         </h3>
-                        <Badge tone="default" className="text-[9px] font-mono">
+                        <Badge tone="default" className="text-[9px] font-mono shrink-0">
                           {selectedManga.source}
                         </Badge>
                         {matchedLocalTitle && (
                           <span
-                            className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 max-w-[200px] truncate"
-                            title={matchedLocalTitle}
+                            className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 shrink-0 cursor-help"
+                            title={t("downloader.matchedLocalManga", { title: matchedLocalTitle })}
                           >
-                            {t("downloader.matchedLocalManga", { title: matchedLocalTitle })}
+                            <Link2 className="h-2.5 w-2.5" />
+                            <span>{t("downloader.matchedLocalBadge")}</span>
                           </span>
                         )}
                       </div>
@@ -516,62 +516,44 @@ export function OnlineSearchDialog({
                   </div>
 
                   {/* Chapter Select Toolbar */}
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="inline-flex items-center rounded-md border border-border/60 bg-muted/30 p-0.5 gap-0.5 shrink-0">
                     {hasDownloadedChapters && (
-                      <label className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer select-none border-r border-border/50 pr-2 mr-0.5">
-                        <input
-                          type="checkbox"
-                          checked={allowOverwrite}
-                          onChange={(e) => setAllowOverwrite(e.target.checked)}
-                          className="h-3 w-3 rounded border-border/80 accent-primary cursor-pointer"
-                        />
-                        <span>{t("downloader.overwriteExisting")}</span>
-                      </label>
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleSelectUndownloaded}
+                          disabled={loadingChapters || chapters.length === 0}
+                          className="h-6 px-2 text-[11px] font-medium rounded text-muted-foreground hover:text-foreground hover:bg-background/80 transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                        >
+                          {t("downloader.selectUndownloaded")}
+                        </button>
+                        <div className="h-3 w-px bg-border/50 mx-0.5" />
+                      </>
                     )}
-                    {hasDownloadedChapters && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        onClick={handleSelectUndownloaded}
-                        disabled={loadingChapters || chapters.length === 0}
-                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
-                      >
-                        <span>{t("downloader.selectUndownloaded")}</span>
-                      </Button>
-                    )}
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="xs"
                       onClick={handleSelectAll}
                       disabled={loadingChapters || chapters.length === 0}
-                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                      className="h-6 px-2 text-[11px] font-medium rounded text-muted-foreground hover:text-foreground hover:bg-background/80 transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
                     >
-                      <CheckSquare className="h-3 w-3 mr-1" />
-                      <span>{t("downloader.selectAll")}</span>
-                    </Button>
-                    <Button
+                      {t("downloader.selectAll")}
+                    </button>
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="xs"
                       onClick={handleInvertSelection}
                       disabled={loadingChapters || chapters.length === 0}
-                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                      className="h-6 px-2 text-[11px] font-medium rounded text-muted-foreground hover:text-foreground hover:bg-background/80 transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
                     >
-                      <span>{t("downloader.invertSelection")}</span>
-                    </Button>
-                    <Button
+                      {t("downloader.invertSelection")}
+                    </button>
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="xs"
                       onClick={handleDeselectAll}
                       disabled={loadingChapters || chapters.length === 0}
-                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                      className="h-6 px-2 text-[11px] font-medium rounded text-muted-foreground hover:text-foreground hover:bg-background/80 transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
                     >
-                      <Square className="h-3 w-3 mr-1" />
-                      <span>{t("downloader.deselectAll")}</span>
-                    </Button>
+                      {t("downloader.deselectAll")}
+                    </button>
                   </div>
                 </div>
 
@@ -688,17 +670,34 @@ export function OnlineSearchDialog({
 
                 {/* Bottom Action Footer */}
                 <div className="flex items-center justify-between px-5 py-3 border-t border-border/50 bg-muted/20">
-                  <div className="text-xs text-muted-foreground font-medium">
-                    {selectedDownloadedCount > 0
-                      ? t("downloader.selectedCountWithOverwrite", {
-                          selected: selectedChapterIds.size,
-                          total: chapters.length,
-                          overwriteCount: selectedDownloadedCount,
-                        })
-                      : t("downloader.selectedCount", {
-                          selected: selectedChapterIds.size,
-                          total: chapters.length,
-                        })}
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs text-muted-foreground font-medium">
+                      {selectedDownloadedCount > 0
+                        ? t("downloader.selectedCountWithOverwrite", {
+                            selected: selectedChapterIds.size,
+                            total: chapters.length,
+                            overwriteCount: selectedDownloadedCount,
+                          })
+                        : t("downloader.selectedCount", {
+                            selected: selectedChapterIds.size,
+                            total: chapters.length,
+                          })}
+                    </div>
+
+                    {hasDownloadedChapters && (
+                      <>
+                        <div className="h-3.5 w-px bg-border/60" />
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={allowOverwrite}
+                            onChange={(e) => setAllowOverwrite(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-border/80 accent-primary cursor-pointer"
+                          />
+                          <span>{t("downloader.overwriteExisting")}</span>
+                        </label>
+                      </>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">

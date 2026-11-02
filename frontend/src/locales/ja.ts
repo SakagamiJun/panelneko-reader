@@ -426,6 +426,7 @@ export const ja = {
     selectUndownloaded: "未ダウンロードのみ選択",
     chapterDownloaded: "ダウンロード済",
     overwriteExisting: "ローカル既存章の上書きを許可",
+    matchedLocalBadge: "一致",
     matchedLocalManga: "ローカル一致: {{title}}",
     selectedCountWithOverwrite: "選択中 {{selected}} / {{total}} 話（既存 {{overwriteCount}} 話を含む）",
   },
