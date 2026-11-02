@@ -496,9 +496,6 @@ export function OnlineSearchDialog({
                         <h3 className="text-xs font-bold text-foreground truncate min-w-0" title={selectedManga.title}>
                           {selectedManga.title}
                         </h3>
-                        <Badge tone="default" className="text-[9px] font-mono shrink-0">
-                          {selectedManga.source}
-                        </Badge>
                         {matchedLocalTitle && (
                           <span
                             className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 shrink-0 cursor-help"
@@ -509,9 +506,14 @@ export function OnlineSearchDialog({
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] text-muted-foreground truncate">
-                        {selectedManga.author || selectedManga.id}
-                      </span>
+                      <div className="flex items-center gap-2 min-w-0 mt-0.5">
+                        <span className="text-[10px] text-muted-foreground truncate">
+                          {selectedManga.author || selectedManga.id}
+                        </span>
+                        <Badge tone="default" className="text-[9px] font-mono shrink-0">
+                          {selectedManga.source}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
 
@@ -687,15 +689,25 @@ export function OnlineSearchDialog({
                     {hasDownloadedChapters && (
                       <>
                         <div className="h-3.5 w-px bg-border/60" />
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={allowOverwrite}
-                            onChange={(e) => setAllowOverwrite(e.target.checked)}
-                            className="h-3.5 w-3.5 rounded border-border/80 accent-primary cursor-pointer"
-                          />
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={allowOverwrite}
+                          onClick={() => setAllowOverwrite((prev) => !prev)}
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none group transition-colors"
+                        >
+                          <div
+                            className={cn(
+                              "h-3.5 w-3.5 rounded border flex items-center justify-center transition-colors shrink-0",
+                              allowOverwrite
+                                ? "bg-primary border-primary text-primary-foreground"
+                                : "border-border/80 group-hover:border-primary/60 bg-background/50"
+                            )}
+                          >
+                            {allowOverwrite && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                          </div>
                           <span>{t("downloader.overwriteExisting")}</span>
-                        </label>
+                        </button>
                       </>
                     )}
                   </div>

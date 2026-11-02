@@ -426,7 +426,7 @@ export const en = {
     selectUndownloaded: "Select Un-downloaded",
     chapterDownloaded: "Downloaded",
     overwriteExisting: "Allow overwriting local chapters",
-    matchedLocalBadge: "Matched",
+    matchedLocalBadge: "Local Matched",
     matchedLocalManga: "Matched local: {{title}}",
     selectedCountWithOverwrite: "Selected {{selected}} / {{total}} chapters ({{overwriteCount}} exist locally)",
   },
