@@ -161,6 +161,7 @@ func (s *SQLiteStore) init() error {
 	s.addColumnIfNotExists("library_manga", "is_available", "INTEGER NOT NULL DEFAULT 1")
 	s.addColumnIfNotExists("download_tasks", "chapter_group", "TEXT NOT NULL DEFAULT ''")
 	s.addColumnIfNotExists("download_tasks", "target_source_id", "TEXT NOT NULL DEFAULT ''")
+	s.addColumnIfNotExists("download_tasks", "force_overwrite", "INTEGER NOT NULL DEFAULT 0")
 	s.addColumnIfNotExists("manga_online_links", "target_group", "TEXT NOT NULL DEFAULT ''")
 	s.addColumnIfNotExists("manga_online_links", "baseline_chapter_number", "REAL NOT NULL DEFAULT -1")
 	s.addColumnIfNotExists("manga_online_links", "baseline_chapter_title", "TEXT NOT NULL DEFAULT ''")
@@ -588,17 +589,18 @@ func (s *SQLiteStore) GetDownloadTask(id string) (contracts.DownloadTask, bool, 
 		SELECT id, source, manga_id, manga_title, manga_cover_url,
 		       chapter_id, chapter_title, chapter_number, chapter_group, target_source_id,
 		       status, total_pages, downloaded_pages, speed, error_message,
-		       created_at, updated_at
+		       created_at, updated_at, force_overwrite
 		FROM download_tasks
 		WHERE id = ?
 	`
 	var t contracts.DownloadTask
 	var statusStr string
+	var forceOverwriteVal int
 	err := s.db.QueryRow(query, id).Scan(
 		&t.ID, &t.Source, &t.MangaID, &t.MangaTitle, &t.MangaCoverURL,
 		&t.ChapterID, &t.ChapterTitle, &t.ChapterNumber, &t.ChapterGroup, &t.TargetSourceID,
 		&statusStr, &t.TotalPages, &t.DownloadedPages, &t.Speed, &t.ErrorMessage,
-		&t.CreatedAt, &t.UpdatedAt,
+		&t.CreatedAt, &t.UpdatedAt, &forceOverwriteVal,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -607,6 +609,7 @@ func (s *SQLiteStore) GetDownloadTask(id string) (contracts.DownloadTask, bool, 
 		return contracts.DownloadTask{}, false, fmt.Errorf("select download task: %w", err)
 	}
 	t.Status = contracts.DownloadTaskStatus(statusStr)
+	t.ForceOverwrite = forceOverwriteVal != 0
 	return t, true, nil
 }
 
@@ -616,21 +619,26 @@ func (s *SQLiteStore) SaveDownloadTask(task contracts.DownloadTask) error {
 			id, source, manga_id, manga_title, manga_cover_url,
 			chapter_id, chapter_title, chapter_number, chapter_group, target_source_id,
 			status, total_pages, downloaded_pages, speed, error_message,
-			created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			created_at, updated_at, force_overwrite
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			status = excluded.status,
 			total_pages = excluded.total_pages,
 			downloaded_pages = excluded.downloaded_pages,
 			speed = excluded.speed,
 			error_message = excluded.error_message,
-			updated_at = excluded.updated_at
+			updated_at = excluded.updated_at,
+			force_overwrite = excluded.force_overwrite
 	`
+	forceOverwriteVal := 0
+	if task.ForceOverwrite {
+		forceOverwriteVal = 1
+	}
 	_, err := s.db.Exec(query,
 		task.ID, task.Source, task.MangaID, task.MangaTitle, task.MangaCoverURL,
 		task.ChapterID, task.ChapterTitle, task.ChapterNumber, task.ChapterGroup, task.TargetSourceID,
 		string(task.Status), task.TotalPages, task.DownloadedPages, task.Speed, task.ErrorMessage,
-		task.CreatedAt, task.UpdatedAt,
+		task.CreatedAt, task.UpdatedAt, forceOverwriteVal,
 	)
 	if err != nil {
 		return fmt.Errorf("save download task: %w", err)
@@ -643,7 +651,7 @@ func (s *SQLiteStore) GetDownloadTasks() ([]contracts.DownloadTask, error) {
 		SELECT id, source, manga_id, manga_title, manga_cover_url,
 		       chapter_id, chapter_title, chapter_number, chapter_group, target_source_id,
 		       status, total_pages, downloaded_pages, speed, error_message,
-		       created_at, updated_at
+		       created_at, updated_at, force_overwrite
 		FROM download_tasks
 		ORDER BY created_at DESC
 	`
@@ -657,16 +665,18 @@ func (s *SQLiteStore) GetDownloadTasks() ([]contracts.DownloadTask, error) {
 	for rows.Next() {
 		var t contracts.DownloadTask
 		var statusStr string
+		var forceOverwriteVal int
 		err := rows.Scan(
 			&t.ID, &t.Source, &t.MangaID, &t.MangaTitle, &t.MangaCoverURL,
 			&t.ChapterID, &t.ChapterTitle, &t.ChapterNumber, &t.ChapterGroup, &t.TargetSourceID,
 			&statusStr, &t.TotalPages, &t.DownloadedPages, &t.Speed, &t.ErrorMessage,
-			&t.CreatedAt, &t.UpdatedAt,
+			&t.CreatedAt, &t.UpdatedAt, &forceOverwriteVal,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan download task: %w", err)
 		}
 		t.Status = contracts.DownloadTaskStatus(statusStr)
+		t.ForceOverwrite = forceOverwriteVal != 0
 		tasks = append(tasks, t)
 	}
 	return tasks, rows.Err()

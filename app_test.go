@@ -1042,11 +1042,32 @@ func TestCheckMangaUpdatesGroupAware(t *testing.T) {
 		t.Fatalf("expected realGroups ['话', '卷'], got %+v", realGroups)
 	}
 
+	// Test GetOnlineMangaChapters deduplication and local manga matching
+	onlineChs, err := app.GetOnlineMangaChapters(copymanga.SiteName, "onepiece", "海贼王")
+	if err != nil {
+		t.Fatalf("GetOnlineMangaChapters failed: %v", err)
+	}
+	var ch1, ch2 *contracts.OnlineMangaChapter
+	for i := range onlineChs {
+		if onlineChs[i].ID == "ch-1" {
+			ch1 = &onlineChs[i]
+		}
+		if onlineChs[i].ID == "ch-2" {
+			ch2 = &onlineChs[i]
+		}
+	}
+	if ch1 == nil || !ch1.IsDownloaded || ch1.MatchedLocalTitle != "海贼王" {
+		t.Fatalf("expected ch-1 to be marked IsDownloaded=true with MatchedLocalTitle='海贼王', got %+v", ch1)
+	}
+	if ch2 == nil || ch2.IsDownloaded {
+		t.Fatalf("expected ch-2 to be marked IsDownloaded=false, got %+v", ch2)
+	}
+
 	// Adversarial test: unknown provider returns clean errors / empty slices
 	if _, err := app.SearchOnlineManga("unknown_provider", "keyword", 1, 10); err == nil {
 		t.Fatalf("expected error searching online manga with unknown provider")
 	}
-	if _, err := app.GetOnlineMangaChapters("unknown_provider", "comic"); err == nil {
+	if _, err := app.GetOnlineMangaChapters("unknown_provider", "comic", ""); err == nil {
 		t.Fatalf("expected error getting online manga chapters with unknown provider")
 	}
 	if unknownGroups, err := app.GetOnlineMangaGroups("unknown_provider", "comic"); err != nil || len(unknownGroups) != 0 {

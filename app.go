@@ -1247,7 +1247,7 @@ func (a *App) SearchOnlineManga(source string, query string, page int, limit int
 	return provider.SearchManga(ctx, query, page, limit)
 }
 
-func (a *App) GetOnlineMangaChapters(source string, mangaID string) ([]contracts.OnlineMangaChapter, error) {
+func (a *App) GetOnlineMangaChapters(source string, mangaID string, mangaTitle string) ([]contracts.OnlineMangaChapter, error) {
 	if err := a.ensureReady(); err != nil {
 		return nil, err
 	}
@@ -1261,7 +1261,103 @@ func (a *App) GetOnlineMangaChapters(source string, mangaID string) ([]contracts
 	if !ok {
 		return nil, fmt.Errorf("unknown source: %s", source)
 	}
-	return provider.GetMangaChapters(ctx, mangaID)
+	chapters, err := provider.GetMangaChapters(ctx, mangaID)
+	if err != nil {
+		return nil, err
+	}
+
+	var matchedLocalMangaID string
+	var matchedLocalTitle string
+
+	if a.store != nil {
+		// Stage 1: Exact match by online link
+		if allLinks, err := a.store.GetAllMangaOnlineLinks(); err == nil {
+			for _, l := range allLinks {
+				if l.OnlineSource == source && l.OnlineComicID == mangaID {
+					matchedLocalMangaID = l.MangaID
+					if l.OnlineTitle != "" {
+						matchedLocalTitle = l.OnlineTitle
+					}
+					break
+				}
+			}
+		}
+
+		// Stage 2: Match by local manga title or folder name
+		if matchedLocalMangaID == "" {
+			if existingMangas, err := a.store.ListLibraryManga(); err == nil && len(existingMangas) > 0 {
+				safeManga := downloader.SanitizeFilename(mangaTitle)
+				for _, m := range existingMangas {
+					if (mangaTitle != "" && strings.EqualFold(m.Title, mangaTitle)) ||
+						(safeManga != "" && strings.EqualFold(m.RelativePath, safeManga)) ||
+						strings.EqualFold(m.RelativePath, mangaID) {
+						matchedLocalMangaID = m.ID
+						matchedLocalTitle = m.Title
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// Stage 3: Decorate chapters with local presence if matched
+	if matchedLocalMangaID != "" {
+		if manifest, err := library.GetReaderManifestWithSources(a.getActiveSources(), matchedLocalMangaID); err == nil && len(manifest.Chapters) > 0 {
+			if matchedLocalTitle == "" {
+				matchedLocalTitle = manifest.Title
+			}
+			allLocalNumbers := make(map[float64]bool)
+			localDownloadedChapterIDs := make(map[string]bool)
+			type localChapterInfo struct {
+				title     string
+				localPath string
+				number    float64
+			}
+			var localList []localChapterInfo
+
+			for _, ch := range manifest.Chapters {
+				allLocalNumbers[ch.Number] = true
+				if strings.HasPrefix(ch.Notes, "{") {
+					var notes contracts.ComicInfoNotes
+					if err := json.Unmarshal([]byte(ch.Notes), &notes); err == nil && notes.ChapterID != "" {
+						localDownloadedChapterIDs[notes.ChapterID] = true
+					}
+				}
+				localList = append(localList, localChapterInfo{
+					title:     ch.Title,
+					localPath: ch.LocalPath,
+					number:    ch.Number,
+				})
+			}
+
+			for i := range chapters {
+				ch := &chapters[i]
+				ch.MatchedLocalTitle = matchedLocalTitle
+				if localDownloadedChapterIDs[ch.ID] {
+					ch.IsDownloaded = true
+					continue
+				}
+				effNum := ch.Number
+				if effNum <= 0 {
+					if parsed := downloader.ExtractChapterNumber(ch.Title, -1); parsed >= 0 {
+						effNum = parsed
+					}
+				}
+				if allLocalNumbers[ch.Number] || (effNum > 0 && allLocalNumbers[effNum]) {
+					ch.IsDownloaded = true
+					continue
+				}
+				for _, loc := range localList {
+					if downloader.MatchChapterTitle(ch.Title, loc.title, loc.localPath) {
+						ch.IsDownloaded = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return chapters, nil
 }
 
 func (a *App) GetOnlineMangaGroups(source string, mangaID string) ([]string, error) {
@@ -1447,7 +1543,7 @@ func (a *App) previewMangaLinkInternal(input contracts.MangaLinkPreviewInput) co
 	}
 	item.MangaTitle = localManga.Title
 
-	onlineChapters, err := a.GetOnlineMangaChapters(input.OnlineSource, input.OnlineComicID)
+	onlineChapters, err := a.GetOnlineMangaChapters(input.OnlineSource, input.OnlineComicID, localManga.Title)
 	if err != nil {
 		item.ErrorMessage = fmt.Sprintf("fetch online chapters: %v", err)
 		return item
@@ -1804,7 +1900,7 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 		return 0, fmt.Errorf("local manga not found: %s", mangaID)
 	}
 
-	onlineChapters, err := a.GetOnlineMangaChapters(link.OnlineSource, link.OnlineComicID)
+	onlineChapters, err := a.GetOnlineMangaChapters(link.OnlineSource, link.OnlineComicID, link.OnlineTitle)
 	if err != nil {
 		return 0, fmt.Errorf("get online chapters: %w", err)
 	}

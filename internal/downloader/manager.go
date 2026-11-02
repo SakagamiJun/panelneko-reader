@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
+	"github.com/sakagamijun/panelneko-reader/internal/logger"
 	"github.com/sakagamijun/panelneko-reader/internal/settings"
 	"github.com/sakagamijun/panelneko-reader/internal/store"
 )
@@ -289,6 +290,7 @@ func (m *Manager) CreateTasks(inputs []contracts.CreateDownloadTaskInput) ([]con
 			ChapterNumber:   chNum,
 			ChapterGroup:    in.ChapterGroup,
 			TargetSourceID:  targetSrcID,
+			ForceOverwrite:  in.ForceOverwrite,
 			Status:          contracts.DownloadStatusPending,
 			TotalPages:      0,
 			DownloadedPages: 0,
@@ -459,6 +461,34 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 		finalFilePath = filepath.Join(chapterDir, FormatChapterFilename(task.ChapterNumber, safeChapter, ""))
 	} else {
 		finalFilePath = filepath.Join(chapterDir, FormatChapterFilename(task.ChapterNumber, safeChapter, ".cbz"))
+	}
+
+	if !task.ForceOverwrite {
+		alreadyExists := false
+		if format == "folder" {
+			if fi, err := os.Stat(finalFilePath); err == nil && fi.IsDir() {
+				if entries, err := os.ReadDir(finalFilePath); err == nil {
+					for _, e := range entries {
+						if !e.IsDir() && recognizedImageExts[strings.ToLower(filepath.Ext(e.Name()))] != "" {
+							alreadyExists = true
+							break
+						}
+					}
+				}
+			}
+		} else {
+			if fi, err := os.Stat(finalFilePath); err == nil && fi.Size() > 1024 {
+				alreadyExists = true
+			}
+		}
+
+		if alreadyExists {
+			logger.Get().Info("Skip downloading chapter %s (%s): already exists locally", task.ChapterTitle, finalFilePath)
+			m.flushTaskFinalState(task.ID, 1, 1, contracts.DownloadStatusCompleted, "")
+			m.emit(contracts.EventDownloadTasksUpdated, nil)
+			m.emitProgress()
+			return nil
+		}
 	}
 
 	provider, ok := m.GetProvider(task.Source)

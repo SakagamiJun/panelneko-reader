@@ -24,11 +24,6 @@ export const DownloadTasksUpdated = "download:tasks_updated";
 export const FilesDropped = "files:dropped";
 
 /**
- * Name of the custom event "files:opened".
- */
-export const FilesOpened = "files:opened";
-
-/**
  * Name of the custom event "followed_update:check_progress".
  */
 export const FollowedUpdateCheckProgress = "followed_update:check_progress";

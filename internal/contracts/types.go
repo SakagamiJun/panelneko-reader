@@ -205,15 +205,17 @@ type OnlineMangaItem struct {
 }
 
 type OnlineMangaChapter struct {
-	ID            string  `json:"id"`
-	MangaID       string  `json:"mangaID"`
-	Source        string  `json:"source"`
-	Title         string  `json:"title"`
-	Number        float64 `json:"number"`
-	Ordered       int64   `json:"ordered,omitempty"`
-	Group         string  `json:"group,omitempty"`
-	GroupPathWord string  `json:"groupPathWord,omitempty"`
-	ReleaseDate   string  `json:"releaseDate,omitempty"`
+	ID                string  `json:"id"`
+	MangaID           string  `json:"mangaID"`
+	Source            string  `json:"source"`
+	Title             string  `json:"title"`
+	Number            float64 `json:"number"`
+	Ordered           int64   `json:"ordered,omitempty"`
+	Group             string  `json:"group,omitempty"`
+	GroupPathWord     string  `json:"groupPathWord,omitempty"`
+	ReleaseDate       string  `json:"releaseDate,omitempty"`
+	IsDownloaded      bool    `json:"isDownloaded"`
+	MatchedLocalTitle string  `json:"matchedLocalTitle,omitempty"`
 }
 
 type OnlineSearchResult struct {
@@ -245,6 +247,7 @@ type DownloadTask struct {
 	ChapterNumber   float64            `json:"chapterNumber"`
 	ChapterGroup    string             `json:"chapterGroup,omitempty"`
 	TargetSourceID  string             `json:"targetSourceID,omitempty"`
+	ForceOverwrite  bool               `json:"forceOverwrite,omitempty"`
 	Status          DownloadTaskStatus `json:"status"`
 	TotalPages      int                `json:"totalPages"`
 	DownloadedPages int                `json:"downloadedPages"`
@@ -273,6 +276,7 @@ type CreateDownloadTaskInput struct {
 	ChapterNumber  float64 `json:"chapterNumber"`
 	ChapterGroup   string  `json:"chapterGroup,omitempty"`
 	TargetSourceID string  `json:"targetSourceID,omitempty"`
+	ForceOverwrite bool    `json:"forceOverwrite,omitempty"`
 }
 
 type MangaOnlineLink struct {
