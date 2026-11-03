@@ -1,5 +1,5 @@
 # This file contains the configuration for this project.
-# When you update `info` or `fileAssociations`, run `wails3 task common:update:build-assets` to update the assets.
+# When you update `info`, run `wails3 task common:update:build-assets` to update the assets.
 # Note that this will overwrite any changes you have made to the assets.
 version: '3'
 
@@ -13,29 +13,6 @@ info:
   comments: "Built using Wails v3"
   version: "0.1.0"
   commit: ""
-
-# File Associations
-fileAssociations:
-  - ext: cbz
-    name: Comic Book ZIP
-    description: Comic Book Archive
-    iconName: icons
-    role: Viewer
-  - ext: cbr
-    name: Comic Book RAR
-    description: Comic Book RAR Archive
-    iconName: icons
-    role: Viewer
-  - ext: zip
-    name: ZIP Archive
-    description: ZIP Archive
-    iconName: icons
-    role: Viewer
-  - ext: rar
-    name: RAR Archive
-    description: RAR Archive
-    iconName: icons
-    role: Viewer
 
 # Dev mode configuration
 dev_mode:
