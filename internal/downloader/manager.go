@@ -429,7 +429,11 @@ func (m *Manager) resolveTargetDirectory(task contracts.DownloadTask) (string, e
 	}
 
 	if st.Downloader.DownloadSubPath != "" {
-		return filepath.Join(targetSource.Path, st.Downloader.DownloadSubPath), nil
+		subPath := filepath.Clean(filepath.FromSlash(st.Downloader.DownloadSubPath))
+		if subPath == "." || !filepath.IsLocal(subPath) {
+			return "", fmt.Errorf("invalid download subpath: %q", st.Downloader.DownloadSubPath)
+		}
+		return filepath.Join(targetSource.Path, subPath), nil
 	}
 	return targetSource.Path, nil
 }

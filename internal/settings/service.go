@@ -122,6 +122,22 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
+// sanitizeDownloadSubPath keeps download destinations inside the selected
+// library source. Invalid values are cleared rather than persisted so a stale
+// path cannot make downloads escape the library root.
+func sanitizeDownloadSubPath(raw string) string {
+	trimmed := strings.Trim(strings.TrimSpace(raw), `/\`)
+	if trimmed == "" {
+		return ""
+	}
+
+	cleaned := filepath.Clean(filepath.FromSlash(trimmed))
+	if cleaned == "." || !filepath.IsLocal(cleaned) {
+		return ""
+	}
+	return cleaned
+}
+
 func (s *Service) Get() contracts.AppSettings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -493,7 +509,7 @@ func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings,
 		targetSourcePath = settings.LibrarySources[0].Path
 	}
 
-	dl.DownloadSubPath = strings.Trim(strings.TrimSpace(dl.DownloadSubPath), `/\`)
+	dl.DownloadSubPath = sanitizeDownloadSubPath(dl.DownloadSubPath)
 
 	if strings.TrimSpace(dl.CopyMangaCDNMode) != "striped" {
 		dl.CopyMangaCDNMode = "official"

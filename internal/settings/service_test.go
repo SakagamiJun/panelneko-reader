@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
@@ -460,5 +461,43 @@ func TestUpdateSourceStatusesPreservesUnrelatedSettings(t *testing.T) {
 	}
 	if updated.LibrarySources[0].Status != contracts.SourceStatusOffline || updated.LibrarySources[0].ErrorMessage != "offline" {
 		t.Fatalf("expected default source to be offline, got %+v", updated.LibrarySources[0])
+	}
+}
+
+func TestNormalizeSanitizesDownloadSubPath(t *testing.T) {
+	sqliteStore, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"Downloads", "Downloads"},
+		{"foo/../bar", "bar"},
+		{"../escape", ""},
+		{"foo/../../bar", ""},
+		{"/absolute/path", filepath.Clean("absolute/path")},
+		{"..", ""},
+		{".", ""},
+	}
+
+	for _, tt := range tests {
+		input := DefaultSettings()
+		input.Downloader.DownloadSubPath = tt.input
+		normalized, err := service.Normalize(input)
+		if err != nil {
+			t.Fatalf("normalize subpath %q: %v", tt.input, err)
+		}
+		if normalized.Downloader.DownloadSubPath != tt.want {
+			t.Errorf("subpath %q normalized to %q; want %q", tt.input, normalized.Downloader.DownloadSubPath, tt.want)
+		}
 	}
 }
