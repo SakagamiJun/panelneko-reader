@@ -2,9 +2,11 @@ package settings
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
@@ -13,6 +15,8 @@ import (
 
 type Service struct {
 	store *store.SQLiteStore
+
+	mu    sync.RWMutex
 	cache contracts.AppSettings
 }
 
@@ -119,7 +123,9 @@ func boolPtr(b bool) *bool {
 }
 
 func (s *Service) Get() contracts.AppSettings {
-	return s.cache
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return cloneSettings(s.cache)
 }
 
 func (s *Service) Update(input contracts.AppSettings) (contracts.AppSettings, error) {
@@ -128,12 +134,85 @@ func (s *Service) Update(input contracts.AppSettings) (contracts.AppSettings, er
 		return contracts.AppSettings{}, err
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := s.store.SaveSettings(normalized); err != nil {
 		return contracts.AppSettings{}, err
 	}
 
 	s.cache = normalized
-	return normalized, nil
+	return cloneSettings(normalized), nil
+}
+
+// UpdateSourceStatuses applies scan results without rewriting unrelated settings.
+// It only updates status fields, so a concurrent settings change or a source
+// added while a scan was running is preserved.
+func (s *Service) UpdateSourceStatuses(updates []contracts.LibrarySource) (contracts.AppSettings, bool, error) {
+	if len(updates) == 0 {
+		return s.Get(), false, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	current := cloneSettings(s.cache)
+	byID := make(map[string]contracts.LibrarySource, len(updates))
+	for _, update := range updates {
+		byID[update.ID] = update
+	}
+
+	changed := false
+	for i := range current.LibrarySources {
+		source := &current.LibrarySources[i]
+		update, ok := byID[source.ID]
+		if !ok {
+			continue
+		}
+		changeDetected := source.Status != update.Status || source.ErrorMessage != update.ErrorMessage ||
+			(update.Status == contracts.SourceStatusOnline && source.MangaCount != update.MangaCount)
+		if changeDetected {
+			changed = true
+			if update.Status == contracts.SourceStatusOnline {
+				source.LastScanned = update.LastScanned
+			}
+		}
+		source.Status = update.Status
+		source.ErrorMessage = update.ErrorMessage
+		if update.Status == contracts.SourceStatusOnline {
+			source.MangaCount = update.MangaCount
+		}
+	}
+
+	if !changed {
+		return cloneSettings(current), false, nil
+	}
+
+	normalized, err := s.Normalize(current)
+	if err != nil {
+		return contracts.AppSettings{}, false, err
+	}
+	if err := s.store.SaveSettings(normalized); err != nil {
+		return contracts.AppSettings{}, false, err
+	}
+	s.cache = normalized
+	return cloneSettings(normalized), true, nil
+}
+
+func cloneSettings(source contracts.AppSettings) contracts.AppSettings {
+	cloned := source
+	cloned.LibrarySources = append([]contracts.LibrarySource(nil), source.LibrarySources...)
+	cloned.Shortcuts = maps.Clone(source.Shortcuts)
+	cloned.Downloader.CopyMangaCustomCDNs = append([]string(nil), source.Downloader.CopyMangaCustomCDNs...)
+	if source.AutoCheckUpdates != nil {
+		value := *source.AutoCheckUpdates
+		cloned.AutoCheckUpdates = &value
+	}
+	if source.EnableThumbnailCache != nil {
+		value := *source.EnableThumbnailCache
+		cloned.EnableThumbnailCache = &value
+	}
+	return cloned
 }
 
 func (s *Service) Normalize(input contracts.AppSettings) (contracts.AppSettings, error) {

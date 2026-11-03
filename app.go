@@ -613,27 +613,9 @@ func (a *App) performSourcesScanLocked() ([]contracts.LibraryManga, error) {
 
 	results := library.ScanAllSources(sources, prevItemsBySource, prevModTimesBySource)
 
-	var sourcesUpdated bool
-	currentSettings := a.settings.Get()
-	sourceMap := make(map[string]contracts.LibrarySource)
-	for _, s := range currentSettings.LibrarySources {
-		sourceMap[s.ID] = s
-	}
-
+	statusUpdates := make([]contracts.LibrarySource, 0, len(results))
 	for _, res := range results {
-		s, exists := sourceMap[res.Source.ID]
-		if exists {
-			if s.Status != res.Source.Status || s.ErrorMessage != res.Source.ErrorMessage || s.MangaCount != len(res.Items) {
-				s.Status = res.Source.Status
-				s.ErrorMessage = res.Source.ErrorMessage
-				if res.Err == nil && res.Source.Enabled {
-					s.MangaCount = len(res.Items)
-					s.LastScanned = time.Now().UTC().Format(time.RFC3339)
-				}
-				sourceMap[res.Source.ID] = s
-				sourcesUpdated = true
-			}
-		}
+		statusUpdates = append(statusUpdates, res.Source)
 
 		if !res.Source.Enabled {
 			if err := a.store.SetSourceAvailability(res.Source.ID, false); err != nil {
@@ -653,19 +635,12 @@ func (a *App) performSourcesScanLocked() ([]contracts.LibraryManga, error) {
 		}
 	}
 
-	if sourcesUpdated {
-		var updatedList []contracts.LibrarySource
-		for _, orig := range currentSettings.LibrarySources {
-			if updated, ok := sourceMap[orig.ID]; ok {
-				updatedList = append(updatedList, updated)
-			} else {
-				updatedList = append(updatedList, orig)
-			}
-		}
-		currentSettings.LibrarySources = updatedList
-		if updated, err := a.settings.Update(currentSettings); err == nil {
-			a.emit(contracts.EventSettingsUpdated, updated)
-		}
+	updated, changed, err := a.settings.UpdateSourceStatuses(statusUpdates)
+	if err != nil {
+		return nil, err
+	}
+	if changed {
+		a.emit(contracts.EventSettingsUpdated, updated)
 	}
 
 	a.emit(contracts.EventLibraryUpdated, nil)
@@ -1074,17 +1049,22 @@ func (a *App) RescanSource(sourceID string) error {
 		return err
 	}
 
+	a.scanMu.Lock()
+	defer a.scanMu.Unlock()
+
 	sourceID = strings.TrimSpace(sourceID)
 	sources := a.getActiveSources()
-	var targetSource *contracts.LibrarySource
+	var targetSource contracts.LibrarySource
+	found := false
 	for _, s := range sources {
 		if s.ID == sourceID {
-			targetSource = &s
+			targetSource = s
+			found = true
 			break
 		}
 	}
 
-	if targetSource == nil {
+	if !found {
 		return fmt.Errorf("source with id %q not found", sourceID)
 	}
 
@@ -1100,7 +1080,7 @@ func (a *App) RescanSource(sourceID string) error {
 		prevItems[r.RelativePath] = r.LibraryManga
 	}
 
-	items, newModTimes, err := library.ScanSource(*targetSource, prevItems, prevModTimes)
+	items, newModTimes, err := library.ScanSource(targetSource, prevItems, prevModTimes)
 	if err != nil {
 		_ = a.store.SetSourceAvailability(sourceID, false)
 		targetSource.Status = contracts.SourceStatusOffline
@@ -1115,16 +1095,14 @@ func (a *App) RescanSource(sourceID string) error {
 		}
 	}
 
-	current := a.settings.Get()
-	for i, s := range current.LibrarySources {
-		if s.ID == sourceID {
-			current.LibrarySources[i] = *targetSource
-			break
-		}
+	updated, changed, err := a.settings.UpdateSourceStatuses([]contracts.LibrarySource{targetSource})
+	if err != nil {
+		return err
 	}
-	updated, _ := a.settings.Update(current)
+	if changed {
+		a.emit(contracts.EventSettingsUpdated, updated)
+	}
 
-	a.emit(contracts.EventSettingsUpdated, updated)
 	a.emit(contracts.EventLibraryUpdated, nil)
 	return nil
 }

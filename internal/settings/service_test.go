@@ -371,3 +371,94 @@ func TestNormalizeLibrarySources(t *testing.T) {
 		t.Fatalf("expected first source to be preserved, got %s", normDupPath.LibrarySources[0].ID)
 	}
 }
+
+func TestGetReturnsIsolatedSettingsCopy(t *testing.T) {
+	sqliteStore, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	input := DefaultSettings()
+	input.Downloader.CopyMangaCustomCDNs = []string{"cdn-a", "cdn-b"}
+	if _, err := service.Update(input); err != nil {
+		t.Fatalf("update settings: %v", err)
+	}
+
+	mutated := service.Get()
+	mutated.LibrarySources[0].Name = "mutated-source"
+	mutated.Shortcuts["nextPage"] = "X"
+	mutated.Downloader.CopyMangaCustomCDNs[0] = "mutated-cdn"
+	if mutated.AutoCheckUpdates != nil {
+		*mutated.AutoCheckUpdates = false
+	}
+
+	fresh := service.Get()
+	if fresh.LibrarySources[0].Name != "Default Library" {
+		t.Fatalf("expected library source name to stay isolated, got %q", fresh.LibrarySources[0].Name)
+	}
+	if fresh.Shortcuts["nextPage"] != "ArrowRight" {
+		t.Fatalf("expected shortcuts to stay isolated, got %q", fresh.Shortcuts["nextPage"])
+	}
+	if fresh.Downloader.CopyMangaCustomCDNs[0] != "cdn-a" {
+		t.Fatalf("expected custom CDN slice to stay isolated, got %q", fresh.Downloader.CopyMangaCustomCDNs[0])
+	}
+	if fresh.AutoCheckUpdates == nil || !*fresh.AutoCheckUpdates {
+		t.Fatal("expected auto check updates pointer to stay isolated")
+	}
+}
+
+func TestUpdateSourceStatusesPreservesUnrelatedSettings(t *testing.T) {
+	sqliteStore, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	service, err := NewService(sqliteStore)
+	if err != nil {
+		t.Fatalf("new settings service: %v", err)
+	}
+
+	input := DefaultSettings()
+	input.ThemeMode = contracts.ThemeModeDark
+	input.LibrarySources = append(input.LibrarySources, contracts.LibrarySource{
+		ID:      "src-b",
+		Name:    "Source B",
+		Type:    contracts.SourceTypeLocal,
+		Path:    t.TempDir(),
+		Enabled: true,
+		Status:  contracts.SourceStatusOnline,
+	})
+	if _, err := service.Update(input); err != nil {
+		t.Fatalf("update settings: %v", err)
+	}
+
+	updated, changed, err := service.UpdateSourceStatuses([]contracts.LibrarySource{
+		{
+			ID:           "default",
+			Status:       contracts.SourceStatusOffline,
+			ErrorMessage: "offline",
+		},
+	})
+	if err != nil {
+		t.Fatalf("update source statuses: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected source status update to be reported as changed")
+	}
+	if updated.ThemeMode != contracts.ThemeModeDark {
+		t.Fatalf("expected unrelated theme setting to be preserved, got %s", updated.ThemeMode)
+	}
+	if len(updated.LibrarySources) != 2 || updated.LibrarySources[1].ID != "src-b" {
+		t.Fatalf("expected unrelated source to be preserved, got %+v", updated.LibrarySources)
+	}
+	if updated.LibrarySources[0].Status != contracts.SourceStatusOffline || updated.LibrarySources[0].ErrorMessage != "offline" {
+		t.Fatalf("expected default source to be offline, got %+v", updated.LibrarySources[0])
+	}
+}
