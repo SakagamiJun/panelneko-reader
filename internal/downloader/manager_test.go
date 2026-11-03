@@ -276,3 +276,51 @@ func TestSpeedMonitoring(t *testing.T) {
 	}
 	_ = mb
 }
+
+func TestFolderChapterCompletenessDetection(t *testing.T) {
+	chapterDir := t.TempDir()
+
+	if pages := existingPageNumbers(chapterDir, 3); len(pages) != 0 {
+		t.Fatalf("expected no pages in empty chapter dir, got %v", pages)
+	}
+
+	for _, name := range []string{"001.jpg", "002.png", "003.webp"} {
+		if err := os.WriteFile(filepath.Join(chapterDir, name), []byte("page"), 0o644); err != nil {
+			t.Fatalf("write page %s: %v", name, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(chapterDir, "ComicInfo.xml"), []byte("<ComicInfo/>"), 0o644); err != nil {
+		t.Fatalf("write ComicInfo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(chapterDir, "004.jpg"), []byte("outside"), 0o644); err != nil {
+		t.Fatalf("write extra page: %v", err)
+	}
+
+	pages := existingPageNumbers(chapterDir, 3)
+	if len(pages) != 3 {
+		t.Fatalf("expected 3 pages within range, got %v", pages)
+	}
+	if !hasAllChapterPages(chapterDir, 3) {
+		t.Fatal("expected all chapter pages to be detected")
+	}
+	if _, ok := readChapterCompleteMarker(chapterDir); ok {
+		t.Fatal("unexpected completion marker before it was written")
+	}
+
+	if err := writeChapterCompleteMarker(chapterDir, 3); err != nil {
+		t.Fatalf("write completion marker: %v", err)
+	}
+	if total, ok := readChapterCompleteMarker(chapterDir); !ok || total != 3 {
+		t.Fatalf("expected completion marker with total 3, got total=%d ok=%v", total, ok)
+	}
+
+	if err := os.Remove(filepath.Join(chapterDir, "002.png")); err != nil {
+		t.Fatalf("remove page: %v", err)
+	}
+	if hasAllChapterPages(chapterDir, 3) {
+		t.Fatal("expected partial chapter to be detected as incomplete")
+	}
+	if pages := existingPageNumbers(chapterDir, 3); len(pages) != 2 {
+		t.Fatalf("expected 2 remaining pages, got %v", pages)
+	}
+}

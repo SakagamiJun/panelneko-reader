@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,8 @@ import (
 )
 
 var sanitizeFilenameRe = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
+
+const chapterCompleteMarker = ".panelneko-complete"
 
 func SanitizeFilename(name string) string {
 	clean := sanitizeFilenameRe.ReplaceAllString(name, "_")
@@ -464,29 +467,19 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 	}
 
 	if !task.ForceOverwrite {
-		alreadyExists := false
 		if format == "folder" {
-			if fi, err := os.Stat(finalFilePath); err == nil && fi.IsDir() {
-				if entries, err := os.ReadDir(finalFilePath); err == nil {
-					for _, e := range entries {
-						if !e.IsDir() && recognizedImageExts[strings.ToLower(filepath.Ext(e.Name()))] != "" {
-							alreadyExists = true
-							break
-						}
-					}
-				}
+			if total, ok := readChapterCompleteMarker(finalFilePath); ok && hasAllChapterPages(finalFilePath, total) {
+				logger.Get().Info("Skip downloading chapter %s (%s): already exists locally", task.ChapterTitle, finalFilePath)
+				m.flushTaskFinalState(task.ID, total, total, contracts.DownloadStatusCompleted, "")
+				return nil
 			}
-		} else {
-			if fi, err := os.Stat(finalFilePath); err == nil && fi.Size() > 1024 {
-				alreadyExists = true
+		} else if fi, err := os.Stat(finalFilePath); err == nil && fi.Size() > 1024 {
+			totalPages := task.TotalPages
+			if totalPages <= 0 {
+				totalPages = 1
 			}
-		}
-
-		if alreadyExists {
 			logger.Get().Info("Skip downloading chapter %s (%s): already exists locally", task.ChapterTitle, finalFilePath)
-			m.flushTaskFinalState(task.ID, 1, 1, contracts.DownloadStatusCompleted, "")
-			m.emit(contracts.EventDownloadTasksUpdated, nil)
-			m.emitProgress()
+			m.flushTaskFinalState(task.ID, totalPages, totalPages, contracts.DownloadStatusCompleted, "")
 			return nil
 		}
 	}
@@ -518,7 +511,27 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 		return fmt.Errorf("no pages found for chapter")
 	}
 
+	existingPages := make(map[int]bool)
+	if format == "folder" {
+		if task.ForceOverwrite {
+			if err := os.RemoveAll(finalFilePath); err != nil {
+				return fmt.Errorf("clear chapter dir: %w", err)
+			}
+		} else {
+			existingPages = existingPageNumbers(finalFilePath, totalPages)
+			if len(existingPages) >= totalPages {
+				if err := writeChapterCompleteMarker(finalFilePath, totalPages); err != nil {
+					return fmt.Errorf("write chapter completion marker: %w", err)
+				}
+				logger.Get().Info("Skip downloading chapter %s (%s): all pages already exist locally", task.ChapterTitle, finalFilePath)
+				m.flushTaskFinalState(task.ID, totalPages, totalPages, contracts.DownloadStatusCompleted, "")
+				return nil
+			}
+		}
+	}
+
 	rt.totalPages.Store(int32(totalPages))
+	rt.downloaded.Store(int32(len(existingPages)))
 	_ = m.store.UpdateDownloadTaskProgress(task.ID, int(rt.downloaded.Load()), totalPages, "")
 	m.emitProgress()
 
@@ -570,9 +583,7 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			// Resume already downloaded valid pages in folder mode
-			if _, exists := findExistingPageFile(finalFilePath, i+1); exists {
-				rt.downloaded.Add(1)
+			if existingPages[i+1] {
 				continue
 			}
 
@@ -592,6 +603,9 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 				_ = os.Remove(imgFile)
 				return dlErr
 			}
+		}
+		if err := writeChapterCompleteMarker(finalFilePath, totalPages); err != nil {
+			return fmt.Errorf("write chapter completion marker: %w", err)
 		}
 	} else {
 		pageNamer := func(pageIndex int) string {
@@ -613,15 +627,54 @@ func (m *Manager) executeDownload(ctx context.Context, rt *runningTask, task con
 	return nil
 }
 
-func findExistingPageFile(chapterDir string, pageNum int) (string, bool) {
-	prefix := fmt.Sprintf("%03d", pageNum)
-	for _, ext := range []string{".webp", ".jpg", ".png", ".jpeg", ".gif", ".avif"} {
-		cand := filepath.Join(chapterDir, prefix+ext)
-		if fi, err := os.Stat(cand); err == nil && fi.Size() > 0 {
-			return cand, true
-		}
+func readChapterCompleteMarker(chapterDir string) (int, bool) {
+	data, err := os.ReadFile(filepath.Join(chapterDir, chapterCompleteMarker))
+	if err != nil {
+		return 0, false
 	}
-	return "", false
+	totalPages, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || totalPages <= 0 {
+		return 0, false
+	}
+	return totalPages, true
+}
+
+func writeChapterCompleteMarker(chapterDir string, totalPages int) error {
+	return os.WriteFile(filepath.Join(chapterDir, chapterCompleteMarker), []byte(strconv.Itoa(totalPages)), 0o644)
+}
+
+func hasAllChapterPages(chapterDir string, totalPages int) bool {
+	if totalPages <= 0 {
+		return false
+	}
+	return len(existingPageNumbers(chapterDir, totalPages)) >= totalPages
+}
+
+func existingPageNumbers(chapterDir string, totalPages int) map[int]bool {
+	pages := make(map[int]bool, totalPages)
+	entries, err := os.ReadDir(chapterDir)
+	if err != nil {
+		return pages
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if recognizedImageExts[strings.ToLower(filepath.Ext(name))] == "" {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || info.Size() <= 0 {
+			continue
+		}
+		page, err := strconv.Atoi(strings.TrimSuffix(name, filepath.Ext(name)))
+		if err != nil || page < 1 || page > totalPages {
+			continue
+		}
+		pages[page] = true
+	}
+	return pages
 }
 
 type countingWriter struct {
