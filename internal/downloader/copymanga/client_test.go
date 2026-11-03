@@ -283,6 +283,34 @@ func TestCopyMangaUserConfiguredTokenPrecedence(t *testing.T) {
 	}
 }
 
+func TestCopyMangaSetUserTokenOverridesAndClears(t *testing.T) {
+	mockStore := &mockAccountStore{
+		accounts: []contracts.CopyMangaAccount{
+			{Username: "auto_user", Token: "auto_token", LimitedAt: 0},
+		},
+	}
+	client := NewClient("127.0.0.1", "", 5)
+	client.SetStore(mockStore)
+
+	client.SetUserToken("personal_token")
+	token, username, err := client.acquireToken(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error after setting user token: %v", err)
+	}
+	if token != "personal_token" || username != "" {
+		t.Fatalf("expected personal token with empty username, got token=%q username=%q", token, username)
+	}
+
+	client.SetUserToken("")
+	token, username, err = client.acquireToken(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error after clearing user token: %v", err)
+	}
+	if token != "auto_token" || username != "auto_user" {
+		t.Fatalf("expected fallback to account pool, got token=%q username=%q", token, username)
+	}
+}
+
 func TestCopyMangaAccountPoolRotationOn210(t *testing.T) {
 	mockStore := &mockAccountStore{
 		accounts: []contracts.CopyMangaAccount{

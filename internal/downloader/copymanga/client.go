@@ -212,6 +212,21 @@ func (c *Client) SetToken(token string) {
 	c.token = strings.TrimSpace(token)
 }
 
+// SetUserToken updates the user-configured token and the active token together.
+// Clearing it makes acquireToken fall back to the account pool. The cooldown is
+// only reset when the token actually changes so routine settings saves do not
+// bypass a 210 rate-limit cooldown.
+func (c *Client) SetUserToken(token string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	trimmed := strings.TrimSpace(token)
+	if c.userConfiguredToken != trimmed {
+		c.userLimitedAt = 0
+	}
+	c.userConfiguredToken = trimmed
+	c.token = trimmed
+}
+
 func (c *Client) getDomain() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

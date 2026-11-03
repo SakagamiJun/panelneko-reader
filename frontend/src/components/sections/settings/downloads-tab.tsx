@@ -79,10 +79,6 @@ export function DownloadsTab({
     try {
       const res = await appAdapter.loginCopyManga(usernameInput, passwordInput);
       if (res.success) {
-        updateDownloader({
-          copyMangaUsername: res.username,
-          copyMangaToken: res.token,
-        });
         setUsernameInput("");
         setPasswordInput("");
       }
@@ -97,11 +93,6 @@ export function DownloadsTab({
     setIsLoggingIn(true);
     try {
       await appAdapter.logoutCopyManga();
-      updateDownloader({
-        copyMangaUsername: "",
-        copyMangaToken: "",
-        copyMangaPasswordEncrypted: "",
-      });
     } catch (err) {
       console.error("Logout failed:", err);
     } finally {

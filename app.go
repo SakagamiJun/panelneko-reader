@@ -466,6 +466,14 @@ func (a *App) UpdateSettings(input contracts.AppSettings) (contracts.AppSettings
 		return contracts.AppSettings{}, err
 	}
 
+	// Credentials are owned by the login/logout flows. Settings saves may carry a
+	// stale copy of these fields from the frontend, so never let them overwrite
+	// the current values.
+	current := a.settings.Get()
+	input.Downloader.CopyMangaUsername = current.Downloader.CopyMangaUsername
+	input.Downloader.CopyMangaPasswordEncrypted = current.Downloader.CopyMangaPasswordEncrypted
+	input.Downloader.CopyMangaToken = current.Downloader.CopyMangaToken
+
 	updated, err := a.settings.Update(input)
 	if err != nil {
 		return contracts.AppSettings{}, err
@@ -473,7 +481,8 @@ func (a *App) UpdateSettings(input contracts.AppSettings) (contracts.AppSettings
 
 	if a.copyManga != nil {
 		a.copyManga.SetAPIDomain(updated.Downloader.CopyMangaAPIDomain)
-		a.copyManga.SetToken(updated.Downloader.CopyMangaToken)
+		a.copyManga.SetUserToken(updated.Downloader.CopyMangaToken)
+		a.copyManga.SetUserCredentials(updated.Downloader.CopyMangaUsername, updated.Downloader.CopyMangaPasswordEncrypted)
 		a.copyManga.SetCDNSettings(updated.Downloader.CopyMangaCDNMode, updated.Downloader.CopyMangaCustomCDNs)
 	}
 	if a.klz9 != nil {
@@ -2242,6 +2251,9 @@ func (a *App) LoginCopyManga(username string, password string) (contracts.CopyMa
 	if err := a.ensureReady(); err != nil {
 		return contracts.CopyMangaLoginResult{Success: false}, err
 	}
+	if a.copyManga == nil {
+		return contracts.CopyMangaLoginResult{Success: false}, fmt.Errorf("copymanga client not initialized")
+	}
 
 	token, err := a.copyManga.LoginUser(context.Background(), username, password)
 	if err != nil {
@@ -2251,22 +2263,21 @@ func (a *App) LoginCopyManga(username string, password string) (contracts.CopyMa
 	machineID := crypto.GetMachineID()
 	encPwd, err := crypto.EncryptPassword(password, machineID, username)
 	if err != nil {
-		logger.Get().Warn("Failed to encrypt password: %v", err)
-		encPwd = ""
+		return contracts.CopyMangaLoginResult{Success: false}, fmt.Errorf("encrypt password: %w", err)
 	}
 
-	if a.settings != nil {
-		st := a.settings.Get()
-		st.Downloader.CopyMangaUsername = username
-		st.Downloader.CopyMangaPasswordEncrypted = encPwd
-		st.Downloader.CopyMangaToken = token
-		_, _ = a.settings.Update(st)
+	st := a.settings.Get()
+	st.Downloader.CopyMangaUsername = username
+	st.Downloader.CopyMangaPasswordEncrypted = encPwd
+	st.Downloader.CopyMangaToken = token
+	updated, err := a.settings.Update(st)
+	if err != nil {
+		return contracts.CopyMangaLoginResult{Success: false}, fmt.Errorf("persist credentials: %w", err)
 	}
 
-	if a.copyManga != nil {
-		a.copyManga.SetToken(token)
-		a.copyManga.SetUserCredentials(username, encPwd)
-	}
+	a.copyManga.SetUserToken(token)
+	a.copyManga.SetUserCredentials(username, encPwd)
+	a.emit(contracts.EventSettingsUpdated, updated)
 
 	return contracts.CopyMangaLoginResult{
 		Success:   true,
@@ -2281,17 +2292,20 @@ func (a *App) LogoutCopyManga() error {
 	if err := a.ensureReady(); err != nil {
 		return err
 	}
-	if a.settings != nil {
-		st := a.settings.Get()
-		st.Downloader.CopyMangaUsername = ""
-		st.Downloader.CopyMangaPasswordEncrypted = ""
-		st.Downloader.CopyMangaToken = ""
-		_, _ = a.settings.Update(st)
+
+	st := a.settings.Get()
+	st.Downloader.CopyMangaUsername = ""
+	st.Downloader.CopyMangaPasswordEncrypted = ""
+	st.Downloader.CopyMangaToken = ""
+	updated, err := a.settings.Update(st)
+	if err != nil {
+		return fmt.Errorf("clear credentials: %w", err)
 	}
 	if a.copyManga != nil {
-		a.copyManga.SetToken("")
+		a.copyManga.SetUserToken("")
 		a.copyManga.SetUserCredentials("", "")
 	}
+	a.emit(contracts.EventSettingsUpdated, updated)
 	return nil
 }
 
@@ -2366,14 +2380,21 @@ func (a *App) AddCopyMangaAccount(username string, password string, token string
 	}
 
 	if token == "" && password != "" {
-		tok, err := a.copyManga.LoginUser(context.Background(), username, password)
-		if err == nil {
-			token = tok
+		if a.copyManga == nil {
+			return fmt.Errorf("copymanga client not initialized")
 		}
+		tok, err := a.copyManga.LoginUser(context.Background(), username, password)
+		if err != nil {
+			return fmt.Errorf("login account: %w", err)
+		}
+		token = tok
 	}
 
 	machineID := crypto.GetMachineID()
-	encPwd, _ := crypto.EncryptPassword(password, machineID, username)
+	encPwd, err := crypto.EncryptPassword(password, machineID, username)
+	if err != nil {
+		return fmt.Errorf("encrypt password: %w", err)
+	}
 
 	acc := contracts.CopyMangaAccount{
 		Username:      username,
@@ -2426,7 +2447,11 @@ func (a *App) ImportCopyMangaAccounts(inputs []contracts.CopyMangaAccountInput) 
 			continue
 		}
 
-		encPwd, _ := crypto.EncryptPassword(password, machineID, username)
+		encPwd, err := crypto.EncryptPassword(password, machineID, username)
+		if err != nil {
+			result.Skipped++
+			continue
+		}
 		acc := contracts.CopyMangaAccount{
 			Username:      username,
 			Password:      encPwd,
