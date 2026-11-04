@@ -1369,14 +1369,24 @@ func TestAddDroppedSources(t *testing.T) {
 		t.Fatalf("AddDroppedSources failed: %v", err)
 	}
 
-	if res.AddedCount != 2 {
-		t.Errorf("expected 2 added sources, got %d", res.AddedCount)
+	if res.AddedCount != 3 {
+		t.Errorf("expected 3 added sources, got %d", res.AddedCount)
 	}
-	if res.IgnoredFiles != 1 {
-		t.Errorf("expected 1 ignored file, got %d", res.IgnoredFiles)
+	if res.IgnoredFiles != 0 {
+		t.Errorf("expected 0 ignored files, got %d", res.IgnoredFiles)
 	}
 	if res.ExistingCount != 0 {
 		t.Errorf("expected 0 existing count, got %d", res.ExistingCount)
+	}
+	foundArchive := false
+	for _, addedPath := range res.AddedPaths {
+		if addedPath == filePath {
+			foundArchive = true
+			break
+		}
+	}
+	if !foundArchive {
+		t.Errorf("expected archive path %s to be added, got %v", filePath, res.AddedPaths)
 	}
 
 	// 2. Drop again with dir1 (already exists)
@@ -1387,11 +1397,11 @@ func TestAddDroppedSources(t *testing.T) {
 	if res2.AddedCount != 0 {
 		t.Errorf("expected 0 added sources on duplicate, got %d", res2.AddedCount)
 	}
-	if res2.ExistingCount != 1 {
-		t.Errorf("expected 1 existing count, got %d", res2.ExistingCount)
+	if res2.ExistingCount != 2 {
+		t.Errorf("expected 2 existing count, got %d", res2.ExistingCount)
 	}
-	if res2.IgnoredFiles != 1 {
-		t.Errorf("expected 1 ignored file, got %d", res2.IgnoredFiles)
+	if res2.IgnoredFiles != 0 {
+		t.Errorf("expected 0 ignored files, got %d", res2.IgnoredFiles)
 	}
 
 	// 3. Drop empty array

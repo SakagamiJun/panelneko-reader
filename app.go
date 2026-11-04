@@ -867,7 +867,7 @@ func (a *App) AddDroppedSources(paths []string) (contracts.DroppedSourcesResult,
 			continue
 		}
 
-		if !info.IsDir() {
+		if !info.IsDir() && !library.IsSupportedArchivePath(cleanPath) {
 			result.IgnoredFiles++
 			continue
 		}
