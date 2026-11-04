@@ -409,6 +409,7 @@ export const ja = {
     deselectAll: "選択解除",
     invertSelection: "反転選択",
     selectedCount: "選択中 {{selected}} / {{total}} 話",
+    search: "検索",
     searching: "検索中…",
     searchPlaceholder: "漫画のタイトルまたは作者名を入力...",
     searchEmpty: "該当するオンライン漫画が見つかりませんでした",

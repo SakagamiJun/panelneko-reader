@@ -409,6 +409,7 @@ export const zhCN = {
     deselectAll: "取消全选",
     invertSelection: "反选",
     selectedCount: "已选 {{selected}} / {{total}} 话",
+    search: "搜索",
     searching: "正在搜索…",
     searchPlaceholder: "输入漫画标题或作者...",
     searchEmpty: "未找到相关在线漫画",

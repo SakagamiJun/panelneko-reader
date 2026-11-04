@@ -409,6 +409,7 @@ export const en = {
     deselectAll: "Deselect All",
     invertSelection: "Invert Selection",
     selectedCount: "Selected {{selected}} / {{total}} chapters",
+    search: "Search",
     searching: "Searching…",
     searchPlaceholder: "Enter manga title or author...",
     searchEmpty: "No matching online manga found",

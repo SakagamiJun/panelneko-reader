@@ -374,7 +374,7 @@ export function OnlineSearchDialog({
             ) : (
               <Search className="h-3.5 w-3.5" />
             )}
-            <span>{searching ? t("downloader.searching") : t("library.rescan")}</span>
+            <span>{searching ? t("downloader.searching") : t("downloader.search")}</span>
           </Button>
         </div>
 
