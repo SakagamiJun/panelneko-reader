@@ -123,19 +123,24 @@ export function ReaderTopBar({
   }, []);
 
   useEffect(() => {
+    // Capture Escape before the app-level "back to library" shortcut so closing
+    // a reader popover does not also leave the reader.
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (chaptersOpen) {
-          setChaptersOpen(false);
-        } else if (jumpOpen) {
-          setJumpOpen(false);
-        } else if (settingsOpen) {
-          setSettingsOpen(false);
-        }
+      if (e.key !== "Escape" || (!chaptersOpen && !jumpOpen && !settingsOpen)) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      if (settingsOpen) {
+        setSettingsOpen(false);
+      } else if (jumpOpen) {
+        setJumpOpen(false);
+      } else {
+        setChaptersOpen(false);
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [chaptersOpen, jumpOpen, settingsOpen]);
 
   const toggleFullscreen = () => {

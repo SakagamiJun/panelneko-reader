@@ -216,7 +216,7 @@ export default function App() {
   }, [settingsQuery.data]);
 
   useEffect(() => {
-    if (!selectedLibraryID || !settingsQuery.data) return;
+    if (!selectedLibraryID || !settingsQuery.data || settingsOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -241,7 +241,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedLibraryID, settingsQuery.data]);
+  }, [selectedLibraryID, settingsQuery.data, settingsOpen]);
 
   useEffect(() => {
     if (selectedLibraryID || !selectedCollectionPath) return;

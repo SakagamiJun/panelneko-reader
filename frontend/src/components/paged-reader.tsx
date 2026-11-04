@@ -265,6 +265,20 @@ export function PagedReader({
         return;
       }
 
+      // Arrow keys follow the reading direction instead of the raw
+      // nextPage/prevPage bindings. This keeps RTL navigation intuitive even
+      // with the default shortcut configuration.
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        const nextOnLeft = direction === "rtl";
+        if ((event.key === "ArrowLeft") === nextOnLeft) {
+          goToNextSpread();
+        } else {
+          goToPrevSpread();
+        }
+        return;
+      }
+
       const key = event.key.toLowerCase();
       const nextKey = shortcuts.nextPage?.toLowerCase();
       const prevKey = shortcuts.prevPage?.toLowerCase();
@@ -289,25 +303,6 @@ export function PagedReader({
         event.preventDefault();
         goToPrevSpread();
         return;
-      }
-
-      // Directional arrow navigation
-      if (direction === "rtl") {
-        if (event.key === "ArrowLeft") {
-          event.preventDefault();
-          goToNextSpread();
-        } else if (event.key === "ArrowRight") {
-          event.preventDefault();
-          goToPrevSpread();
-        }
-      } else {
-        if (event.key === "ArrowRight") {
-          event.preventDefault();
-          goToNextSpread();
-        } else if (event.key === "ArrowLeft") {
-          event.preventDefault();
-          goToPrevSpread();
-        }
       }
     };
 

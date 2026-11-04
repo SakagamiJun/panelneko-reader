@@ -71,6 +71,10 @@ export function ReaderController({
   const navigationRequestIDRef = useRef(0);
   const previousModeRef = useRef(mode);
   const requestedMetricIDsRef = useRef<Set<string>>(new Set());
+  const chapterNavRef = useRef<{ next: () => void; prev: () => void }>({
+    next: () => {},
+    prev: () => {},
+  });
 
   const [metrics, setMetrics] = useState<Record<string, PageMetric>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -163,7 +167,17 @@ export function ReaderController({
       }
       const s = settings.shortcuts || {};
       const key = e.key.toLowerCase();
-      if ((s.toggleMenu && key === s.toggleMenu.toLowerCase()) || key === "m") {
+      if (s.nextChapter && key === s.nextChapter.toLowerCase()) {
+        e.preventDefault();
+        chapterNavRef.current.next();
+        return;
+      }
+      if (s.prevChapter && key === s.prevChapter.toLowerCase()) {
+        e.preventDefault();
+        chapterNavRef.current.prev();
+        return;
+      }
+      if (s.toggleMenu && key === s.toggleMenu.toLowerCase()) {
         e.preventDefault();
         toggleHUD();
       }
@@ -420,6 +434,8 @@ export function ReaderController({
       }
     }
   };
+
+  chapterNavRef.current = { next: handleNextChapter, prev: handlePrevChapter };
 
   const handleSelectChapter = (chapterID: string) => {
     const targetIndex = pages.findIndex((p) => p.chapterID === chapterID);
