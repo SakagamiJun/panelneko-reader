@@ -324,3 +324,90 @@ func TestFolderChapterCompletenessDetection(t *testing.T) {
 		t.Fatalf("expected 2 remaining pages, got %v", pages)
 	}
 }
+
+func TestRecoverInterruptedTasks(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbStore, err := store.Open(filepath.Join(tmpDir, "store"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer dbStore.Close()
+
+	settService, err := settings.NewService(dbStore)
+	if err != nil {
+		t.Fatalf("new settings: %v", err)
+	}
+	mgr := NewManager(dbStore, settService)
+	defer mgr.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	tasks := []contracts.DownloadTask{
+		{ID: "task-downloading", Source: "copymanga", MangaID: "m", MangaTitle: "M", ChapterID: "c1", ChapterTitle: "C1", Status: contracts.DownloadStatusDownloading, CreatedAt: now, UpdatedAt: now},
+		{ID: "task-pending", Source: "copymanga", MangaID: "m", MangaTitle: "M", ChapterID: "c2", ChapterTitle: "C2", Status: contracts.DownloadStatusPending, CreatedAt: now, UpdatedAt: now},
+		{ID: "task-waiting", Source: "copymanga", MangaID: "m", MangaTitle: "M", ChapterID: "c3", ChapterTitle: "C3", Status: contracts.DownloadStatusWaitingSource, CreatedAt: now, UpdatedAt: now},
+	}
+	for _, task := range tasks {
+		if err := dbStore.SaveDownloadTask(task); err != nil {
+			t.Fatalf("save task %s: %v", task.ID, err)
+		}
+	}
+
+	if err := mgr.RecoverInterruptedTasks(); err != nil {
+		t.Fatalf("recover tasks: %v", err)
+	}
+
+	for _, id := range []string{"task-downloading", "task-pending"} {
+		task, found, err := dbStore.GetDownloadTask(id)
+		if err != nil || !found {
+			t.Fatalf("get task %s: found=%v err=%v", id, found, err)
+		}
+		if task.Status != contracts.DownloadStatusPaused {
+			t.Errorf("expected %s to be paused, got %s", id, task.Status)
+		}
+	}
+	waiting, found, err := dbStore.GetDownloadTask("task-waiting")
+	if err != nil || !found {
+		t.Fatalf("get waiting task: found=%v err=%v", found, err)
+	}
+	if waiting.Status != contracts.DownloadStatusWaitingSource {
+		t.Errorf("expected waiting_source task to stay unchanged, got %s", waiting.Status)
+	}
+}
+
+func TestSetMaxConcurrentDownloads(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbStore, err := store.Open(filepath.Join(tmpDir, "store"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer dbStore.Close()
+
+	settService, err := settings.NewService(dbStore)
+	if err != nil {
+		t.Fatalf("new settings: %v", err)
+	}
+	mgr := NewManager(dbStore, settService)
+	defer mgr.Close()
+
+	mgr.SetMaxConcurrentDownloads(1)
+	if got := cap(mgr.chapterSem); got != 1 {
+		t.Fatalf("expected idle limit to apply immediately, got cap %d", got)
+	}
+
+	mgr.mu.Lock()
+	mgr.running["fake"] = &runningTask{taskID: "fake"}
+	mgr.mu.Unlock()
+	mgr.SetMaxConcurrentDownloads(2)
+	if got := cap(mgr.chapterSem); got != 1 {
+		t.Fatalf("expected running limit to wait for drain, got cap %d", got)
+	}
+
+	mgr.mu.Lock()
+	delete(mgr.running, "fake")
+	mgr.applyPendingConcurrencyLocked()
+	got := cap(mgr.chapterSem)
+	mgr.mu.Unlock()
+	if got != 2 {
+		t.Fatalf("expected pending limit to apply after drain, got cap %d", got)
+	}
+}

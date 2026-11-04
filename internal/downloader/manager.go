@@ -49,6 +49,8 @@ type Manager struct {
 	settings             *settings.Service
 	providers            map[string]contracts.MangaProvider
 	chapterSem           chan struct{}
+	maxConcurrent        int
+	pendingConcurrency   int
 	running              map[string]*runningTask
 	mu                   sync.RWMutex
 	notifyMu             sync.Mutex
@@ -66,21 +68,19 @@ func NewManager(
 	providers ...contracts.MangaProvider,
 ) *Manager {
 	st := settingsService.Get()
-	maxChapter := st.Downloader.MaxConcurrentDownloads
-	if maxChapter <= 0 {
-		maxChapter = 3
-	}
+	maxChapter := normalizeConcurrency(st.Downloader.MaxConcurrentDownloads)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	mgr := &Manager{
-		ctx:        ctx,
-		cancel:     cancel,
-		store:      storeValue,
-		settings:   settingsService,
-		providers:  make(map[string]contracts.MangaProvider),
-		chapterSem: make(chan struct{}, maxChapter),
-		running:    make(map[string]*runningTask),
-		stopTicker: make(chan struct{}),
+		ctx:           ctx,
+		cancel:        cancel,
+		store:         storeValue,
+		settings:      settingsService,
+		providers:     make(map[string]contracts.MangaProvider),
+		chapterSem:    make(chan struct{}, maxChapter),
+		maxConcurrent: maxChapter,
+		running:       make(map[string]*runningTask),
+		stopTicker:    make(chan struct{}),
 	}
 	for _, p := range providers {
 		if p != nil {
@@ -92,6 +92,63 @@ func NewManager(
 	go mgr.speedMonitorLoop()
 
 	return mgr
+}
+
+func normalizeConcurrency(limit int) int {
+	if limit <= 0 {
+		return 3
+	}
+	if limit > 10 {
+		return 10
+	}
+	return limit
+}
+
+func (m *Manager) applyPendingConcurrencyLocked() {
+	if m.pendingConcurrency <= 0 || len(m.running) != 0 {
+		return
+	}
+	m.chapterSem = make(chan struct{}, m.pendingConcurrency)
+	m.maxConcurrent = m.pendingConcurrency
+	m.pendingConcurrency = 0
+}
+
+// SetMaxConcurrentDownloads applies a new download limit. It swaps the
+// semaphore immediately when idle and defers the change until the current
+// queue drains otherwise, so active workers are never disrupted.
+func (m *Manager) SetMaxConcurrentDownloads(limit int) {
+	limit = normalizeConcurrency(limit)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.maxConcurrent = limit
+	if len(m.running) == 0 {
+		m.chapterSem = make(chan struct{}, limit)
+		m.pendingConcurrency = 0
+		return
+	}
+	if limit == cap(m.chapterSem) {
+		m.pendingConcurrency = 0
+		return
+	}
+	m.pendingConcurrency = limit
+}
+
+// RecoverInterruptedTasks resets tasks left in a running state by an abnormal
+// shutdown. Waiting-source tasks are intentionally left untouched.
+func (m *Manager) RecoverInterruptedTasks() error {
+	tasks, err := m.store.GetDownloadTasks()
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		if task.Status != contracts.DownloadStatusDownloading && task.Status != contracts.DownloadStatusPending {
+			continue
+		}
+		if err := m.store.UpdateDownloadTaskStatus(task.ID, contracts.DownloadStatusPaused, ""); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *Manager) RegisterProvider(p contracts.MangaProvider) {
@@ -323,6 +380,8 @@ func (m *Manager) dispatchWorker(task contracts.DownloadTask) {
 		m.mu.Unlock()
 		return
 	}
+	m.applyPendingConcurrencyLocked()
+	sem := m.chapterSem
 	ctx, cancel := context.WithCancel(m.ctx)
 	rt := &runningTask{
 		taskID: task.ID,
@@ -335,15 +394,16 @@ func (m *Manager) dispatchWorker(task contracts.DownloadTask) {
 	m.mu.Unlock()
 	m.notifyActiveTasks()
 
-	go m.startWorker(ctx, rt, task)
+	go m.startWorker(ctx, rt, task, sem)
 }
 
-func (m *Manager) startWorker(ctx context.Context, rt *runningTask, task contracts.DownloadTask) {
+func (m *Manager) startWorker(ctx context.Context, rt *runningTask, task contracts.DownloadTask, sem chan struct{}) {
 	defer m.wg.Done()
 	defer func() {
 		m.mu.Lock()
 		_, wasRunning := m.running[task.ID]
 		delete(m.running, task.ID)
+		m.applyPendingConcurrencyLocked()
 		m.mu.Unlock()
 		m.emit(contracts.EventDownloadTasksUpdated, nil)
 		m.emitProgress()
@@ -353,8 +413,8 @@ func (m *Manager) startWorker(ctx context.Context, rt *runningTask, task contrac
 	}()
 
 	select {
-	case m.chapterSem <- struct{}{}:
-		defer func() { <-m.chapterSem }()
+	case sem <- struct{}{}:
+		defer func() { <-sem }()
 	case <-ctx.Done():
 		m.flushTaskFinalState(task.ID, int(rt.downloaded.Load()), int(rt.totalPages.Load()), contracts.DownloadStatusPaused, "")
 		return
@@ -712,6 +772,7 @@ func (m *Manager) PauseTask(taskID string) error {
 		rt = r
 		r.cancel()
 		delete(m.running, taskID)
+		m.applyPendingConcurrencyLocked()
 		wasRunning = true
 	}
 	m.mu.Unlock()

@@ -433,6 +433,10 @@ func (a *App) bootstrap() error {
 	a.klz9 = klzClient
 	a.downloads = downloadMgr
 
+	if err := downloadMgr.RecoverInterruptedTasks(); err != nil {
+		logger.Get().Warn("Failed to recover interrupted download tasks: %v", err)
+	}
+
 	if previousTasks, err := storeValue.GetDownloadTasks(); err == nil && len(previousTasks) > 0 {
 		a.autoLinkFromTasks(previousTasks)
 	}
@@ -487,6 +491,9 @@ func (a *App) UpdateSettings(input contracts.AppSettings) (contracts.AppSettings
 	}
 	if a.klz9 != nil {
 		a.klz9.SetBaseURL(updated.Downloader.RawMangaBaseURL)
+	}
+	if a.downloads != nil {
+		a.downloads.SetMaxConcurrentDownloads(updated.Downloader.MaxConcurrentDownloads)
 	}
 
 	_ = logger.Get().SetEnabled(updated.EnableFileLogging)
