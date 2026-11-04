@@ -1403,3 +1403,110 @@ func TestAddDroppedSources(t *testing.T) {
 		t.Errorf("expected zero counts for empty paths, got %+v", res3)
 	}
 }
+
+func TestPreviewAndCheckUseChapterIDAndEffectiveNumber(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(r.URL.Path, "/api/v3/comic2/comic-slug") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 200,
+				"results": map[string]any{
+					"comic": map[string]any{
+						"name":      "Test Manga",
+						"path_word": "comic-slug",
+					},
+					"groups": map[string]any{
+						"default": map[string]any{
+							"name":      "话",
+							"path_word": "default",
+						},
+					},
+				},
+			})
+			return
+		}
+		if strings.Contains(r.URL.Path, "/group/default/chapters") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 200,
+				"results": map[string]any{
+					"total": 2,
+					"list": []map[string]any{
+						{"uuid": "ch-special", "name": "特别篇", "index": 0.5},
+						{"uuid": "ch-3", "name": "第3话", "index": 0.0},
+					},
+				},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	libraryRoot := t.TempDir()
+	mangaDir := filepath.Join(libraryRoot, "Test Manga")
+	chapterPath := filepath.Join(mangaDir, "000 - 序章.cbz")
+	writeZipArchiveForAppTest(t, chapterPath, map[string]string{
+		"001.png": "page",
+		"ComicInfo.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<ComicInfo>
+  <Title>序章</Title>
+  <Number>0</Number>
+  <Notes>{"source":"copymanga","mangaId":"comic-slug","chapterId":"ch-special"}</Notes>
+</ComicInfo>`,
+	})
+
+	app, cleanup := newAssetTestApp(t, libraryRoot)
+	defer cleanup()
+
+	mangas, err := app.ScanLibrary()
+	if err != nil || len(mangas) == 0 {
+		t.Fatalf("scan library failed: %v", err)
+	}
+	targetMangaID := mangas[0].ID
+
+	serverHost := strings.TrimPrefix(server.URL, "http://")
+	app.copyManga = copymanga.NewClient(serverHost, "", 5)
+	app.klz9 = klz9.NewClient(app.store, "https://klz9.com", 5)
+	app.downloads = downloader.NewManager(app.store, app.settings, app.copyManga, app.klz9)
+	defer app.downloads.Close()
+
+	if err := app.LinkMangaOnline(contracts.MangaOnlineLink{
+		MangaID:       targetMangaID,
+		OnlineSource:  copymanga.SiteName,
+		OnlineComicID: "comic-slug",
+		OnlineTitle:   "Test Manga",
+		AutoFollow:    true,
+		FollowPolicy:  "latest_only",
+	}); err != nil {
+		t.Fatalf("link manga: %v", err)
+	}
+
+	preview, err := app.PreviewMangaLink(contracts.MangaLinkPreviewInput{
+		MangaID:       targetMangaID,
+		OnlineSource:  copymanga.SiteName,
+		OnlineComicID: "comic-slug",
+		FollowPolicy:  "latest_only",
+	})
+	if err != nil {
+		t.Fatalf("preview manga link: %v", err)
+	}
+	if preview.LatestOnlyCount != 1 || len(preview.PendingChapters) != 1 || preview.PendingChapters[0] != "第3话" {
+		t.Fatalf("expected only 第3话 to be pending, got count=%d pending=%v", preview.LatestOnlyCount, preview.PendingChapters)
+	}
+
+	queued, err := app.CheckMangaUpdates(targetMangaID)
+	if err != nil {
+		t.Fatalf("check manga updates: %v", err)
+	}
+	if queued != 1 {
+		t.Fatalf("expected 1 queued chapter, got %d", queued)
+	}
+
+	tasks, err := app.GetDownloadTasks()
+	if err != nil {
+		t.Fatalf("get download tasks: %v", err)
+	}
+	if len(tasks) != 1 || tasks[0].ChapterID != "ch-3" {
+		t.Fatalf("expected only ch-3 to be queued, got %+v", tasks)
+	}
+}

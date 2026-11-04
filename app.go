@@ -1330,7 +1330,7 @@ func (a *App) GetOnlineMangaChapters(source string, mangaID string, mangaTitle s
 						effNum = parsed
 					}
 				}
-				if allLocalNumbers[ch.Number] || (effNum > 0 && allLocalNumbers[effNum]) {
+				if (ch.Number > 0 && allLocalNumbers[ch.Number]) || (effNum > 0 && allLocalNumbers[effNum]) {
 					ch.IsDownloaded = true
 					continue
 				}
@@ -1609,14 +1609,16 @@ func (a *App) previewMangaLinkInternal(input contracts.MangaLinkPreviewInput) co
 			onlineMaxTitle = ch.Title
 		}
 
-		alreadyPresent := false
-		if allLocalNumbers[ch.Number] || (effNum > 0 && allLocalNumbers[effNum]) {
-			alreadyPresent = true
-		} else {
-			for _, loc := range localList {
-				if downloader.MatchChapterTitle(ch.Title, loc.title, loc.localPath) {
-					alreadyPresent = true
-					break
+		alreadyPresent := ch.IsDownloaded
+		if !alreadyPresent {
+			if (ch.Number > 0 && allLocalNumbers[ch.Number]) || (effNum > 0 && allLocalNumbers[effNum]) {
+				alreadyPresent = true
+			} else {
+				for _, loc := range localList {
+					if downloader.MatchChapterTitle(ch.Title, loc.title, loc.localPath) {
+						alreadyPresent = true
+						break
+					}
 				}
 			}
 		}
@@ -2033,7 +2035,7 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 		}
 
 		alreadyDownloaded := false
-		if locNums != nil && (locNums[ch.Number] || locNums[effectiveChapterNumber]) {
+		if locNums != nil && ((ch.Number > 0 && locNums[ch.Number]) || (effectiveChapterNumber > 0 && locNums[effectiveChapterNumber])) {
 			alreadyDownloaded = true
 		} else {
 			for _, locCh := range localChapters {
@@ -2052,7 +2054,7 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 			if link.FollowPolicy == "fill_gaps" {
 				shouldDownload = true
 			} else { // latest_only default
-				if ch.Number > maxNum && effectiveChapterNumber > maxNum {
+				if effectiveChapterNumber > maxNum {
 					shouldDownload = true
 				}
 			}
