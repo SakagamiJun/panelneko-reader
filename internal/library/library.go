@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
+	"github.com/sakagamijun/panelneko-reader/internal/logger"
 )
 
 var libraryManifestSemaphore = make(chan struct{}, 32)
@@ -145,6 +147,16 @@ func getMangaModTime(mangaPath string, fallback int64) int64 {
 }
 
 func ScanSource(source contracts.LibrarySource, prevItems map[string]contracts.LibraryManga, prevModTimes map[string]int64) ([]contracts.LibraryManga, map[string]int64, error) {
+	return ScanSourceContext(context.Background(), source, prevItems, prevModTimes)
+}
+
+func ScanSourceContext(ctx context.Context, source contracts.LibrarySource, prevItems map[string]contracts.LibraryManga, prevModTimes map[string]int64) ([]contracts.LibraryManga, map[string]int64, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	outputRoot := source.Path
 	sourceID := source.ID
 	if sourceID == "" {
@@ -210,6 +222,9 @@ func ScanSource(source contracts.LibrarySource, prevItems map[string]contracts.L
 	var errOnce sync.Once
 
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			break
+		}
 		if !entry.IsDir() && !isSupportedArchivePath(entry.Name()) {
 			continue
 		}
@@ -217,16 +232,23 @@ func ScanSource(source contracts.LibrarySource, prevItems map[string]contracts.L
 		wg.Add(1)
 		go func(entry os.DirEntry) {
 			defer wg.Done()
+			if ctx.Err() != nil {
+				return
+			}
 			entryPath := filepath.Join(outputRoot, entry.Name())
 
 			info, err := entry.Info()
 			if err != nil {
+				logger.Get().Warn("Skipping library entry %s: %v", entry.Name(), err)
+				errOnce.Do(func() { firstErr = err })
 				return
 			}
 
 			if hasCollectionMarker(entryPath) {
 				subEntries, err := os.ReadDir(entryPath)
 				if err != nil {
+					logger.Get().Warn("Skipping collection %s: %v", entry.Name(), err)
+					errOnce.Do(func() { firstErr = err })
 					return
 				}
 
@@ -298,6 +320,7 @@ func ScanSource(source contracts.LibrarySource, prevItems map[string]contracts.L
 
 					manifest, err := loadMangaManifestWithSource(outputRoot, sourceID, subPath, subRelPath)
 					if err != nil {
+						logger.Get().Warn("Skipping library entry %s: %v", subRelPath, err)
 						continue
 					}
 					if len(manifest.reader.Chapters) == 0 {
@@ -387,6 +410,7 @@ func ScanSource(source contracts.LibrarySource, prevItems map[string]contracts.L
 
 			manifest, err := loadMangaManifestWithSource(outputRoot, sourceID, entryPath, relPath)
 			if err != nil {
+				logger.Get().Warn("Skipping library entry %s: %v", relPath, err)
 				errOnce.Do(func() { firstErr = err })
 				return
 			}
@@ -418,7 +442,10 @@ func ScanSource(source contracts.LibrarySource, prevItems map[string]contracts.L
 	}
 
 	wg.Wait()
-	if firstErr != nil {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	if len(items) == 0 && firstErr != nil {
 		return nil, nil, firstErr
 	}
 
@@ -437,14 +464,32 @@ func ScanAllSources(
 	prevItemsBySource map[string]map[string]contracts.LibraryManga,
 	prevModTimesBySource map[string]map[string]int64,
 ) []SourceScanResult {
+	return ScanAllSourcesContext(context.Background(), sources, prevItemsBySource, prevModTimesBySource)
+}
+
+func ScanAllSourcesContext(
+	ctx context.Context,
+	sources []contracts.LibrarySource,
+	prevItemsBySource map[string]map[string]contracts.LibraryManga,
+	prevModTimesBySource map[string]map[string]int64,
+) []SourceScanResult {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	results := make([]SourceScanResult, len(sources))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
 
 	for i, src := range sources {
+		if ctx.Err() != nil {
+			break
+		}
 		wg.Add(1)
 		go func(idx int, source contracts.LibrarySource) {
 			defer wg.Done()
+			if ctx.Err() != nil {
+				return
+			}
 
 			if !source.Enabled {
 				source.Status = contracts.SourceStatusDisabled
@@ -460,7 +505,7 @@ func ScanAllSources(
 			sourcePrevItems := prevItemsBySource[source.ID]
 			sourcePrevModTimes := prevModTimesBySource[source.ID]
 
-			items, newModTimes, err := ScanSource(source, sourcePrevItems, sourcePrevModTimes)
+			items, newModTimes, err := ScanSourceContext(ctx, source, sourcePrevItems, sourcePrevModTimes)
 			if err != nil {
 				source.Status = contracts.SourceStatusOffline
 				source.ErrorMessage = err.Error()
@@ -485,6 +530,9 @@ func ScanAllSources(
 	}
 
 	wg.Wait()
+	if ctx.Err() != nil {
+		return nil
+	}
 	return results
 }
 

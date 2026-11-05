@@ -1499,3 +1499,27 @@ func TestScanSingleArchiveUsesRelativePathCacheKey(t *testing.T) {
 		t.Fatalf("unexpected mod time cache: %+v", modTimes)
 	}
 }
+
+func TestScanSourceSkipsBrokenEntry(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "broken.cbz"), []byte("not-an-archive"), 0o644); err != nil {
+		t.Fatalf("write broken archive: %v", err)
+	}
+
+	mangaDir := filepath.Join(root, "Good Manga")
+	if err := os.MkdirAll(mangaDir, 0o755); err != nil {
+		t.Fatalf("mkdir manga: %v", err)
+	}
+	writeZipArchive(t, filepath.Join(mangaDir, "001.cbz"), map[string]string{
+		"001.jpg": "page",
+	})
+
+	source := contracts.LibrarySource{ID: "default", Path: root, Enabled: true}
+	items, _, err := ScanSource(source, nil, nil)
+	if err != nil {
+		t.Fatalf("expected broken entry to be skipped, got %v", err)
+	}
+	if len(items) != 1 || items[0].Title != "Good Manga" {
+		t.Fatalf("expected only the good manga to be returned, got %+v", items)
+	}
+}
