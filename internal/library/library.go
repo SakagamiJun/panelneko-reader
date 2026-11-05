@@ -160,8 +160,8 @@ func ScanSource(source contracts.LibrarySource, prevItems map[string]contracts.L
 			modTime := info.ModTime().UnixNano()
 			relPath := filepath.Base(outputRoot)
 			mangaID := EncodeMangaIDWithSource(sourceID, relPath)
-			if prevTime, ok := prevModTimes[mangaID]; ok && prevTime == modTime {
-				if prevItem, ok := prevItems[mangaID]; ok {
+			if prevTime, ok := prevModTimes[relPath]; ok && prevTime == modTime {
+				if prevItem, ok := prevItems[relPath]; ok {
 					prevItem.SourceID = sourceID
 					prevItem.IsAvailable = true
 					return []contracts.LibraryManga{prevItem}, map[string]int64{mangaID: modTime}, nil

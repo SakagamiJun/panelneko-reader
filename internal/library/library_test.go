@@ -1464,3 +1464,38 @@ func TestGroupedArchiveChaptersAndSingleArchiveSource(t *testing.T) {
 		t.Fatalf("unexpected data from single archive: %v, got %q", err, string(singleData))
 	}
 }
+
+func TestScanSingleArchiveUsesRelativePathCacheKey(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "broken.cbz")
+	if err := os.WriteFile(archivePath, []byte("not-an-archive"), 0o644); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+	info, err := os.Stat(archivePath)
+	if err != nil {
+		t.Fatalf("stat archive: %v", err)
+	}
+
+	source := contracts.LibrarySource{ID: "src-archive", Path: archivePath, Enabled: true}
+	prevItem := contracts.LibraryManga{
+		ID:           EncodeMangaIDWithSource("src-archive", "broken.cbz"),
+		SourceID:     "src-archive",
+		Title:        "Cached Archive",
+		RelativePath: "broken.cbz",
+		IsAvailable:  false,
+	}
+	items, modTimes, err := ScanSource(
+		source,
+		map[string]contracts.LibraryManga{"broken.cbz": prevItem},
+		map[string]int64{"broken.cbz": info.ModTime().UnixNano()},
+	)
+	if err != nil {
+		t.Fatalf("expected cached archive scan to succeed without opening the file, got %v", err)
+	}
+	if len(items) != 1 || items[0].ID != prevItem.ID || !items[0].IsAvailable {
+		t.Fatalf("unexpected cached items: %+v", items)
+	}
+	if modTimes[prevItem.ID] != info.ModTime().UnixNano() {
+		t.Fatalf("unexpected mod time cache: %+v", modTimes)
+	}
+}
