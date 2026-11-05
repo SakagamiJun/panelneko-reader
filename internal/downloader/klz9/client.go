@@ -39,11 +39,12 @@ var (
 )
 
 type Client struct {
-	store      *store.SQLiteStore
-	httpClient *http.Client
-	baseURL    string
-	mu         sync.RWMutex
-	cached     *contracts.SiteProfile
+	store        *store.SQLiteStore
+	httpClient   *http.Client
+	baseURL      string
+	mu           sync.RWMutex
+	cached       *contracts.SiteProfile
+	profileStale bool
 }
 
 var _ contracts.MangaProvider = (*Client)(nil)
@@ -68,17 +69,24 @@ func NewClient(store *store.SQLiteStore, baseURL string, timeoutSeconds int) *Cl
 }
 
 func (c *Client) SetBaseURL(baseURL string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	c.baseURL = strings.TrimRight(baseURL, "/")
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.baseURL == baseURL {
+		return
+	}
+	c.baseURL = baseURL
+	c.cached = nil
+	c.profileStale = true
 }
 
 func (c *Client) GetProfile(ctx context.Context, forceRefresh bool) (contracts.SiteProfile, error) {
 	c.mu.RLock()
-	if !forceRefresh && c.cached != nil && c.cached.APIBase != "" && c.cached.SignatureSecret != "" {
+	if !forceRefresh && !c.profileStale && c.cached != nil && c.cached.APIBase != "" && c.cached.SignatureSecret != "" {
 		p := *c.cached
 		c.mu.RUnlock()
 		return p, nil
@@ -88,7 +96,8 @@ func (c *Client) GetProfile(ctx context.Context, forceRefresh bool) (contracts.S
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if !forceRefresh {
+	stale := forceRefresh || c.profileStale
+	if !stale {
 		if p, found, err := c.store.GetLatestSiteProfile(SiteName); err == nil && found && p.APIBase != "" && p.SignatureSecret != "" {
 			c.cached = &p
 			return p, nil
@@ -96,6 +105,7 @@ func (c *Client) GetProfile(ctx context.Context, forceRefresh bool) (contracts.S
 	}
 
 	profile, err := c.fetchAndExtractProfile(ctx)
+	c.profileStale = false
 	if err != nil {
 		if c.cached != nil {
 			return *c.cached, nil

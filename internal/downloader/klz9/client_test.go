@@ -2,6 +2,8 @@ package klz9
 
 import (
 	"testing"
+
+	"github.com/sakagamijun/panelneko-reader/internal/contracts"
 )
 
 func TestCalculateSignature(t *testing.T) {
@@ -115,5 +117,22 @@ func TestExtractPageURLsFromPayload_EdgeCases(t *testing.T) {
 	urlsPages := extractPageURLsFromPayload(payloadPages)
 	if len(urlsPages) != 2 || urlsPages[0] != "https://img.example.com/p1.jpg" || urlsPages[1] != "https://img.example.com/p2.jpg" {
 		t.Fatalf("unexpected extracted pages urls: %v", urlsPages)
+	}
+}
+
+func TestSetBaseURLInvalidatesProfileCache(t *testing.T) {
+	client := NewClient(nil, "https://old.example", 5)
+	client.cached = &contracts.SiteProfile{APIBase: "https://old.example/api", SignatureSecret: "old"}
+	client.SetBaseURL("https://old.example")
+	if client.cached == nil {
+		t.Fatal("expected same base URL to keep the profile cache")
+	}
+
+	client.SetBaseURL("https://new.example")
+	if client.cached != nil {
+		t.Fatal("expected cached profile to be cleared when base URL changes")
+	}
+	if !client.profileStale {
+		t.Fatal("expected profile to be marked stale when base URL changes")
 	}
 }
