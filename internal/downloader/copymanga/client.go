@@ -717,7 +717,10 @@ func (c *Client) RecordCDNResult(usedURL string, success bool) {
 	if err != nil {
 		return
 	}
-	for _, n := range c.cdnNodes {
+	c.mu.RLock()
+	nodes := append([]*CDNNode(nil), c.cdnNodes...)
+	c.mu.RUnlock()
+	for _, n := range nodes {
 		if n.Host == u.Host {
 			if success {
 				n.RecordSuccess()
