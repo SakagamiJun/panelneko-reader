@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
@@ -57,6 +57,8 @@ export function OnlineSearchDialog({
   const [selectedChapterIds, setSelectedChapterIds] = useState<Set<string>>(new Set());
   const [allowOverwrite, setAllowOverwrite] = useState(false);
   const [isSubmittingDownload, setIsSubmittingDownload] = useState(false);
+  const searchRequestRef = useRef(0);
+  const chapterRequestRef = useRef(0);
 
   const matchedLocalTitle = useMemo(
     () => chapters.find((c) => c.matchedLocalTitle)?.matchedLocalTitle,
@@ -86,6 +88,8 @@ export function OnlineSearchDialog({
   // Sync initial query and source when opened
   useEffect(() => {
     if (open) {
+      searchRequestRef.current += 1;
+      chapterRequestRef.current += 1;
       const source =
         initialSource === "klz9" && settings?.downloader?.enableRawManga
           ? "klz9"
@@ -127,6 +131,8 @@ export function OnlineSearchDialog({
   const executeSearch = useCallback(
     async (source: "copymanga" | "klz9", query: string) => {
       if (!query.trim()) return;
+      const requestID = ++searchRequestRef.current;
+      chapterRequestRef.current += 1;
       setSearching(true);
       setSearchError(null);
       setSelectedManga(null);
@@ -135,18 +141,23 @@ export function OnlineSearchDialog({
 
       try {
         const res = await appAdapter.searchOnlineManga(source, query.trim(), 1);
+        if (searchRequestRef.current !== requestID) return;
         setSearchResults(res.items || []);
       } catch (err: unknown) {
+        if (searchRequestRef.current !== requestID) return;
         setSearchError(err instanceof Error ? err.message : String(err));
         setSearchResults([]);
       } finally {
-        setSearching(false);
+        if (searchRequestRef.current === requestID) {
+          setSearching(false);
+        }
       }
     },
     []
   );
 
   const handleSelectManga = async (manga: OnlineMangaItem) => {
+    const requestID = ++chapterRequestRef.current;
     setSelectedManga(manga);
     setLoadingChapters(true);
     setChaptersError(null);
@@ -156,15 +167,19 @@ export function OnlineSearchDialog({
 
     try {
       const fetchedChapters = await appAdapter.getOnlineMangaChapters(manga.source, manga.id, manga.title);
+      if (chapterRequestRef.current !== requestID) return;
       setChapters(fetchedChapters);
       // Default to selecting only un-downloaded chapters
       const unDownloaded = fetchedChapters.filter((c) => !c.isDownloaded);
       setSelectedChapterIds(new Set(unDownloaded.map((c) => c.id)));
     } catch (err: unknown) {
+      if (chapterRequestRef.current !== requestID) return;
       setChaptersError(err instanceof Error ? err.message : String(err));
       setChapters([]);
     } finally {
-      setLoadingChapters(false);
+      if (chapterRequestRef.current === requestID) {
+        setLoadingChapters(false);
+      }
     }
   };
 
