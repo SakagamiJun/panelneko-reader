@@ -154,28 +154,49 @@ func (s *SQLiteStore) init() error {
 		}
 	}
 
-	s.addColumnIfNotExists("library_manga", "parent_path", "TEXT NOT NULL DEFAULT ''")
-	s.addColumnIfNotExists("library_manga", "is_collection", "INTEGER NOT NULL DEFAULT 0")
-	s.addColumnIfNotExists("library_manga", "manga_count", "INTEGER NOT NULL DEFAULT 0")
-	s.addColumnIfNotExists("library_manga", "source_id", "TEXT NOT NULL DEFAULT 'default'")
-	s.addColumnIfNotExists("library_manga", "is_available", "INTEGER NOT NULL DEFAULT 1")
-	s.addColumnIfNotExists("download_tasks", "chapter_group", "TEXT NOT NULL DEFAULT ''")
-	s.addColumnIfNotExists("download_tasks", "target_source_id", "TEXT NOT NULL DEFAULT ''")
-	s.addColumnIfNotExists("download_tasks", "force_overwrite", "INTEGER NOT NULL DEFAULT 0")
-	s.addColumnIfNotExists("manga_online_links", "target_group", "TEXT NOT NULL DEFAULT ''")
-	s.addColumnIfNotExists("manga_online_links", "baseline_chapter_number", "REAL NOT NULL DEFAULT -1")
-	s.addColumnIfNotExists("manga_online_links", "baseline_chapter_title", "TEXT NOT NULL DEFAULT ''")
-	s.addColumnIfNotExists("copymanga_accounts", "platform", "TEXT NOT NULL DEFAULT 'copymanga'")
+	columns := []struct {
+		table  string
+		column string
+		colDef string
+	}{
+		{"library_manga", "parent_path", "TEXT NOT NULL DEFAULT ''"},
+		{"library_manga", "is_collection", "INTEGER NOT NULL DEFAULT 0"},
+		{"library_manga", "manga_count", "INTEGER NOT NULL DEFAULT 0"},
+		{"library_manga", "source_id", "TEXT NOT NULL DEFAULT 'default'"},
+		{"library_manga", "is_available", "INTEGER NOT NULL DEFAULT 1"},
+		{"download_tasks", "chapter_group", "TEXT NOT NULL DEFAULT ''"},
+		{"download_tasks", "target_source_id", "TEXT NOT NULL DEFAULT ''"},
+		{"download_tasks", "force_overwrite", "INTEGER NOT NULL DEFAULT 0"},
+		{"manga_online_links", "target_group", "TEXT NOT NULL DEFAULT ''"},
+		{"manga_online_links", "baseline_chapter_number", "REAL NOT NULL DEFAULT -1"},
+		{"manga_online_links", "baseline_chapter_title", "TEXT NOT NULL DEFAULT ''"},
+		{"copymanga_accounts", "platform", "TEXT NOT NULL DEFAULT 'copymanga'"},
+	}
+	for _, column := range columns {
+		if err := s.addColumnIfNotExists(column.table, column.column, column.colDef); err != nil {
+			return err
+		}
+	}
 
-	_, _ = s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_library_manga_source ON library_manga (source_id)`)
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_library_manga_source ON library_manga (source_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_library_manga_title ON library_manga (title)`,
+		`CREATE INDEX IF NOT EXISTS idx_library_manga_relative_path ON library_manga (relative_path)`,
+		`CREATE INDEX IF NOT EXISTS idx_manga_online_links_source_comic ON manga_online_links (online_source, online_comic_id)`,
+	}
+	for _, statement := range indexes {
+		if _, err := s.db.Exec(statement); err != nil {
+			return fmt.Errorf("create schema index: %w", err)
+		}
+	}
 
 	return nil
 }
 
-func (s *SQLiteStore) addColumnIfNotExists(table, column, colDef string) {
+func (s *SQLiteStore) addColumnIfNotExists(table, column, colDef string) error {
 	rows, err := s.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
 	if err != nil {
-		return
+		return fmt.Errorf("inspect table %s: %w", table, err)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -185,13 +206,19 @@ func (s *SQLiteStore) addColumnIfNotExists(table, column, colDef string) {
 		var dfltValue *string
 		var pk int
 		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
-			return
+			return fmt.Errorf("scan table %s columns: %w", table, err)
 		}
 		if name == column {
-			return
+			return nil
 		}
 	}
-	s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, colDef))
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate table %s columns: %w", table, err)
+	}
+	if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, colDef)); err != nil {
+		return fmt.Errorf("add column %s.%s: %w", table, column, err)
+	}
+	return nil
 }
 
 func (s *SQLiteStore) GetSettings() (contracts.AppSettings, bool, error) {
@@ -682,6 +709,50 @@ func (s *SQLiteStore) GetDownloadTasks() ([]contracts.DownloadTask, error) {
 	return tasks, rows.Err()
 }
 
+func (s *SQLiteStore) GetActiveDownloadTasks() ([]contracts.DownloadTask, error) {
+	const query = `
+		SELECT id, source, manga_id, manga_title, manga_cover_url,
+		       chapter_id, chapter_title, chapter_number, chapter_group, target_source_id,
+		       status, total_pages, downloaded_pages, speed, error_message,
+		       created_at, updated_at, force_overwrite
+		FROM download_tasks
+		WHERE status IN ('downloading', 'pending')
+		ORDER BY created_at DESC
+	`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query active download tasks: %w", err)
+	}
+	defer rows.Close()
+
+	var tasks []contracts.DownloadTask
+	for rows.Next() {
+		var t contracts.DownloadTask
+		var statusStr string
+		var forceOverwriteVal int
+		if err := rows.Scan(
+			&t.ID, &t.Source, &t.MangaID, &t.MangaTitle, &t.MangaCoverURL,
+			&t.ChapterID, &t.ChapterTitle, &t.ChapterNumber, &t.ChapterGroup, &t.TargetSourceID,
+			&statusStr, &t.TotalPages, &t.DownloadedPages, &t.Speed, &t.ErrorMessage,
+			&t.CreatedAt, &t.UpdatedAt, &forceOverwriteVal,
+		); err != nil {
+			return nil, fmt.Errorf("scan active download task: %w", err)
+		}
+		t.Status = contracts.DownloadTaskStatus(statusStr)
+		t.ForceOverwrite = forceOverwriteVal != 0
+		tasks = append(tasks, t)
+	}
+	return tasks, rows.Err()
+}
+
+func (s *SQLiteStore) CountDownloadTasks() (int, error) {
+	var count int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM download_tasks`).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count download tasks: %w", err)
+	}
+	return count, nil
+}
+
 func (s *SQLiteStore) UpdateDownloadTaskStatus(id string, status contracts.DownloadTaskStatus, errorMsg string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	const query = `UPDATE download_tasks SET status = ?, error_message = ?, updated_at = ? WHERE id = ?`
@@ -755,6 +826,60 @@ func (s *SQLiteStore) SaveMangaOnlineLink(link contracts.MangaOnlineLink) error 
 		return fmt.Errorf("save manga online link: %w", err)
 	}
 	return nil
+}
+
+func (s *SQLiteStore) GetMangaOnlineLinkByOnline(source string, comicID string) (contracts.MangaOnlineLink, bool, error) {
+	const query = `
+		SELECT manga_id, online_source, online_comic_id, online_title,
+		       auto_follow, follow_policy, last_checked_at, last_notified_chapter,
+		       target_group, baseline_chapter_number, baseline_chapter_title
+		FROM manga_online_links
+		WHERE online_source = ? AND online_comic_id = ?
+		LIMIT 1
+	`
+	var link contracts.MangaOnlineLink
+	var autoFollowInt int
+	err := s.db.QueryRow(query, source, comicID).Scan(
+		&link.MangaID, &link.OnlineSource, &link.OnlineComicID, &link.OnlineTitle,
+		&autoFollowInt, &link.FollowPolicy, &link.LastCheckedAt, &link.LastNotifiedChapter,
+		&link.TargetGroup, &link.BaselineChapterNumber, &link.BaselineChapterTitle,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return contracts.MangaOnlineLink{}, false, nil
+		}
+		return contracts.MangaOnlineLink{}, false, fmt.Errorf("select manga online link by online id: %w", err)
+	}
+	link.AutoFollow = autoFollowInt == 1
+	return link, true, nil
+}
+
+func (s *SQLiteStore) FindLibraryManga(title string, relativePath string, fallbackPath string) (contracts.LibraryManga, bool, error) {
+	const query = `
+		SELECT id, source_id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, is_available
+		FROM library_manga
+		WHERE title = ? COLLATE NOCASE
+		   OR relative_path = ? COLLATE NOCASE
+		   OR relative_path = ? COLLATE NOCASE
+		ORDER BY last_updated DESC
+		LIMIT 1
+	`
+	var m contracts.LibraryManga
+	var isColl int
+	var isAvail int
+	err := s.db.QueryRow(query, title, relativePath, fallbackPath).Scan(
+		&m.ID, &m.SourceID, &m.Title, &m.SourceURL, &m.RelativePath, &m.ParentPath, &isColl, &m.MangaCount, &m.CoverImageURL,
+		&m.ChapterCount, &m.PageCount, &m.LastUpdated, &isAvail,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return contracts.LibraryManga{}, false, nil
+		}
+		return contracts.LibraryManga{}, false, fmt.Errorf("find library manga: %w", err)
+	}
+	m.IsCollection = (isColl == 1)
+	m.IsAvailable = (isAvail == 1)
+	return m, true, nil
 }
 
 func (s *SQLiteStore) GetMangaOnlineLink(mangaID string) (contracts.MangaOnlineLink, bool, error) {

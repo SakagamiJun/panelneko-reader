@@ -857,7 +857,11 @@ func (m *Manager) RetryTask(taskID string) error {
 }
 
 func (m *Manager) GetProgress() contracts.DownloadProgress {
-	tasks, err := m.store.GetDownloadTasks()
+	tasks, err := m.store.GetActiveDownloadTasks()
+	if err != nil {
+		return contracts.DownloadProgress{}
+	}
+	totalTasks, err := m.store.CountDownloadTasks()
 	if err != nil {
 		return contracts.DownloadProgress{}
 	}
@@ -903,7 +907,7 @@ func (m *Manager) GetProgress() contracts.DownloadProgress {
 
 	return contracts.DownloadProgress{
 		ActiveTasks:     activeCount,
-		TotalTasks:      len(tasks),
+		TotalTasks:      totalTasks,
 		DownloadedPages: downloadedPages,
 		TotalPages:      totalPages,
 		SpeedFormatted:  speedStr,

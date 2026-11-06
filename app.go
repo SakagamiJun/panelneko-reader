@@ -329,6 +329,12 @@ func (a *App) CheckForUpdates() (contracts.UpdateCheckResult, error) {
 
 type App struct {
 	bootErr            error
+	ctx                context.Context
+	cancel             context.CancelFunc
+	lifecycleOnce      sync.Once
+	lifecycleMu        sync.Mutex
+	shuttingDown       bool
+	bgWG               sync.WaitGroup
 	store              *store.SQLiteStore
 	settings           *settings.Service
 	copyManga          *copymanga.Client
@@ -349,17 +355,44 @@ type App struct {
 }
 
 func NewApp() *App {
-	return &App{}
+	app := &App{}
+	app.ensureLifecycle()
+	return app
+}
+
+func (a *App) ensureLifecycle() context.Context {
+	a.lifecycleOnce.Do(func() {
+		if a.ctx == nil {
+			a.ctx, a.cancel = context.WithCancel(context.Background())
+		}
+	})
+	return a.ctx
+}
+
+func (a *App) goBackground(run func(ctx context.Context)) {
+	ctx := a.ensureLifecycle()
+	a.lifecycleMu.Lock()
+	if a.shuttingDown {
+		a.lifecycleMu.Unlock()
+		return
+	}
+	a.bgWG.Add(1)
+	a.lifecycleMu.Unlock()
+	go func() {
+		defer a.bgWG.Done()
+		run(ctx)
+	}()
 }
 
 func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
+	a.ensureLifecycle()
 	a.bootErr = a.bootstrap()
 	if a.bootErr == nil {
-		go func() {
+		a.goBackground(func(ctx context.Context) {
 			a.scanOnce.Do(func() {
-				_, _ = a.performSourcesScan()
+				_, _ = a.performSourcesScanContext(ctx)
 			})
-		}()
+		})
 	}
 	return nil
 }
@@ -442,11 +475,15 @@ func (a *App) bootstrap() error {
 	}
 
 	if st.Downloader.AutoCheckComicUpdates {
-		go func() {
-			time.Sleep(2 * time.Second)
+		a.goBackground(func(ctx context.Context) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+			}
 			logger.Get().Info("Startup auto check for followed comics update initiated")
-			_, _ = a.CheckAllFollowedUpdates()
-		}()
+			_, _ = a.checkAllFollowedUpdates(ctx)
+		})
 	}
 
 	cacheDir := filepath.Join(appDataDir, "cache", "thumbnails")
@@ -542,10 +579,14 @@ func (a *App) ScanLibrary() ([]contracts.LibraryManga, error) {
 }
 
 func (a *App) performSourcesScan() ([]contracts.LibraryManga, error) {
+	return a.performSourcesScanContext(a.ensureLifecycle())
+}
+
+func (a *App) performSourcesScanContext(ctx context.Context) ([]contracts.LibraryManga, error) {
 	a.scanMu.Lock()
 	defer a.scanMu.Unlock()
 
-	return a.performSourcesScanLocked()
+	return a.performSourcesScanLocked(ctx)
 }
 
 func (a *App) onDownloadActiveCountChanged(activeCount int) {
@@ -557,7 +598,9 @@ func (a *App) onDownloadActiveCountChanged(activeCount int) {
 			a.downloadScanActive = true
 			stopCh := make(chan struct{})
 			a.downloadScanStop = stopCh
-			go a.runDownloadScanLoop(stopCh)
+			a.goBackground(func(ctx context.Context) {
+				a.runDownloadScanLoop(ctx, stopCh)
+			})
 		}
 	} else {
 		if a.downloadScanActive {
@@ -566,18 +609,22 @@ func (a *App) onDownloadActiveCountChanged(activeCount int) {
 				close(a.downloadScanStop)
 				a.downloadScanStop = nil
 			}
-			go a.triggerScanWithTryLock(true)
+			a.goBackground(func(context.Context) {
+				a.triggerScanWithTryLock(true)
+			})
 		}
 	}
 }
 
-func (a *App) runDownloadScanLoop(stopCh <-chan struct{}) {
+func (a *App) runDownloadScanLoop(ctx context.Context, stopCh <-chan struct{}) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-stopCh:
+			return
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			a.triggerScanWithTryLock(false)
@@ -594,10 +641,13 @@ func (a *App) triggerScanWithTryLock(isFinalSweep bool) {
 	}
 	defer a.scanMu.Unlock()
 
-	_, _ = a.performSourcesScanLocked()
+	_, _ = a.performSourcesScanLocked(a.ensureLifecycle())
 }
 
-func (a *App) performSourcesScanLocked() ([]contracts.LibraryManga, error) {
+func (a *App) performSourcesScanLocked(ctx context.Context) ([]contracts.LibraryManga, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	sources := a.getActiveSources()
 
 	prevItemsBySource := make(map[string]map[string]contracts.LibraryManga)
@@ -618,7 +668,10 @@ func (a *App) performSourcesScanLocked() ([]contracts.LibraryManga, error) {
 		prevModTimesBySource[src.ID] = modTimesMap
 	}
 
-	results := library.ScanAllSources(sources, prevItemsBySource, prevModTimesBySource)
+	results := library.ScanAllSourcesContext(ctx, sources, prevItemsBySource, prevModTimesBySource)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	statusUpdates := make([]contracts.LibrarySource, 0, len(results))
 	for _, res := range results {
@@ -911,9 +964,9 @@ func (a *App) AddDroppedSources(paths []string) (contracts.DroppedSourcesResult,
 			return result, err
 		}
 		a.emit(contracts.EventSettingsUpdated, updated)
-		go func() {
-			_, _ = a.performSourcesScan()
-		}()
+		a.goBackground(func(ctx context.Context) {
+			_, _ = a.performSourcesScanContext(ctx)
+		})
 	}
 
 	return result, nil
@@ -1087,7 +1140,7 @@ func (a *App) RescanSource(sourceID string) error {
 		prevItems[r.RelativePath] = r.LibraryManga
 	}
 
-	items, newModTimes, err := library.ScanSource(targetSource, prevItems, prevModTimes)
+	items, newModTimes, err := library.ScanSourceContext(a.ensureLifecycle(), targetSource, prevItems, prevModTimes)
 	if err != nil {
 		_ = a.store.SetSourceAvailability(sourceID, false)
 		targetSource.Status = contracts.SourceStatusOffline
@@ -1242,51 +1295,69 @@ func (a *App) SearchOnlineManga(source string, query string, page int, limit int
 }
 
 func (a *App) GetOnlineMangaChapters(source string, mangaID string, mangaTitle string) ([]contracts.OnlineMangaChapter, error) {
+	return a.getOnlineMangaChapters(a.ensureLifecycle(), source, mangaID, mangaTitle)
+}
+
+func (a *App) getOnlineMangaChapters(ctx context.Context, source string, mangaID string, mangaTitle string) ([]contracts.OnlineMangaChapter, error) {
+	chapters, _, err := a.getOnlineMangaChaptersWithManifest(ctx, source, mangaID, mangaTitle, "")
+	return chapters, err
+}
+
+func (a *App) getOnlineMangaChaptersWithManifest(ctx context.Context, source string, mangaID string, mangaTitle string, localMangaIDHint string) ([]contracts.OnlineMangaChapter, *contracts.ReaderManifest, error) {
 	if err := a.ensureReady(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if a.downloads == nil {
-		return nil, fmt.Errorf("downloader not initialized")
+		return nil, nil, fmt.Errorf("downloader not initialized")
 	}
 	provider, ok := a.downloads.GetProvider(source)
 	if !ok {
-		return nil, fmt.Errorf("unknown source: %s", source)
+		return nil, nil, fmt.Errorf("unknown source: %s", source)
 	}
 	chapters, err := provider.GetMangaChapters(ctx, mangaID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	var matchedLocalMangaID string
+	matchedLocalMangaID := localMangaIDHint
 	var matchedLocalTitle string
+	var localManifest *contracts.ReaderManifest
 
 	if a.store != nil {
 		// Stage 1: Exact match by online link
-		if allLinks, err := a.store.GetAllMangaOnlineLinks(); err == nil {
-			for _, l := range allLinks {
-				if l.OnlineSource == source && l.OnlineComicID == mangaID {
-					matchedLocalMangaID = l.MangaID
-					if l.OnlineTitle != "" {
-						matchedLocalTitle = l.OnlineTitle
-					}
-					break
+		if matchedLocalMangaID == "" {
+			link, found, err := a.store.GetMangaOnlineLinkByOnline(source, mangaID)
+			if err != nil {
+				logger.Get().Warn("Failed to look up online link for %s/%s: %v", source, mangaID, err)
+			} else if found {
+				matchedLocalMangaID = link.MangaID
+				if link.OnlineTitle != "" {
+					matchedLocalTitle = link.OnlineTitle
 				}
 			}
 		}
 
 		// Stage 2: Match by local manga title or folder name
 		if matchedLocalMangaID == "" {
-			if existingMangas, err := a.store.ListLibraryManga(); err == nil && len(existingMangas) > 0 {
-				safeManga := downloader.SanitizeFilename(mangaTitle)
-				for _, m := range existingMangas {
-					if (mangaTitle != "" && strings.EqualFold(m.Title, mangaTitle)) ||
-						(safeManga != "" && strings.EqualFold(m.RelativePath, safeManga)) ||
-						strings.EqualFold(m.RelativePath, mangaID) {
-						matchedLocalMangaID = m.ID
-						matchedLocalTitle = m.Title
+			safeManga := downloader.SanitizeFilename(mangaTitle)
+			m, found, err := a.store.FindLibraryManga(mangaTitle, safeManga, mangaID)
+			if err != nil {
+				logger.Get().Warn("Failed to look up local manga for %q: %v", mangaTitle, err)
+			} else if found {
+				matchedLocalMangaID = m.ID
+				matchedLocalTitle = m.Title
+			} else if existingMangas, listErr := a.store.ListLibraryManga(); listErr == nil {
+				// Fallback for Unicode case-fold matches that SQLite NOCASE
+				// does not cover (for example non-ASCII title variants).
+				for _, existing := range existingMangas {
+					if (mangaTitle != "" && strings.EqualFold(existing.Title, mangaTitle)) ||
+						(safeManga != "" && strings.EqualFold(existing.RelativePath, safeManga)) ||
+						strings.EqualFold(existing.RelativePath, mangaID) {
+						matchedLocalMangaID = existing.ID
+						matchedLocalTitle = existing.Title
 						break
 					}
 				}
@@ -1297,6 +1368,7 @@ func (a *App) GetOnlineMangaChapters(source string, mangaID string, mangaTitle s
 	// Stage 3: Decorate chapters with local presence if matched
 	if matchedLocalMangaID != "" {
 		if manifest, err := library.GetReaderManifestWithSources(a.getActiveSources(), matchedLocalMangaID); err == nil && len(manifest.Chapters) > 0 {
+			localManifest = &manifest
 			if matchedLocalTitle == "" {
 				matchedLocalTitle = manifest.Title
 			}
@@ -1351,7 +1423,7 @@ func (a *App) GetOnlineMangaChapters(source string, mangaID string, mangaTitle s
 		}
 	}
 
-	return chapters, nil
+	return chapters, localManifest, nil
 }
 
 func (a *App) GetOnlineMangaGroups(source string, mangaID string) ([]string, error) {
@@ -1537,17 +1609,18 @@ func (a *App) previewMangaLinkInternal(input contracts.MangaLinkPreviewInput) co
 	}
 	item.MangaTitle = localManga.Title
 
-	onlineChapters, err := a.GetOnlineMangaChapters(input.OnlineSource, input.OnlineComicID, localManga.Title)
+	onlineChapters, manifestPtr, err := a.getOnlineMangaChaptersWithManifest(
+		a.ensureLifecycle(), input.OnlineSource, input.OnlineComicID, localManga.Title, input.MangaID,
+	)
 	if err != nil {
 		item.ErrorMessage = fmt.Sprintf("fetch online chapters: %v", err)
 		return item
 	}
-
-	manifest, err := library.GetReaderManifestWithSources(a.getActiveSources(), input.MangaID)
-	if err != nil {
-		item.ErrorMessage = fmt.Sprintf("scan local chapters: %v", err)
+	if manifestPtr == nil {
+		item.ErrorMessage = "scan local chapters: no local chapters found"
 		return item
 	}
+	manifest := *manifestPtr
 
 	allLocalNumbers := make(map[float64]bool)
 	var localMaxNum float64 = -1
@@ -1883,6 +1956,10 @@ func (a *App) autoLinkFromTasks(tasks []contracts.DownloadTask) {
 }
 
 func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
+	return a.checkMangaUpdates(a.ensureLifecycle(), mangaID)
+}
+
+func (a *App) checkMangaUpdates(ctx context.Context, mangaID string) (int, error) {
 	if err := a.ensureReady(); err != nil {
 		return 0, err
 	}
@@ -1896,15 +1973,16 @@ func (a *App) CheckMangaUpdates(mangaID string) (int, error) {
 		return 0, fmt.Errorf("local manga not found: %s", mangaID)
 	}
 
-	onlineChapters, err := a.GetOnlineMangaChapters(link.OnlineSource, link.OnlineComicID, link.OnlineTitle)
+	onlineChapters, manifestPtr, err := a.getOnlineMangaChaptersWithManifest(
+		ctx, link.OnlineSource, link.OnlineComicID, link.OnlineTitle, mangaID,
+	)
 	if err != nil {
 		return 0, fmt.Errorf("get online chapters: %w", err)
 	}
-
-	manifest, err := library.GetReaderManifestWithSources(a.getActiveSources(), mangaID)
-	if err != nil {
-		return 0, fmt.Errorf("get local manifest: %w", err)
+	if manifestPtr == nil {
+		return 0, fmt.Errorf("get local manifest: no local chapters found")
 	}
+	manifest := *manifestPtr
 
 	// Filter tasks already queued and collect downloaded groups
 	existingTasks, _ := a.downloads.GetTasks()
@@ -2104,6 +2182,10 @@ func (a *App) GetFollowedUpdateCheckStatus() contracts.FollowedUpdateCheckProgre
 }
 
 func (a *App) CheckAllFollowedUpdates() (int, error) {
+	return a.checkAllFollowedUpdates(a.ensureLifecycle())
+}
+
+func (a *App) checkAllFollowedUpdates(ctx context.Context) (int, error) {
 	if err := a.ensureReady(); err != nil {
 		return 0, err
 	}
@@ -2151,8 +2233,12 @@ func (a *App) CheckAllFollowedUpdates() (int, error) {
 	}
 
 	totalQueued := 0
+loop:
 	for i, link := range links {
-		n, err := a.CheckMangaUpdates(link.MangaID)
+		if ctx.Err() != nil {
+			break
+		}
+		n, err := a.checkMangaUpdates(ctx, link.MangaID)
 		if err != nil {
 			logger.Get().Warn("Failed to check updates for followed manga %s (%s): %v", link.MangaID, link.OnlineTitle, err)
 		} else {
@@ -2168,7 +2254,11 @@ func (a *App) CheckAllFollowedUpdates() (int, error) {
 		a.emit(contracts.EventFollowedUpdateCheckProgress, progressCopy)
 
 		if i < total-1 {
-			time.Sleep(1000 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				break loop
+			case <-time.After(1000 * time.Millisecond):
+			}
 		}
 	}
 
