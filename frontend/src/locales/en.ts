@@ -1,6 +1,9 @@
 export const en = {
   app: {
     title: "PanelNeko Reader",
+    errorTitle: "The app hit a runtime error",
+    errorDescription: "The window was prevented from blanking completely. Restart the app. If the error remains, copy the message below.",
+    close: "Close",
   },
   shell: {
     settings: "Settings",
@@ -63,6 +66,8 @@ export const en = {
     checkUpdateFailed: "Failed to check for updates",
     headerDesc: "PanelNeko system preferences and configuration",
     autoSaved: "Auto-saved",
+    autoSaveFailed: "Failed to save settings",
+    loadFailed: "Failed to load settings",
     close: "Close",
     aboutTab: "About",
     outputRootDesc: "Local folder containing manga subdirectories or ZIP/CBZ archives",
@@ -259,6 +264,7 @@ export const en = {
   library: {
     title: "Local Library",
     empty: "No manga directories found. Please configure your manga library directory below to scan your local folders and archives (.zip/.cbz).",
+    loadFailed: "Failed to load the library",
     dropHint: "Drag and drop manga folders or archives here to import",
     openFileOrFolder: "Open Manga Folder or Archive",
     back: "Back to Library",
@@ -354,6 +360,7 @@ export const en = {
     allSettings: "All Settings...",
     loading: "Loading reader…",
     loadFailed: "Failed to open reader for this manga.",
+    noPages: "No local pages available for this manga yet.",
   },
   updates: {
     newVersionTitle: "New Version Available",
@@ -443,6 +450,7 @@ export const en = {
     unlinked: "Unlinked",
     loading: "Loading links…",
     empty: "Local library is empty",
+    checkFailed: "Failed to check this manga",
     selectedCount: "{{count}} manga selected",
     batchLinkSelected: "Batch Link ({{count}})",
     batchUnlinkSelected: "Batch Unlink ({{count}})",

@@ -1,6 +1,9 @@
 export const zhCN = {
   app: {
     title: "PanelNeko 阅读器",
+    errorTitle: "应用发生了运行时错误",
+    errorDescription: "窗口已被防止完全空白。请重启应用；如果问题仍然存在，请复制下方信息。",
+    close: "关闭",
   },
   shell: {
     settings: "配置",
@@ -63,6 +66,8 @@ export const zhCN = {
     checkUpdateFailed: "检查更新失败，请重试",
     headerDesc: "PanelNeko 系统参数与个性化偏好",
     autoSaved: "已自动保存",
+    autoSaveFailed: "设置保存失败",
+    loadFailed: "设置加载失败",
     close: "关闭",
     aboutTab: "关于",
     outputRootDesc: "存放本地漫画（包含图片子目录或 ZIP/CBZ 压缩包）的本地文件夹",
@@ -259,6 +264,7 @@ export const zhCN = {
   library: {
     title: "本地漫画库",
     empty: "当前漫画库目录下还没有已导入漫画。请点击下方按钮选择存放漫画（包含图片子目录或 ZIP/CBZ 压缩包）的本地文件夹。",
+    loadFailed: "漫画库加载失败",
     dropHint: "拖拽本地漫画文件夹或压缩包到此处快速导入",
     openFileOrFolder: "打开漫画文件夹或压缩包",
     back: "返回书架",
@@ -354,6 +360,7 @@ export const zhCN = {
     allSettings: "全部设置...",
     loading: "正在加载阅读器…",
     loadFailed: "无法打开当前漫画阅读器。",
+    noPages: "当前漫画还没有可阅读的本地页面。",
   },
   updates: {
     newVersionTitle: "发现新版本",
@@ -443,6 +450,7 @@ export const zhCN = {
     unlinked: "未关联",
     loading: "正在读取关联状态…",
     empty: "本地漫画库为空",
+    checkFailed: "检查该漫画失败",
     selectedCount: "已选择 {{count}} 部漫画",
     batchLinkSelected: "批量关联所选 ({{count}})",
     batchUnlinkSelected: "批量取消关联 ({{count}})",

@@ -31,7 +31,7 @@ export interface SettingsDialogProps {
   open: boolean;
   onClose: (finalSettings?: AppSettings) => void;
   settings: AppSettings;
-  onSave: (settings: AppSettings) => void;
+  onSave: (settings: AppSettings) => void | Promise<void>;
   defaultTab?: SettingsTab;
   version?: string;
   commit?: string;
@@ -51,10 +51,24 @@ export function SettingsDialog({
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
   const [form, setForm] = useState<AppSettings>(settings);
-  const [isSavedRecently, setIsSavedRecently] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [isDevMode, setIsDevMode] = useState(false);
 
-  const saveTimeoutRef = useRef<number | null>(null);
+  const formRef = useRef<AppSettings>(settings);
+  const pendingSaveRef = useRef<AppSettings | null>(null);
+  const debounceTimerRef = useRef<number | null>(null);
+  const savedTimerRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef(0);
+  const onSaveRef = useRef(onSave);
+  const flushSaveRef = useRef<() => Promise<void>>(async () => {});
+
+  useEffect(() => {
+    formRef.current = form;
+  }, [form]);
+
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
 
   useEffect(() => {
     if (open) {
@@ -63,9 +77,11 @@ export function SettingsDialog({
   }, [open]);
 
   useEffect(() => {
-    if (settings) {
-      setForm(settings);
+    if (!settings) return;
+    if (pendingSaveRef.current || saveInFlightRef.current > 0) {
+      return;
     }
+    setForm(settings);
   }, [settings]);
 
   useEffect(() => {
@@ -74,10 +90,47 @@ export function SettingsDialog({
     }
   }, [open, defaultTab]);
 
+  const flushSave = async () => {
+    if (debounceTimerRef.current) {
+      window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    const pending = pendingSaveRef.current;
+    if (!pending) return;
+    pendingSaveRef.current = null;
+    saveInFlightRef.current += 1;
+    setSaveState("saving");
+    try {
+      await onSaveRef.current(pending);
+      if (!pendingSaveRef.current) {
+        setSaveState("saved");
+        if (savedTimerRef.current) {
+          window.clearTimeout(savedTimerRef.current);
+        }
+        savedTimerRef.current = window.setTimeout(() => {
+          setSaveState("idle");
+        }, 1500);
+      }
+    } catch (err) {
+      console.error("Failed to auto-save settings:", err);
+      setSaveState("error");
+    } finally {
+      saveInFlightRef.current -= 1;
+    }
+  };
+  flushSaveRef.current = flushSave;
+
   useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) {
-        window.clearTimeout(saveTimeoutRef.current);
+      if (debounceTimerRef.current) {
+        window.clearTimeout(debounceTimerRef.current);
+      }
+      if (savedTimerRef.current) {
+        window.clearTimeout(savedTimerRef.current);
+      }
+      const pending = pendingSaveRef.current;
+      if (pending) {
+        void onSaveRef.current(pending);
       }
     };
   }, []);
@@ -87,28 +140,27 @@ export function SettingsDialog({
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose(form);
+        void flushSaveRef.current();
+        onClose(formRef.current);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose, form]);
+  }, [open, onClose]);
 
   if (!open) return null;
 
   const updateFields = (patch: Partial<AppSettings>) => {
-    setForm((prev) => {
-      const next = { ...prev, ...patch };
-      onSave(next);
-      return next;
-    });
-    setIsSavedRecently(true);
-    if (saveTimeoutRef.current) {
-      window.clearTimeout(saveTimeoutRef.current);
+    const next = { ...formRef.current, ...patch };
+    formRef.current = next;
+    setForm(next);
+    pendingSaveRef.current = next;
+    if (debounceTimerRef.current) {
+      window.clearTimeout(debounceTimerRef.current);
     }
-    saveTimeoutRef.current = window.setTimeout(() => {
-      setIsSavedRecently(false);
-    }, 1500);
+    debounceTimerRef.current = window.setTimeout(() => {
+      void flushSaveRef.current();
+    }, 450);
   };
 
   const updateField = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
@@ -116,7 +168,7 @@ export function SettingsDialog({
   };
 
   const updateDownloader = (patch: Partial<NonNullable<AppSettings["downloader"]>>) => {
-    const current = form.downloader || {
+    const current = formRef.current.downloader || {
       enableCopyManga: false,
       enableRawManga: false,
       downloadDir: "",
@@ -144,7 +196,8 @@ export function SettingsDialog({
   ];
 
   const handleClose = () => {
-    onClose(form);
+    void flushSaveRef.current();
+    onClose(formRef.current);
   };
 
   return (
@@ -174,15 +227,22 @@ export function SettingsDialog({
 
           <div className="flex items-center gap-3">
             {/* Auto-save reactive status */}
-            <div
-              className={cn(
-                "flex items-center gap-1.5 text-xs text-muted-foreground transition-opacity duration-200",
-                isSavedRecently ? "opacity-100 text-success" : "opacity-0"
-              )}
-            >
-              <Check className="h-3.5 w-3.5" />
-              <span className="font-medium text-[11px]">{t("settings.autoSaved")}</span>
-            </div>
+            {saveState === "error" ? (
+              <div className="flex items-center gap-1.5 text-xs text-danger">
+                <X className="h-3.5 w-3.5" />
+                <span className="font-medium text-[11px]">{t("settings.autoSaveFailed")}</span>
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "flex items-center gap-1.5 text-xs text-muted-foreground transition-opacity duration-200",
+                  saveState === "saved" ? "opacity-100 text-success" : "opacity-0"
+                )}
+              >
+                <Check className="h-3.5 w-3.5" />
+                <span className="font-medium text-[11px]">{t("settings.autoSaved")}</span>
+              </div>
+            )}
 
             <div className="flex items-center gap-1.5">
               <Kbd size="sm" className="hidden sm:inline-flex text-[10px]">

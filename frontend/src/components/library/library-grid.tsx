@@ -13,6 +13,8 @@ export interface LibraryGridProps {
   onClearSearch: () => void;
   loading: boolean;
   emptyLabel: string;
+  error?: string;
+  onRetry?: () => void;
   onOpenManga: (mangaID: string) => void;
   onOpenCollection: (collectionPath: string, sourceID?: string) => void;
   onOpenSettings: () => void;
@@ -33,6 +35,8 @@ export function LibraryGrid({
   onClearSearch,
   loading,
   emptyLabel,
+  error,
+  onRetry,
   onOpenManga,
   onOpenCollection,
   onOpenSettings,
@@ -75,6 +79,22 @@ export function LibraryGrid({
   });
 
   const { t } = useTranslation();
+
+  if (error) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center p-6 text-center gap-3">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-card border border-border/80 shadow-xs text-danger">
+          <BookImage className="h-5 w-5" />
+        </div>
+        <p className="text-xs text-muted-foreground">{error}</p>
+        {onRetry && (
+          <Button type="button" size="xs" variant="outline" onClick={onRetry} className="text-xs">
+            {t("downloader.retry")}
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   if (loading) {
     return (

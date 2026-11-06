@@ -1,6 +1,9 @@
 export const ja = {
   app: {
     title: "PanelNeko リーダー",
+    errorTitle: "アプリで実行時エラーが発生しました",
+    errorDescription: "画面が完全に空白にならないよう保護されています。アプリを再起動してください。問題が続く場合は下のメッセージをコピーしてください。",
+    close: "閉じる",
   },
   shell: {
     settings: "設定",
@@ -63,6 +66,8 @@ export const ja = {
     checkUpdateFailed: "更新の確認に失敗しました",
     headerDesc: "PanelNeko システム設定とカスタマイズ",
     autoSaved: "自動保存済み",
+    autoSaveFailed: "設定の保存に失敗しました",
+    loadFailed: "設定の読み込みに失敗しました",
     close: "閉じる",
     aboutTab: "概要",
     outputRootDesc: "漫画の画像フォルダーや ZIP/CBZ 圧縮ファイルを保存しているローカルフォルダ",
@@ -259,6 +264,7 @@ export const ja = {
   library: {
     title: "本棚",
     empty: "ライブラリフォルダーに漫画が見つかりません。下ボタンより、漫画の画像フォルダーや ZIP/CBZ 圧縮ファイルを保存しているローカルフォルダを設定してください。",
+    loadFailed: "ライブラリの読み込みに失敗しました",
     dropHint: "漫画フォルダまたは圧縮ファイルをここにドラッグ＆ドロップしてインポート",
     openFileOrFolder: "漫画フォルダまたは圧縮ファイルを開く",
     back: "本棚に戻る",
@@ -354,6 +360,7 @@ export const ja = {
     allSettings: "すべての設定...",
     loading: "リーダーを読み込み中…",
     loadFailed: "漫画リーダーを開けませんでした。",
+    noPages: "この漫画にはまだローカルページがありません。",
   },
   updates: {
     newVersionTitle: "新しいバージョンが見つかりました",
@@ -443,6 +450,7 @@ export const ja = {
     unlinked: "未紐付け",
     loading: "紐付け状態を読込中…",
     empty: "ローカル漫画ライブラリが空です",
+    checkFailed: "この漫画の確認に失敗しました",
     selectedCount: "{{count}} 作品選択中",
     batchLinkSelected: "選択作品を一括紐付け ({{count}})",
     batchUnlinkSelected: "選択作品の一括紐付け解除 ({{count}})",

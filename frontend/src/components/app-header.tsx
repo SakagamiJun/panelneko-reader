@@ -145,18 +145,19 @@ export function AppHeader({
   }, [propDownloadProgress]);
 
   useEffect(() => {
-    if (propDownloadTasks === undefined) {
-      void appAdapter.getDownloadTasks().then(setInternalDownloadTasks).catch(() => {});
-      const offTasks = appAdapter.subscribe(EVENTS.DOWNLOAD_TASKS_UPDATED, (payload) => {
-        if (Array.isArray(payload)) {
-          setInternalDownloadTasks(payload as DownloadTask[]);
-        } else {
-          void appAdapter.getDownloadTasks().then(setInternalDownloadTasks).catch(() => {});
-        }
-      });
-      return offTasks;
+    if (propDownloadTasks !== undefined || !isDownloadMenuOpen) {
+      return;
     }
-  }, [propDownloadTasks]);
+    void appAdapter.getDownloadTasks().then(setInternalDownloadTasks).catch(() => {});
+    const offTasks = appAdapter.subscribe(EVENTS.DOWNLOAD_TASKS_UPDATED, (payload) => {
+      if (Array.isArray(payload)) {
+        setInternalDownloadTasks(payload as DownloadTask[]);
+      } else {
+        void appAdapter.getDownloadTasks().then(setInternalDownloadTasks).catch(() => {});
+      }
+    });
+    return offTasks;
+  }, [propDownloadTasks, isDownloadMenuOpen]);
 
   useEffect(() => {
     if (propFollowedUpdateProgress === undefined) {

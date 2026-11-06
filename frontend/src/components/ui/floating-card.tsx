@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { i18n } from "@/lib/i18n";
 
 export interface FloatingCardProps {
   icon?: ReactNode;
@@ -20,7 +21,7 @@ export function FloatingCard({
   title,
   badge,
   onClose,
-  closeAriaLabel = "Close",
+  closeAriaLabel = i18n.t("app.close"),
   durationMs,
   children,
   footer,

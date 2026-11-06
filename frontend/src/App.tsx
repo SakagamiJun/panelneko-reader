@@ -618,6 +618,19 @@ export default function App() {
     });
   };
 
+  if (settingsQuery.isError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+        <div className="flex max-w-md flex-col items-center gap-4 rounded-2xl border border-border/80 bg-card p-6 text-center shadow-sm">
+          <p className="text-sm font-semibold">{t("settings.loadFailed")}</p>
+          <Button type="button" size="sm" variant="outline" onClick={() => void settingsQuery.refetch()}>
+            {t("downloader.retry")}
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main
       className="h-screen overflow-hidden bg-background text-foreground flex flex-col antialiased select-none"
@@ -676,8 +689,11 @@ export default function App() {
             <span className="text-xs text-muted-foreground">{t("reader.loading")}</span>
           </div>
         ) : selectedLibraryID && readerQuery.isError ? (
-          <div className="flex h-full items-center justify-center bg-background text-xs text-danger font-medium">
-            {t("reader.loadFailed")}
+          <div className="flex h-full flex-col items-center justify-center gap-3 bg-background text-xs text-danger font-medium">
+            <span>{t("reader.loadFailed")}</span>
+            <Button type="button" size="xs" variant="outline" onClick={() => void readerQuery.refetch()}>
+              {t("downloader.retry")}
+            </Button>
           </div>
         ) : selectedLibraryID && readerQuery.data && settings ? (
           <ReaderController
@@ -696,7 +712,7 @@ export default function App() {
           />
         ) : selectedLibraryID && readerQuery.data ? (
           <div className="flex h-full items-center justify-center bg-card/20 text-sm text-muted-foreground">
-            Loading reader settings…
+            {t("settings.loading")}
           </div>
         ) : (
           <div className="flex flex-col h-full w-full overflow-hidden">
@@ -708,6 +724,8 @@ export default function App() {
                 onClearSearch={() => setSearchQuery("")}
                 loading={libraryQuery.isLoading}
                 emptyLabel={t("library.empty")}
+                error={libraryQuery.isError ? t("library.loadFailed") : undefined}
+                onRetry={() => void libraryQuery.refetch()}
                 onOpenManga={(id) => {
                   const item = library.find((i) => i.id === id);
                   if (item && item.isAvailable === false) {
@@ -748,7 +766,9 @@ export default function App() {
           open={settingsOpen}
           onClose={handleCloseSettings}
           settings={settings}
-          onSave={(nextSettings) => settingsMutation.mutate(nextSettings)}
+          onSave={async (nextSettings) => {
+              await settingsMutation.mutateAsync(nextSettings);
+            }}
           version={versionQuery.data?.version}
           commit={versionQuery.data?.commit}
           defaultTab={settingsDefaultTab}

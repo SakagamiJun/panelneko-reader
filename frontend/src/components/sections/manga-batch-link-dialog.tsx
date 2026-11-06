@@ -86,6 +86,7 @@ export function MangaBatchLinkDialog({
   const [baselineChoices, setBaselineChoices] = useState<Map<string, "local" | "online" | "fill_gaps">>(new Map());
 
   const sourceMenuRef = useRef<HTMLDivElement>(null);
+  const cancelledRef = useRef(false);
 
   const fetchGroupsForComic = useCallback(
     async (comicId: string) => {
@@ -157,6 +158,7 @@ export function MangaBatchLinkDialog({
   }, []);
 
   useEffect(() => {
+    cancelledRef.current = !open;
     if (open) {
       void loadLinks();
       setSelectedIds(new Set());
@@ -207,6 +209,7 @@ export function MangaBatchLinkDialog({
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        cancelledRef.current = true;
         onClose();
       }
     };
@@ -266,6 +269,7 @@ export function MangaBatchLinkDialog({
 
     setBatchMatching(true);
     for (const manga of unlinked) {
+      if (cancelledRef.current) break;
       await handleMatchSingle(manga);
     }
     setBatchMatching(false);
@@ -373,6 +377,7 @@ export function MangaBatchLinkDialog({
 
     const worker = async () => {
       while (currentIndex < itemsToPreview.length) {
+        if (cancelledRef.current) return;
         const idx = currentIndex++;
         const item = itemsToPreview[idx];
         const input = getPreviewInput(item.manga.id);
@@ -382,6 +387,7 @@ export function MangaBatchLinkDialog({
 
         try {
           const res = await appAdapter.previewMangaLink(input);
+          if (cancelledRef.current) return;
           setPreviewItems((prev) =>
             prev.map((p) => (p.mangaId === item.manga.id ? res : p))
           );
@@ -404,7 +410,7 @@ export function MangaBatchLinkDialog({
           setPreviewItems((prev) =>
             prev.map((p) =>
               p.mangaId === item.manga.id
-                ? { ...p, errorMessage: err?.message || "Check failed" }
+                ? { ...p, errorMessage: err?.message || t("batchLink.checkFailed") }
                 : p
             )
           );
@@ -448,7 +454,7 @@ export function MangaBatchLinkDialog({
       setPreviewItems((prev) =>
         prev.map((p) =>
           p.mangaId === mangaId
-            ? { ...p, errorMessage: err?.message || "Check failed" }
+            ? { ...p, errorMessage: err?.message || t("batchLink.checkFailed") }
             : p
         )
       );
@@ -470,6 +476,7 @@ export function MangaBatchLinkDialog({
     setBatchMatching(true);
     try {
       for (const item of toConfirm) {
+        if (cancelledRef.current) break;
         const match = selectedMatch.get(item.mangaId);
         if (!match) continue;
 

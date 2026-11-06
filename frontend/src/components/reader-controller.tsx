@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { PagedReader } from "@/components/paged-reader";
 import { ScrollReader } from "@/components/scroll-reader";
 import { ReaderTopBar } from "@/components/reader-top-bar";
@@ -65,6 +66,7 @@ export function ReaderController({
   onExitReader,
   onOpenFullSettings,
 }: ReaderControllerProps) {
+  const { t } = useTranslation();
   const handledJumpRequestIDRef = useRef<number | null>(null);
   const lastSavedPageRef = useRef<number | null>(null);
   const metricRequestGenerationRef = useRef(0);
@@ -477,7 +479,7 @@ export function ReaderController({
   if (pages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center border-l border-border/40 bg-card/14 text-sm text-muted-foreground">
-        No local pages available for this manga yet.
+        {t("reader.noPages")}
       </div>
     );
   }
