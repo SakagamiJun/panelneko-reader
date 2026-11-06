@@ -84,6 +84,8 @@ export function MangaBatchLinkDialog({
   const [isCheckingQueue, setIsCheckingQueue] = useState(false);
   const [reviewSelectedIds, setReviewSelectedIds] = useState<Set<string>>(new Set());
   const [baselineChoices, setBaselineChoices] = useState<Map<string, "local" | "online" | "fill_gaps">>(new Map());
+  const [visibleMangaCount, setVisibleMangaCount] = useState(100);
+  const [visibleReviewCount, setVisibleReviewCount] = useState(100);
 
   const sourceMenuRef = useRef<HTMLDivElement>(null);
   const cancelledRef = useRef(false);
@@ -240,6 +242,17 @@ export function MangaBatchLinkDialog({
       return true;
     });
   }, [nonCollectionMangas, linksMap, linkFilter, sourceFilter, filterQuery]);
+
+  useEffect(() => {
+    setVisibleMangaCount(100);
+  }, [filterQuery, linkFilter, sourceFilter, nonCollectionMangas.length]);
+
+  useEffect(() => {
+    setVisibleReviewCount(100);
+  }, [currentStep, previewItems.length]);
+
+  const visibleMangas = displayedMangas.slice(0, visibleMangaCount);
+  const visiblePreviewItems = previewItems.slice(0, visibleReviewCount);
 
   // Match a single manga
   const handleMatchSingle = async (manga: LibraryManga) => {
@@ -917,7 +930,7 @@ export function MangaBatchLinkDialog({
                   <span>{t("batchLink.empty")}</span>
                 </div>
               ) : (
-                displayedMangas.map((manga) => {
+                visibleMangas.map((manga) => {
                   const link = linksMap.get(manga.id);
                   const isLinked = Boolean(link && link.onlineComicId);
                   const isSelected = selectedIds.has(manga.id);
@@ -1198,6 +1211,19 @@ export function MangaBatchLinkDialog({
                   );
                 })
               )}
+              {visibleMangaCount < displayedMangas.length && (
+                <div className="flex justify-center pt-2">
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={() => setVisibleMangaCount((count) => count + 100)}
+                    className="text-xs"
+                  >
+                    {t("app.loadMore", { count: displayedMangas.length - visibleMangaCount })}
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Step 1 Bottom Action Footer */}
@@ -1343,7 +1369,7 @@ export function MangaBatchLinkDialog({
                   </div>
 
                   {/* Table Rows */}
-                  {previewItems.map((item) => {
+                  {visiblePreviewItems.map((item) => {
                     const manga = nonCollectionMangas.find((m) => m.id === item.mangaId);
                     const isSelected = reviewSelectedIds.has(item.mangaId);
                     const choice = baselineChoices.get(item.mangaId) || "local";
@@ -1597,6 +1623,19 @@ export function MangaBatchLinkDialog({
                       </div>
                     );
                   })}
+                  {visibleReviewCount < previewItems.length && (
+                    <div className="flex justify-center p-3">
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        onClick={() => setVisibleReviewCount((count) => count + 100)}
+                        className="text-xs"
+                      >
+                        {t("app.loadMore", { count: previewItems.length - visibleReviewCount })}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
