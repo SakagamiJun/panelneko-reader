@@ -4,6 +4,7 @@ export const ja = {
     errorTitle: "アプリで実行時エラーが発生しました",
     errorDescription: "画面が完全に空白にならないよう保護されています。アプリを再起動してください。問題が続く場合は下のメッセージをコピーしてください。",
     close: "閉じる",
+    loadMore: "さらに表示（残り {{count}} 件）",
   },
   shell: {
     settings: "設定",

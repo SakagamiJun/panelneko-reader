@@ -4,6 +4,7 @@ export const zhCN = {
     errorTitle: "应用发生了运行时错误",
     errorDescription: "窗口已被防止完全空白。请重启应用；如果问题仍然存在，请复制下方信息。",
     close: "关闭",
+    loadMore: "加载更多（剩余 {{count}} 项）",
   },
   shell: {
     settings: "配置",

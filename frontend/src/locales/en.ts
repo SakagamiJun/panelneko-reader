@@ -4,6 +4,7 @@ export const en = {
     errorTitle: "The app hit a runtime error",
     errorDescription: "The window was prevented from blanking completely. Restart the app. If the error remains, copy the message below.",
     close: "Close",
+    loadMore: "Load more ({{count}} remaining)",
   },
   shell: {
     settings: "Settings",

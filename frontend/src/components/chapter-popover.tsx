@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { X, Search, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { ReaderChapter } from "@/lib/contracts";
@@ -20,6 +21,7 @@ export function ChapterPopover({
 }: ChapterPopoverProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -35,6 +37,13 @@ export function ChapterPopover({
       c.title.toLowerCase().includes(query) ||
       (c.number > 0 && String(c.number).includes(query))
     );
+  });
+
+  const virtualizer = useVirtualizer({
+    count: filteredChapters.length,
+    getScrollElement: () => scrollEl,
+    estimateSize: () => 48,
+    overscan: 6,
   });
 
   return (
@@ -71,41 +80,49 @@ export function ChapterPopover({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto space-y-0.5 pr-0.5 max-h-[360px]">
+      <div ref={setScrollEl} className="flex-1 overflow-y-auto pr-0.5 max-h-[360px]">
         {filteredChapters.length === 0 ? (
           <div className="py-8 text-center text-xs text-muted-foreground">
             {t("library.noMatches")}
           </div>
         ) : (
-          filteredChapters.map((ch) => {
-            const isActive = ch.id === activeChapterID;
-            return (
-              <button
-                key={ch.id}
-                type="button"
-                onClick={() => {
-                  onSelectChapter(ch.id);
-                  onClose();
-                }}
-                className={cn(
-                  "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-xs transition-colors border",
-                  isActive
-                    ? "bg-accent/80 text-foreground font-medium border-border/80 shadow-xs"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                )}
-              >
-                <div className="min-w-0 flex-1 pr-2">
-                  <div className={cn("truncate", isActive && "font-semibold text-foreground")}>
-                    {ch.number > 0 ? `${ch.number} · ${ch.title}` : ch.title}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">
-                    {t("library.pageUnit", { count: ch.pageCount })}
-                  </div>
+          <div className="relative" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const ch = filteredChapters[virtualRow.index];
+              const isActive = ch.id === activeChapterID;
+              return (
+                <div
+                  key={ch.id}
+                  className="absolute left-0 top-0 w-full px-0.5 pb-0.5"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectChapter(ch.id);
+                      onClose();
+                    }}
+                    className={cn(
+                      "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-xs transition-colors border",
+                      isActive
+                        ? "bg-accent/80 text-foreground font-medium border-border/80 shadow-xs"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1 pr-2">
+                      <div className={cn("truncate", isActive && "font-semibold text-foreground")}>
+                        {ch.number > 0 ? `${ch.number} · ${ch.title}` : ch.title}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        {t("library.pageUnit", { count: ch.pageCount })}
+                      </div>
+                    </div>
+                    {isActive && <Check className="h-3.5 w-3.5 shrink-0 ml-2 text-primary" />}
+                  </button>
                 </div>
-                {isActive && <Check className="h-3.5 w-3.5 shrink-0 ml-2 text-primary" />}
-              </button>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
