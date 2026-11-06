@@ -57,6 +57,7 @@ export function OnlineSearchDialog({
   const [selectedChapterIds, setSelectedChapterIds] = useState<Set<string>>(new Set());
   const [allowOverwrite, setAllowOverwrite] = useState(false);
   const [isSubmittingDownload, setIsSubmittingDownload] = useState(false);
+  const [visibleChapterCount, setVisibleChapterCount] = useState(200);
   const searchRequestRef = useRef(0);
   const chapterRequestRef = useRef(0);
 
@@ -84,6 +85,12 @@ export function OnlineSearchDialog({
     if (activeGroup === "all") return chapters;
     return chapters.filter((ch) => ch.group === activeGroup);
   }, [chapters, activeGroup]);
+
+  useEffect(() => {
+    setVisibleChapterCount(200);
+  }, [chapters, activeGroup]);
+
+  const visibleChapters = displayedChapters.slice(0, visibleChapterCount);
 
   // Sync initial query and source when opened
   useEffect(() => {
@@ -637,7 +644,7 @@ export function OnlineSearchDialog({
                         </div>
                       )}
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {displayedChapters.map((ch) => {
+                        {visibleChapters.map((ch) => {
                           const isChecked = selectedChapterIds.has(ch.id);
                           return (
                             <button
@@ -680,6 +687,19 @@ export function OnlineSearchDialog({
                             </button>
                           );
                         })}
+                        {visibleChapterCount < displayedChapters.length && (
+                          <div className="col-span-full flex justify-center pt-1">
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              onClick={() => setVisibleChapterCount((count) => count + 200)}
+                              className="text-xs"
+                            >
+                              {t("app.loadMore", { count: displayedChapters.length - visibleChapterCount })}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
