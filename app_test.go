@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -846,9 +847,34 @@ func TestAppServiceShutdown(t *testing.T) {
 	app, cleanup := newAssetTestApp(t, t.TempDir())
 	defer cleanup()
 
+	started := make(chan struct{})
+	finished := make(chan struct{})
+	app.goBackground(func(ctx context.Context) {
+		close(started)
+		<-ctx.Done()
+		close(finished)
+	})
+	<-started
+
 	if err := app.ServiceShutdown(); err != nil {
 		t.Fatalf("ServiceShutdown failed: %v", err)
 	}
+
+	select {
+	case <-finished:
+	default:
+		t.Fatal("expected background task to be cancelled and awaited during shutdown")
+	}
+
+	// Verify that tasks scheduled after shutdown are rejected
+	postShutdownRan := false
+	app.goBackground(func(ctx context.Context) {
+		postShutdownRan = true
+	})
+	if postShutdownRan {
+		t.Fatal("expected background task scheduled after shutdown to be rejected")
+	}
+
 	// Calling shutdown on nil store should also be safe
 	appNil := &App{}
 	if err := appNil.ServiceShutdown(); err != nil {

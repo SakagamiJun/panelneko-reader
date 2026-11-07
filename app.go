@@ -398,6 +398,14 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 }
 
 func (a *App) ServiceShutdown() error {
+	a.lifecycleMu.Lock()
+	a.shuttingDown = true
+	if a.cancel != nil {
+		a.cancel()
+	}
+	a.lifecycleMu.Unlock()
+	a.bgWG.Wait()
+
 	a.downloadScanMu.Lock()
 	if a.downloadScanActive {
 		a.downloadScanActive = false
