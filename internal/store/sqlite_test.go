@@ -1,6 +1,7 @@
 package store
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/sakagamijun/panelneko-reader/internal/contracts"
@@ -503,5 +504,109 @@ func TestDifferentialUpsertPreservesAndPrunes(t *testing.T) {
 	r4, ok4 := recMap["m4"]
 	if !ok4 || r4.Title != "New 4" || r4.ModTime != 400 {
 		t.Errorf("m4 unexpected state: %+v", r4)
+	}
+}
+
+func TestFindLibraryMangaIndexAndCollation(t *testing.T) {
+	tmpDir := t.TempDir()
+	sqliteStore, err := Open(tmpDir)
+	if err != nil {
+		t.Fatalf("open sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
+	// 1. Boundary: all empty arguments should return not found immediately
+	_, found, err := sqliteStore.FindLibraryManga("", "   ", "")
+	if err != nil || found {
+		t.Fatalf("expected empty args to return false, nil; got found=%v err=%v", found, err)
+	}
+
+	// 2. Insert test manga
+	m := contracts.LibraryManga{
+		ID:           "test-manga-id",
+		SourceID:     "default",
+		Title:        "Frieren Beyond Journey's End",
+		RelativePath: "Frieren/Season 1",
+		IsAvailable:  true,
+		LastUpdated:  "2026-05-01T00:00:00Z",
+	}
+	if err := sqliteStore.SaveLibraryMangaForSource("default", []contracts.LibraryManga{m}, map[string]int64{m.ID: 100}); err != nil {
+		t.Fatalf("save manga: %v", err)
+	}
+
+	// 3. Case-insensitive lookup by title
+	res, found, err := sqliteStore.FindLibraryManga("frieren beyond journey's end", "", "")
+	if err != nil || !found || res.ID != m.ID {
+		t.Fatalf("find by title failed: found=%v res=%+v err=%v", found, res, err)
+	}
+
+	// 4. Case-insensitive lookup by relativePath
+	res, found, err = sqliteStore.FindLibraryManga("", "FRIEREN/SEASON 1", "")
+	if err != nil || !found || res.ID != m.ID {
+		t.Fatalf("find by path failed: found=%v res=%+v err=%v", found, res, err)
+	}
+
+	// 5. Query plan verification: assert query plan uses index for NOCASE lookup
+	explainQuery := `
+		EXPLAIN QUERY PLAN
+		SELECT id, source_id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, is_available
+		FROM library_manga
+		WHERE rowid IN (
+			SELECT rowid FROM library_manga WHERE title = ? COLLATE NOCASE
+			UNION
+			SELECT rowid FROM library_manga WHERE relative_path = ? COLLATE NOCASE
+		)
+		ORDER BY last_updated DESC
+		LIMIT 1
+	`
+	rows, err := sqliteStore.db.Query(explainQuery, "frieren", "frieren/season 1")
+	if err != nil {
+		t.Fatalf("explain query plan: %v", err)
+	}
+	defer rows.Close()
+
+	var planLines []string
+	hasTitleIndex := false
+	hasRelPathIndex := false
+	for rows.Next() {
+		var a, b, c int
+		var detail string
+		if err := rows.Scan(&a, &b, &c, &detail); err != nil {
+			t.Fatalf("scan plan: %v", err)
+		}
+		planLines = append(planLines, detail)
+		if strings.Contains(detail, "idx_library_manga_title") {
+			hasTitleIndex = true
+		}
+		if strings.Contains(detail, "idx_library_manga_relative_path") {
+			hasRelPathIndex = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows err: %v", err)
+	}
+	if !hasTitleIndex || !hasRelPathIndex {
+		t.Fatalf("expected query plan to use both title and relative_path indexes, got plan: %v", planLines)
+	}
+
+	// 6. Adversarial test: manually recreate old binary indexes and verify init() upgrades them
+	if _, err := sqliteStore.db.Exec(`DROP INDEX IF EXISTS idx_library_manga_title`); err != nil {
+		t.Fatalf("drop index: %v", err)
+	}
+	if _, err := sqliteStore.db.Exec(`CREATE INDEX idx_library_manga_title ON library_manga (title)`); err != nil {
+		t.Fatalf("create binary index: %v", err)
+	}
+
+	// Reopen store to trigger schema upgrade
+	if err := sqliteStore.init(); err != nil {
+		t.Fatalf("init store after binary index regression: %v", err)
+	}
+
+	var indexSQL string
+	if err := sqliteStore.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_library_manga_title'`).Scan(&indexSQL); err != nil {
+		t.Fatalf("query upgraded index sql: %v", err)
+	}
+	if !strings.Contains(strings.ToUpper(indexSQL), "NOCASE") {
+		t.Fatalf("expected index to be upgraded to NOCASE, got: %q", indexSQL)
 	}
 }

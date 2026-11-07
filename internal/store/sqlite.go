@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -178,10 +179,22 @@ func (s *SQLiteStore) init() error {
 		}
 	}
 
+	// Drop old indexes without NOCASE collation so they can be recreated properly
+	var indexSQL string
+	_ = s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_library_manga_title'`).Scan(&indexSQL)
+	if indexSQL != "" && !strings.Contains(strings.ToUpper(indexSQL), "NOCASE") {
+		_, _ = s.db.Exec(`DROP INDEX idx_library_manga_title`)
+	}
+	indexSQL = ""
+	_ = s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_library_manga_relative_path'`).Scan(&indexSQL)
+	if indexSQL != "" && !strings.Contains(strings.ToUpper(indexSQL), "NOCASE") {
+		_, _ = s.db.Exec(`DROP INDEX idx_library_manga_relative_path`)
+	}
+
 	indexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_library_manga_source ON library_manga (source_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_library_manga_title ON library_manga (title)`,
-		`CREATE INDEX IF NOT EXISTS idx_library_manga_relative_path ON library_manga (relative_path)`,
+		`CREATE INDEX IF NOT EXISTS idx_library_manga_title ON library_manga (title COLLATE NOCASE)`,
+		`CREATE INDEX IF NOT EXISTS idx_library_manga_relative_path ON library_manga (relative_path COLLATE NOCASE)`,
 		`CREATE INDEX IF NOT EXISTS idx_manga_online_links_source_comic ON manga_online_links (online_source, online_comic_id)`,
 	}
 	for _, statement := range indexes {
@@ -855,19 +868,45 @@ func (s *SQLiteStore) GetMangaOnlineLinkByOnline(source string, comicID string) 
 }
 
 func (s *SQLiteStore) FindLibraryManga(title string, relativePath string, fallbackPath string) (contracts.LibraryManga, bool, error) {
-	const query = `
+	title = strings.TrimSpace(title)
+	relativePath = strings.TrimSpace(relativePath)
+	fallbackPath = strings.TrimSpace(fallbackPath)
+	if title == "" && relativePath == "" && fallbackPath == "" {
+		return contracts.LibraryManga{}, false, nil
+	}
+
+	var subqueries []string
+	var args []any
+	if title != "" {
+		subqueries = append(subqueries, "SELECT rowid FROM library_manga WHERE title = ? COLLATE NOCASE")
+		args = append(args, title)
+	}
+	if relativePath != "" {
+		subqueries = append(subqueries, "SELECT rowid FROM library_manga WHERE relative_path = ? COLLATE NOCASE")
+		args = append(args, relativePath)
+	}
+	if fallbackPath != "" && fallbackPath != relativePath {
+		subqueries = append(subqueries, "SELECT rowid FROM library_manga WHERE relative_path = ? COLLATE NOCASE")
+		args = append(args, fallbackPath)
+	}
+	if len(subqueries) == 0 {
+		return contracts.LibraryManga{}, false, nil
+	}
+
+	query := fmt.Sprintf(`
 		SELECT id, source_id, title, source_url, relative_path, parent_path, is_collection, manga_count, cover_image_url, chapter_count, page_count, last_updated, is_available
 		FROM library_manga
-		WHERE title = ? COLLATE NOCASE
-		   OR relative_path = ? COLLATE NOCASE
-		   OR relative_path = ? COLLATE NOCASE
+		WHERE rowid IN (
+			%s
+		)
 		ORDER BY last_updated DESC
 		LIMIT 1
-	`
+	`, strings.Join(subqueries, "\nUNION\n"))
+
 	var m contracts.LibraryManga
 	var isColl int
 	var isAvail int
-	err := s.db.QueryRow(query, title, relativePath, fallbackPath).Scan(
+	err := s.db.QueryRow(query, args...).Scan(
 		&m.ID, &m.SourceID, &m.Title, &m.SourceURL, &m.RelativePath, &m.ParentPath, &isColl, &m.MangaCount, &m.CoverImageURL,
 		&m.ChapterCount, &m.PageCount, &m.LastUpdated, &isAvail,
 	)
