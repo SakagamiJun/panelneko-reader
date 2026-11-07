@@ -265,12 +265,11 @@ export function PagedReader({
         return;
       }
 
-      // Arrow keys follow the reading direction instead of the raw
-      // nextPage/prevPage bindings. This keeps RTL navigation intuitive even
-      // with the default shortcut configuration.
+      // Arrow keys follow the configured navigation direction (fixed or direction-based)
+      // instead of raw key assignments, keeping mouse and keyboard navigation in sync.
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         event.preventDefault();
-        const nextOnLeft = direction === "rtl";
+        const nextOnLeft = isNextSpreadOnLeft(direction, sideClickMode);
         if ((event.key === "ArrowLeft") === nextOnLeft) {
           goToNextSpread();
         } else {
@@ -308,7 +307,7 @@ export function PagedReader({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [direction, goToNextSpread, goToPrevSpread, shortcuts.nextPage, shortcuts.prevPage]);
+  }, [direction, sideClickMode, goToNextSpread, goToPrevSpread, shortcuts.nextPage, shortcuts.prevPage]);
 
   const calculateOriginalScale = useCallback(() => {
     if (!spreadStageRef.current) return 2;
