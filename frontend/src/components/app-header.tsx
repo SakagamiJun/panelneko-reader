@@ -611,22 +611,47 @@ export function AppHeader({
                       })}
                     </div>
 
-                    {/* Manage Directories shortcut */}
-                    {onOpenManageSources && (
+                    {/* Actions row: Manage Directories & Rescan */}
+                    {(onOpenManageSources || onRescan) && (
                       <>
                         <div className="h-px bg-border/40 my-1 mx-1" />
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            setIsSourceMenuOpen(false);
-                            onOpenManageSources();
-                          }}
-                          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-left font-medium"
-                        >
-                          <FolderCog className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{t("library.manageSources")}</span>
-                        </button>
+                        <div className="flex items-center gap-1.5 p-1">
+                          {onOpenManageSources && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setIsSourceMenuOpen(false);
+                                onOpenManageSources();
+                              }}
+                              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-center font-medium select-none"
+                            >
+                              <FolderCog className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{t("library.manageSources")}</span>
+                            </button>
+                          )}
+                          {onRescan && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              disabled={isRescanning}
+                              onClick={() => {
+                                onRescan();
+                              }}
+                              className={cn(
+                                "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors text-center font-medium select-none",
+                                isRescanning
+                                  ? "text-muted-foreground/50 cursor-not-allowed bg-muted/30"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60 cursor-pointer"
+                              )}
+                            >
+                              <RefreshCw className={cn("h-3.5 w-3.5 shrink-0", isRescanning && "animate-spin")} />
+                              <span className="truncate">
+                                {isRescanning ? t("library.rescanning") : t("library.rescan")}
+                              </span>
+                            </button>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>

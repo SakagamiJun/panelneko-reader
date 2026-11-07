@@ -299,7 +299,7 @@ export const zhCN = {
     offlineAlertDesc: "该漫画所在的外置磁盘或网络目录当前未连接。请连接设备或在设置中重新定位目录路径。",
     filterAllSources: "全部目录",
     sourceFilter: "按目录筛选",
-    manageSources: "管理目录...",
+    manageSources: "管理目录",
     offlineBannerSingle: "检测到 1 个目录处于离线状态，已自动隐藏对应书籍",
     offlineBannerMultiple: "检测到 {{count}} 个目录处于离线状态，已自动隐藏对应书籍",
     rescan: "重新扫描",

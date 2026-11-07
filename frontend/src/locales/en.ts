@@ -299,7 +299,7 @@ export const en = {
     offlineAlertDesc: "The external drive or network directory for this manga is currently disconnected. Please connect the device or relocate the directory path in Settings.",
     filterAllSources: "All Directories",
     sourceFilter: "Filter by Directory",
-    manageSources: "Manage Directories...",
+    manageSources: "Manage Sources",
     offlineBannerSingle: "1 directory is offline, related manga automatically hidden",
     offlineBannerMultiple: "{{count}} directories are offline, related manga automatically hidden",
     rescan: "Rescan",

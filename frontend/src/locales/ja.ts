@@ -299,7 +299,7 @@ export const ja = {
     offlineAlertDesc: "この作品が保存されている外付けディスクまたはネットワークディレクトリが切断されています。接続するか、設定でパスを再指定してください。",
     filterAllSources: "すべてのディレクトリ",
     sourceFilter: "ディレクトリで絞り込み",
-    manageSources: "ディレクトリ管理...",
+    manageSources: "ディレクトリ管理",
     offlineBannerSingle: "1つのディレクトリがオフラインのため、該当する作品を自動で非表示にしました",
     offlineBannerMultiple: "{{count}}個のディレクトリがオフラインのため、該当する作品を自動で非表示にしました",
     rescan: "再スキャン",
