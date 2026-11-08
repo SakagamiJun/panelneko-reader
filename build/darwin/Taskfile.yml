@@ -139,14 +139,22 @@ tasks:
     summary: Creates a configurable `.dmg` from the `.app` bundle
     platforms: [darwin]
     cmds:
-      - >-
-        wails3 tool package --format dmg --name "{{.APP_NAME}}" --out "{{.BIN_DIR}}"
-        --background "{{.DMG_BACKGROUND}}"
-        --volume-icon "{{.DMG_VOLUME_ICON}}"
-        --file-icon "{{.DMG_FILE_ICON}}"
-        --window-width "{{.DMG_WINDOW_WIDTH}}"
-        --window-height "{{.DMG_WINDOW_HEIGHT}}"
-        {{if .DMG_FILES}}--files "{{.DMG_FILES}}"{{end}}
+      - |
+        ARGS=""
+        if [ -n "{{.DMG_BACKGROUND}}" ] && [ -f "{{.DMG_BACKGROUND}}" ]; then
+          ARGS="$ARGS --background \"{{.DMG_BACKGROUND}}\""
+        fi
+        if [ -n "{{.DMG_VOLUME_ICON}}" ] && [ -f "{{.DMG_VOLUME_ICON}}" ]; then
+          ARGS="$ARGS --volume-icon \"{{.DMG_VOLUME_ICON}}\""
+        fi
+        if [ -n "{{.DMG_FILE_ICON}}" ] && [ -f "{{.DMG_FILE_ICON}}" ]; then
+          ARGS="$ARGS --file-icon \"{{.DMG_FILE_ICON}}\""
+        fi
+        if [ -n "{{.DMG_FILES}}" ]; then
+          ARGS="$ARGS --files \"{{.DMG_FILES}}\""
+        fi
+        eval wails3 tool package --format dmg --name "\"{{.APP_NAME}}\"" --out "\"{{.BIN_DIR}}\"" \
+          --window-width "\"{{.DMG_WINDOW_WIDTH}}\"" --window-height "\"{{.DMG_WINDOW_HEIGHT}}\"" $ARGS
     vars:
       DMG_BACKGROUND: '{{.DMG_BACKGROUND | default "build/darwin/dmg-background.png"}}'
       DMG_VOLUME_ICON: '{{.DMG_VOLUME_ICON | default "build/darwin/icons.icns"}}'
