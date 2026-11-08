@@ -184,7 +184,7 @@ func isHomebrewExecutable(execPath string, customPrefix string) bool {
 		return true
 	}
 
-	if runtime.GOOS == "darwin" {
+	if runtime.GOOS == "darwin" || customPrefix != "" {
 		prefixes := []string{
 			customPrefix,
 			os.Getenv("HOMEBREW_PREFIX"),

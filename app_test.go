@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -387,6 +388,9 @@ func TestIsHomebrewExecutable(t *testing.T) {
 	}
 
 	// 2. Caskroom symlink test
+	if runtime.GOOS == "windows" {
+		t.Skip("Symlinks require administrator privileges on Windows")
+	}
 	tempPrefix := t.TempDir()
 	caskDir := filepath.Join(tempPrefix, "Caskroom", "panelneko", "0.11.0")
 	if err := os.MkdirAll(caskDir, 0o755); err != nil {
