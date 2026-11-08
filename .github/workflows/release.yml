@@ -111,7 +111,7 @@ jobs:
       matrix:
         include:
           - name: linux-amd64
-            os: ubuntu-24.04
+            os: ubuntu-latest
             arch: amd64
             archive: panelneko-reader-linux-amd64.tar.gz
           - name: macos-amd64
