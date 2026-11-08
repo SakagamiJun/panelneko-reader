@@ -74,7 +74,7 @@ func main() {
 		})
 	}
 
-	app.Menu.SetApplicationMenu(application.DefaultApplicationMenu())
+	initApplicationMenu(app)
 
 	initBg := application.NewRGB(243, 247, 252)
 	if app.Env != nil && app.Env.IsDarkMode() {
