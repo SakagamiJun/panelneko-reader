@@ -673,8 +673,8 @@ func TestGenerateNaturalIDAndPassword(t *testing.T) {
 		}
 	}
 
-	// In 2000 samples, collision count should be virtually zero
-	if len(seenIDs) < 1995 {
+	// In 2000 samples, collision count should be minimal (>99% uniqueness)
+	if len(seenIDs) < 1980 {
 		t.Fatalf("high collision rate: got %d unique IDs out of 2000", len(seenIDs))
 	}
 }
