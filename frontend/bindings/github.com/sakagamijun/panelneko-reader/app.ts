@@ -3,7 +3,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -13,16 +13,12 @@ export function AddCopyMangaAccount(username: string, password: string, token: s
     return $Call.ByID(3732476098, username, password, token);
 }
 
-export function AddDroppedSources(paths: string[]): $CancellablePromise<contracts$0.DroppedSourcesResult> {
-    return $Call.ByID(3217358460, paths).then(($result: any) => {
-        return $$createType0($result);
-    });
+export function AddDroppedSources(paths: string[] | null): $CancellablePromise<contracts$0.DroppedSourcesResult> {
+    return $Call.ByID(3217358460, paths);
 }
 
 export function AddLibrarySource(source: contracts$0.LibrarySource): $CancellablePromise<contracts$0.AppSettings> {
-    return $Call.ByID(3053176450, source).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(3053176450, source);
 }
 
 export function CancelDownloadTask(taskID: string): $CancellablePromise<void> {
@@ -34,9 +30,7 @@ export function CheckAllFollowedUpdates(): $CancellablePromise<number> {
 }
 
 export function CheckForUpdates(): $CancellablePromise<contracts$0.UpdateCheckResult> {
-    return $Call.ByID(2675659504).then(($result: any) => {
-        return $$createType2($result);
-    });
+    return $Call.ByID(2675659504);
 }
 
 export function CheckMangaUpdates(mangaID: string): $CancellablePromise<number> {
@@ -51,56 +45,40 @@ export function ClearThumbnailCache(): $CancellablePromise<void> {
     return $Call.ByID(3775367792);
 }
 
-export function CreateDownloadTasks(inputs: contracts$0.CreateDownloadTaskInput[]): $CancellablePromise<contracts$0.DownloadTask[]> {
-    return $Call.ByID(2151602833, inputs).then(($result: any) => {
-        return $$createType4($result);
-    });
+export function CreateDownloadTasks(inputs: contracts$0.CreateDownloadTaskInput[] | null): $CancellablePromise<contracts$0.DownloadTask[] | null> {
+    return $Call.ByID(2151602833, inputs);
 }
 
 export function DeleteCopyMangaAccount(username: string): $CancellablePromise<void> {
     return $Call.ByID(4152057768, username);
 }
 
-export function GetAllMangaOnlineLinks(): $CancellablePromise<contracts$0.MangaOnlineLink[]> {
-    return $Call.ByID(1961264694).then(($result: any) => {
-        return $$createType6($result);
-    });
+export function GetAllMangaOnlineLinks(): $CancellablePromise<contracts$0.MangaOnlineLink[] | null> {
+    return $Call.ByID(1961264694);
 }
 
 export function GetAppVersion(): $CancellablePromise<contracts$0.AppVersionInfo> {
-    return $Call.ByID(1780012486).then(($result: any) => {
-        return $$createType7($result);
-    });
+    return $Call.ByID(1780012486);
 }
 
-export function GetCopyMangaAccounts(): $CancellablePromise<contracts$0.CopyMangaAccount[]> {
-    return $Call.ByID(1868486418).then(($result: any) => {
-        return $$createType9($result);
-    });
+export function GetCopyMangaAccounts(): $CancellablePromise<contracts$0.CopyMangaAccount[] | null> {
+    return $Call.ByID(1868486418);
 }
 
 export function GetDevInfo(): $CancellablePromise<contracts$0.DevInfo> {
-    return $Call.ByID(851352478).then(($result: any) => {
-        return $$createType10($result);
-    });
+    return $Call.ByID(851352478);
 }
 
 export function GetDownloadProgress(): $CancellablePromise<contracts$0.DownloadProgress> {
-    return $Call.ByID(1305665572).then(($result: any) => {
-        return $$createType11($result);
-    });
+    return $Call.ByID(1305665572);
 }
 
-export function GetDownloadTasks(): $CancellablePromise<contracts$0.DownloadTask[]> {
-    return $Call.ByID(3990232731).then(($result: any) => {
-        return $$createType4($result);
-    });
+export function GetDownloadTasks(): $CancellablePromise<contracts$0.DownloadTask[] | null> {
+    return $Call.ByID(3990232731);
 }
 
 export function GetFollowedUpdateCheckStatus(): $CancellablePromise<contracts$0.FollowedUpdateCheckProgress> {
-    return $Call.ByID(2930683628).then(($result: any) => {
-        return $$createType12($result);
-    });
+    return $Call.ByID(2930683628);
 }
 
 export function GetIsDevMode(): $CancellablePromise<boolean> {
@@ -108,75 +86,55 @@ export function GetIsDevMode(): $CancellablePromise<boolean> {
 }
 
 export function GetMangaOnlineLink(mangaID: string): $CancellablePromise<contracts$0.MangaOnlineLink> {
-    return $Call.ByID(4043201390, mangaID).then(($result: any) => {
-        return $$createType5($result);
-    });
+    return $Call.ByID(4043201390, mangaID);
 }
 
-export function GetOnlineMangaChapters(source: string, mangaID: string, mangaTitle: string): $CancellablePromise<contracts$0.OnlineMangaChapter[]> {
-    return $Call.ByID(2287518610, source, mangaID, mangaTitle).then(($result: any) => {
-        return $$createType14($result);
-    });
+export function GetOnlineMangaChapters(source: string, mangaID: string, mangaTitle: string): $CancellablePromise<contracts$0.OnlineMangaChapter[] | null> {
+    return $Call.ByID(2287518610, source, mangaID, mangaTitle);
 }
 
-export function GetOnlineMangaGroups(source: string, mangaID: string): $CancellablePromise<string[]> {
-    return $Call.ByID(1026509168, source, mangaID).then(($result: any) => {
-        return $$createType15($result);
-    });
+export function GetOnlineMangaGroups(source: string, mangaID: string): $CancellablePromise<string[] | null> {
+    return $Call.ByID(1026509168, source, mangaID);
 }
 
 export function GetReaderManifest(mangaID: string): $CancellablePromise<contracts$0.ReaderManifest> {
-    return $Call.ByID(2762869845, mangaID).then(($result: any) => {
-        return $$createType16($result);
-    });
+    return $Call.ByID(2762869845, mangaID);
 }
 
 export function GetReaderProgress(mangaID: string): $CancellablePromise<contracts$0.ReaderProgress> {
-    return $Call.ByID(940000275, mangaID).then(($result: any) => {
-        return $$createType17($result);
-    });
+    return $Call.ByID(940000275, mangaID);
 }
 
 export function GetSettings(): $CancellablePromise<contracts$0.AppSettings> {
-    return $Call.ByID(2554697378).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(2554697378);
 }
 
 export function GetThumbnailCacheSize(): $CancellablePromise<number> {
     return $Call.ByID(2849375100);
 }
 
-export function ImportCopyMangaAccounts(inputs: contracts$0.CopyMangaAccountInput[]): $CancellablePromise<contracts$0.CopyMangaAccountImportResult> {
-    return $Call.ByID(2133604867, inputs).then(($result: any) => {
-        return $$createType18($result);
-    });
+export function ImportCopyMangaAccounts(inputs: contracts$0.CopyMangaAccountInput[] | null): $CancellablePromise<contracts$0.CopyMangaAccountImportResult> {
+    return $Call.ByID(2133604867, inputs);
 }
 
 export function LinkMangaOnline(input: contracts$0.MangaOnlineLink): $CancellablePromise<void> {
     return $Call.ByID(3464908720, input);
 }
 
-export function ListLibraryManga(): $CancellablePromise<contracts$0.LibraryManga[]> {
-    return $Call.ByID(3843098540).then(($result: any) => {
-        return $$createType20($result);
-    });
+export function ListLibraryManga(): $CancellablePromise<contracts$0.LibraryManga[] | null> {
+    return $Call.ByID(3843098540);
 }
 
 export function LoginCopyManga(username: string, password: string): $CancellablePromise<contracts$0.CopyMangaLoginResult> {
-    return $Call.ByID(359310417, username, password).then(($result: any) => {
-        return $$createType21($result);
-    });
+    return $Call.ByID(359310417, username, password);
 }
 
 export function LogoutCopyManga(): $CancellablePromise<void> {
     return $Call.ByID(634478102);
 }
 
-export function MatchLocalManga(mangaID: string, provider: string): $CancellablePromise<contracts$0.OnlineMangaItem[]> {
-    return $Call.ByID(247968811, mangaID, provider).then(($result: any) => {
-        return $$createType23($result);
-    });
+export function MatchLocalManga(mangaID: string, provider: string): $CancellablePromise<contracts$0.OnlineMangaItem[] | null> {
+    return $Call.ByID(247968811, mangaID, provider);
 }
 
 export function OpenDirectory(mangaID: string): $CancellablePromise<void> {
@@ -191,28 +149,20 @@ export function PauseDownloadTask(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(3743113560, taskID);
 }
 
-export function PreviewBatchMangaLinks(inputs: contracts$0.MangaLinkPreviewInput[]): $CancellablePromise<contracts$0.MangaLinkPreviewItem[]> {
-    return $Call.ByID(4086719864, inputs).then(($result: any) => {
-        return $$createType25($result);
-    });
+export function PreviewBatchMangaLinks(inputs: contracts$0.MangaLinkPreviewInput[] | null): $CancellablePromise<contracts$0.MangaLinkPreviewItem[] | null> {
+    return $Call.ByID(4086719864, inputs);
 }
 
 export function PreviewMangaLink(input: contracts$0.MangaLinkPreviewInput): $CancellablePromise<contracts$0.MangaLinkPreviewItem> {
-    return $Call.ByID(3328611069, input).then(($result: any) => {
-        return $$createType24($result);
-    });
+    return $Call.ByID(3328611069, input);
 }
 
 export function RelocateLibrarySource(sourceID: string, newPath: string): $CancellablePromise<contracts$0.AppSettings> {
-    return $Call.ByID(3057094592, sourceID, newPath).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(3057094592, sourceID, newPath);
 }
 
 export function RemoveLibrarySource(sourceID: string): $CancellablePromise<contracts$0.AppSettings> {
-    return $Call.ByID(2853868853, sourceID).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(2853868853, sourceID);
 }
 
 export function RescanSource(sourceID: string): $CancellablePromise<void> {
@@ -227,16 +177,12 @@ export function RetryDownloadTask(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(1828093348, taskID);
 }
 
-export function ScanLibrary(): $CancellablePromise<contracts$0.LibraryManga[]> {
-    return $Call.ByID(1313264123).then(($result: any) => {
-        return $$createType20($result);
-    });
+export function ScanLibrary(): $CancellablePromise<contracts$0.LibraryManga[] | null> {
+    return $Call.ByID(1313264123);
 }
 
 export function SearchOnlineManga(source: string, query: string, page: number, limit: number): $CancellablePromise<contracts$0.OnlineSearchResult> {
-    return $Call.ByID(1245704362, source, query, page, limit).then(($result: any) => {
-        return $$createType26($result);
-    });
+    return $Call.ByID(1245704362, source, query, page, limit);
 }
 
 export function SetDevMode(enabled: boolean): $CancellablePromise<void> {
@@ -260,48 +206,13 @@ export function UnlinkMangaOnline(mangaID: string): $CancellablePromise<void> {
 }
 
 export function UpdateLibrarySource(source: contracts$0.LibrarySource): $CancellablePromise<contracts$0.AppSettings> {
-    return $Call.ByID(2133816242, source).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(2133816242, source);
 }
 
 export function UpdateReaderProgress(input: contracts$0.ReaderProgress): $CancellablePromise<contracts$0.ReaderProgress> {
-    return $Call.ByID(3384846808, input).then(($result: any) => {
-        return $$createType17($result);
-    });
+    return $Call.ByID(3384846808, input);
 }
 
 export function UpdateSettings(input: contracts$0.AppSettings): $CancellablePromise<contracts$0.AppSettings> {
-    return $Call.ByID(2894041249, input).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(2894041249, input);
 }
-
-// Private type creation functions
-const $$createType0 = contracts$0.DroppedSourcesResult.createFrom;
-const $$createType1 = contracts$0.AppSettings.createFrom;
-const $$createType2 = contracts$0.UpdateCheckResult.createFrom;
-const $$createType3 = contracts$0.DownloadTask.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = contracts$0.MangaOnlineLink.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = contracts$0.AppVersionInfo.createFrom;
-const $$createType8 = contracts$0.CopyMangaAccount.createFrom;
-const $$createType9 = $Create.Array($$createType8);
-const $$createType10 = contracts$0.DevInfo.createFrom;
-const $$createType11 = contracts$0.DownloadProgress.createFrom;
-const $$createType12 = contracts$0.FollowedUpdateCheckProgress.createFrom;
-const $$createType13 = contracts$0.OnlineMangaChapter.createFrom;
-const $$createType14 = $Create.Array($$createType13);
-const $$createType15 = $Create.Array($Create.Any);
-const $$createType16 = contracts$0.ReaderManifest.createFrom;
-const $$createType17 = contracts$0.ReaderProgress.createFrom;
-const $$createType18 = contracts$0.CopyMangaAccountImportResult.createFrom;
-const $$createType19 = contracts$0.LibraryManga.createFrom;
-const $$createType20 = $Create.Array($$createType19);
-const $$createType21 = contracts$0.CopyMangaLoginResult.createFrom;
-const $$createType22 = contracts$0.OnlineMangaItem.createFrom;
-const $$createType23 = $Create.Array($$createType22);
-const $$createType24 = contracts$0.MangaLinkPreviewItem.createFrom;
-const $$createType25 = $Create.Array($$createType24);
-const $$createType26 = contracts$0.OnlineSearchResult.createFrom;
