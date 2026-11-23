@@ -7,7 +7,7 @@ require (
 	github.com/nwaples/rardecode/v2 v2.4.6
 	github.com/wailsapp/wails/v3 v3.1.0
 	golang.org/x/image v0.48.0
-	golang.org/x/net v0.62.0
+	golang.org/x/net v0.63.0
 	golang.org/x/sync v0.25.0
 )
 
@@ -18,5 +18,5 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
-	golang.org/x/term v0.47.0 // indirect
+	golang.org/x/term v0.48.0 // indirect
 )
